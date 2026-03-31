@@ -1,0 +1,50 @@
+services:
+  # Redis service for chat history and caching
+  redis:
+    image: redis:7-alpine
+    container_name: koolbuy-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - koolbuy-network
+
+  # FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: koolbuy-api
+    ports:
+      - "8001:8000"  # Host:Container - using 8001 to avoid local conflicts
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - CHAT_TTL=${CHAT_TTL:-3600}
+      - MAX_HISTORY_MESSAGES=${MAX_HISTORY_MESSAGES:-20}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./leads.csv:/app/leads.csv
+      - ./products.csv:/app/products.csv
+      - ./knowledge_base.txt:/app/knowledge_base.txt
+      - ./system_prompt.txt:/app/system_prompt.txt
+    networks:
+      - koolbuy-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+
+networks:
+  koolbuy-network:
+    driver: bridge

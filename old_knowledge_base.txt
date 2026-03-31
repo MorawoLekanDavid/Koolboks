@@ -1,0 +1,310 @@
+# KOOLBUY KNOWLEDGE BASE
+# Loaded at startup. Edit this file to update bot knowledge without touching app.py.
+
+## ABOUT KOOLBUY
+Koolbuy (koolbuystore.com) is Nigeria's solar freezer marketplace — a multi-vendor platform
+selling Koolboks, Thermocool, Scanfrost, Bruhm, Hisense, LG, and other brands.
+Contact: WhatsApp +2348106912022 | info@koolbuystore.com | 28A Adeola Raji Ave, Gbagada.
+Customer Support: support@koolbuystore.com | WhatsApp 07002252252 | 02013300108
+Support Hours: Monday – Saturday, 9am – 6pm
+Physical presence and vendors in South-West, South-South, and Abuja.
+
+## WHY SOLAR FREEZERS
+Up to 40% of Nigerian food is wasted due to no cold storage and no reliable power.
+Koolboks units are 55% more energy efficient, use eco-friendly refrigerant (79% less gas),
+and include IoT remote temperature monitoring.
+
+## KEY FEATURES (P.O.W.E.R)
+P = Practical payments: 20% down, balance over 2-23 months
+O = Outstanding aftersales: 24hr doorstep maintenance
+W = Worry-free warranty: 3yr freezer + 1yr inventory insurance
+E = Energy efficient: saves 80-100% on electricity bills
+R = Remote IoT monitoring via phone
+
+## S.M.I.L.E SUMMARY
+Save 50% energy | Make 20% down payment | Insured 1yr inventory | Lasts 120hrs cooling | Enjoy 3yr warranty
+
+## HOW SOLAR WORKS
+Sun -> Panels -> Pedestal Battery -> Freezer.
+Battery lasts 8-12hrs without sun depending on battery size and usage.
+Charge time: 6-8 hours under good sunlight.
+Power unit 24-48hrs first to activate Ice Battery.
+Ice Battery keeps cold 3-4 DAYS without any power. Set thermostat max to 3.
+System can also be connected to NEPA or a generator as an additional charging source.
+
+## WHAT'S IN THE FULL SOLAR PACKAGE
+- Solar freezer
+- Lithium battery (pedestal)
+- Solar panels (250W each; number depends on freezer size)
+- Charge controller
+- Cables and accessories
+
+## PRODUCT TYPES
+- Freezer Alone: works with AC electricity. No battery included.
+- Maxi Battery Integrated (Koolboks): built-in battery, runs without constant power.
+- DC Freezer: runs directly off DC solar/battery power.
+- AC Inverter Freezer: works on AC power with inverter compatibility.
+- Pedestal Bundle: freezer + pedestal battery + solar panels.
+
+## POWERFOOT (Pedestal Battery)
+Converts ANY brand freezer to solar. Fits 200L-600L freezers.
+Houses the battery and elevates the freezer -- improves airflow, reduces moisture exposure.
+Features: solar input (12v-150v), AC-220v in/out, DC 24v, USB charging, battery display, wheels.
+F.L.A.S.H: Fits any brand | LED + USB ports | Auto solar switching | State of charge display | High mobility wheels
+
+## LITHIUM BATTERY
+3000+ charge cycles (10-15yr lifespan) | 90% usable energy | Fast charge | Maintenance-free | BMS protection
+Battery can be upgraded later if longer backup time is needed.
+
+## SOLAR PANELS
+Each panel is 250W monocrystalline -- built for heat, rain, and dust.
+Number of panels depends on freezer size and configuration.
+Additional panels can be added later to improve performance.
+
+## SCRAP4NEW / UPGRADE PROGRAMME
+Old or broken freezer? Swap for a new solar unit.
+We evaluate your old freezer, assign it a value, and you pay the balance for a new one.
+Up to N50,000 off + same-day pickup.
+
+## SIZING GUIDE (match crates/volume to freezer size)
+1-5 crates              -> 198L or 200L
+5-15 crates             -> 208L DC, 219L, or 242L
+15-30 crates            -> 519L or 530L
+30+ crates              -> 600L, 538L, or Cold Room
+Ice blocks/sachet water -> 195L DC Ice Maker (up to 18 ice blocks per cycle in 24-48hrs)
+Large ice block use     -> 750L (35-40 ice blocks per cycle in ~72hrs)
+
+General size guide:
+- 195L: Commercial ice block maker
+- 198L-208L: Small business or home use
+- 300L-450L: Medium businesses
+- 500L-750L: Large commercial use
+
+## POWER MATCHING GUIDE
+Has stable NEPA/generator AND happy with it  -> Freezer alone (AC Inverter)
+Has NEPA/generator BUT unreliable/expensive  -> AC Inverter + solar bundle
+Has existing solar panels already            -> AC Inverter only (NO solar bundle)
+No power at all                              -> DC freezer OR full solar bundle
+Wants freezer only, no solar                 -> Sell freezer alone, no bundle push
+
+## BNPL / CREDIT PAYMENT PLANS
+20% fixed down payment (cannot be reduced) + 80% balance over 2-23 months. Zero interest. No hidden fees.
+Available plan durations: 1, 5, 11, 17, or up to 23 months depending on product.
+Flex payment option: 70% now + 30% within 30 days (no interest).
+Formula: Down = Price x 0.20 | Monthly = (Price x 0.80) / 23
+Example: N633,000 -> Down = N126,600 | Monthly = N22,017
+Payment methods: Visa, MasterCard, Verve (secure encrypted gateways).
+
+PAYG (Pay-As-You-Go) via Koolboks partnership:
+- Make initial deposit, receive unit, then top up credit like a prepaid meter.
+- Enter a code after each payment to keep the freezer running.
+- Once fully paid off, the unit unlocks permanently and belongs to the customer.
+
+Credit qualification requirements:
+- Valid government-issued ID
+- Bank Verification Number (BVN)
+- Evidence of steady income or business operations
+- Initial deposit (amount depends on product package)
+- Credit approval subject to quick verification by financing partners.
+
+Deposit range: 20%-35% depending on product and plan selected.
+Missed payments: may lead to restricted usage or follow-up from support team.
+
+## PAYMENT BEFORE DELIVERY
+Standard: payment before delivery for all orders.
+Installment plans: full credit process and documentation must be completed before delivery.
+Outright payment: pay-on-delivery may be considered depending on location
+(customer covers logistics cost first, pays for product at delivery).
+Skeptical customers: can visit any nearest Koolbuy office to confirm and pay directly.
+
+## INSTALLATION
+Available across all states in Nigeria.
+Cost: N40,000 or N50,000 depending on freezer size.
+Not included in product price because customers are in different locations.
+Some customers prefer pickup or use their own engineer.
+Koolbuy installation team recommended to protect warranty.
+Technical support provided for solar panel mounting and full configuration.
+
+## SHIPPING & DELIVERY
+Nationwide delivery across Nigeria via verified logistics partners.
+Fleet: bikes, vans, and trucks (1.5-ton and 3.5-ton) depending on delivery requirement.
+Processing time: 12-48 hours after payment confirmation.
+Weekends/public holidays: processed next business day.
+Confirmation and tracking sent via email or WhatsApp (real-time SMS/email tracking available).
+Same-day delivery available depending on location and request time.
+
+Delivery time estimates:
+Lagos: 1-3 business days
+Other major cities: 2-5 business days
+Remote locations: 3-7 business days
+
+Delays possible due to: weather, logistics disruptions, public holidays, incomplete address.
+Delivery fees: calculated automatically at checkout based on location and weight.
+Failed delivery: customer may pay re-delivery fee. Unclaimed orders returned to warehouse.
+Damaged/lost items: contact support immediately -- Koolbuy works with insured partners.
+
+## AGENTS & DISTRIBUTORS
+Agents in different states across Nigeria.
+Share your location and we connect you with the nearest agent.
+Partnership enquiries welcome from e-commerce businesses, retailers, and wholesalers.
+
+## RETURNS & REFUNDS
+Returns accepted if:
+- Item is damaged, defective, or incorrect
+- Item is unused, unopened, in original packaging
+- Return request submitted within 3-7 days of delivery
+- Proof of purchase provided
+
+Non-returnable: clearance/final-sale items, items showing signs of use, items outside return window,
+items missing original packaging, items returned without prior approval.
+
+Return process:
+1. Contact support (chat, email, or WhatsApp) with order number, reason, and photos if damaged
+2. Wait for approval before sending item back
+3. Returns sent without approval will not be processed
+
+Return shipping:
+- Koolbuy error (wrong/damaged item) -> Koolbuy covers return shipping
+- Customer-initiated (change of mind) -> customer covers return shipping
+
+Refund timeline:
+- Processing: 2-5 business days after inspection
+- Bank/payment processing: 3-10 business days
+- Refund via original payment method, bank transfer, or store credit
+
+Exchanges offered where stock is available; otherwise refund or store credit.
+Disputes reviewed within 2-5 business days.
+
+## WARRANTY
+Freezer: 3 years
+Components (controllers, adaptors): 1 year
+Batteries: 1-3 years depending on type
+Inventory insurance: 1 year (covers spoilage due to delayed service response)
+
+## ORDER & PAYMENT FLOW
+1. Add item to cart
+2. Choose payment: full, BNPL, or Flex
+3. Confirm checkout
+4. Receive order confirmation and delivery/tracking update
+
+Order tracking: via order number, SMS, email, or contact support.
+
+## ESCALATION
+If bot cannot help: "I'm sorry I couldn't find the exact information. Let me connect you
+with a customer support agent who can assist you further."
+WhatsApp: +2348106912022 | support@koolbuystore.com
+
+## FULL Q&A
+
+### SALES / GENERAL
+Q: What products does Koolbuy offer?
+A: Solar freezers, chest freezers, batteries, power solutions, solar panels, ice makers, and accessories from brands like Koolboks, Hisense, LG, Thermocool, and others.
+
+Q: What is the difference between a freezer alone and a Maxi Battery integrated freezer?
+A: A freezer alone works with electricity only. A Maxi Battery integrated freezer has a built-in battery and runs without constant power.
+
+Q: Which freezer size should I choose?
+A: Depends on your storage volume. 198-208L for small business/home, 300-450L for medium business, 500-750L for large commercial. Share your crate volume and we will size it precisely.
+
+Q: Can I use the freezer without electricity?
+A: Yes -- Maxi Battery integrated Koolboks freezers run on stored battery power without constant electricity.
+
+Q: Do you sell ice block machines?
+A: Yes. The 195L solar freezer doubles as a commercial ice block maker -- up to 18 ice blocks per cycle in 24-48 hours.
+
+Q: How long does it take to produce ice blocks?
+A: 24-48 hours for the 195L. The 750L takes about 72 hours and produces 35-40 blocks per cycle.
+
+Q: How can I get full product details?
+A: Request the product brochure and we will send it immediately. You can also contact us on WhatsApp +2348106912022.
+
+Q: How can I place an order?
+A: On the Koolbuy website by selecting your product and payment plan, or contact our sales team directly.
+
+Q: Do you have agents near me?
+A: Yes -- agents across all states. Share your location and we will connect you with the nearest one.
+
+### CREDIT & PAYMENT
+Q: Do you offer installment payment?
+A: Yes -- plans from 2 to 23 months. Also a Flex option: 70% now, 30% within 30 days. Zero interest on all plans.
+
+Q: How does the PAYG system work?
+A: Make an initial deposit, receive the unit, then top up credit like a prepaid meter. Enter a code after each payment. Once fully paid, the unit unlocks permanently.
+
+Q: What do I need to qualify for a credit plan?
+A: Valid government ID, BVN, proof of steady income or business, and an initial deposit. Approval subject to quick verification.
+
+Q: What happens if I miss a payment?
+A: Missed payments may lead to restricted usage or follow-up from the support team.
+
+Q: Is payment before or after delivery?
+A: Payment before delivery is standard. Outright buyers may qualify for pay-on-delivery in some locations. Installment customers must complete credit documentation first.
+
+Q: What deposit is required?
+A: Typically 20%-35% depending on the product and plan selected.
+
+### ENGINEERING / TECHNICAL
+Q: Can the freezer run throughout the day?
+A: Yes -- using solar power and battery backup. Performance depends on battery capacity, sunlight, and usage.
+
+Q: What happens at night or when there is no sunlight?
+A: The freezer runs on the pedestal battery -- typically 8-12 hours backup.
+
+Q: How long does it take to charge the battery?
+A: About 6-8 hours under good sunlight. May vary with weather.
+
+Q: How durable are the solar panels?
+A: Monocrystalline panels built to withstand heat, rain, and dust.
+
+Q: Can the system work with NEPA or a generator?
+A: Yes -- NEPA or generator can serve as an additional charging source alongside solar.
+
+Q: What is the benefit of the pedestal?
+A: It houses the battery, elevates the freezer for better airflow, and reduces moisture exposure.
+
+Q: Is installation complicated?
+A: No -- designed for straightforward setup. Technical support is provided for solar panel mounting and configuration.
+
+Q: Can I expand the system later?
+A: Yes -- additional panels or higher-capacity batteries can be added.
+
+Q: How long does the battery last?
+A: Lithium batteries: 3,000+ cycles, approximately 10-15 years under normal usage.
+
+Q: What is the solar panel wattage?
+A: Each panel is 250W. Number of panels depends on freezer size and configuration.
+
+Q: Can I upgrade the battery later?
+A: Yes -- the battery can be upgraded for longer backup time.
+
+### LOGISTICS & DELIVERY
+Q: Do you deliver nationwide?
+A: Yes -- safe shipping across Nigeria, with physical presence in South-West, South-South, and Abuja.
+
+Q: How much does delivery cost?
+A: Calculated at checkout based on your location and item weight.
+
+Q: Do you offer same-day delivery?
+A: Yes -- available depending on location and request time.
+
+Q: Can I track my shipment?
+A: Yes -- real-time tracking via SMS or email.
+
+Q: What if my item is damaged or lost in transit?
+A: Contact support immediately. Koolbuy works with insured partners and will resolve the issue.
+
+Q: Is installation available in my state?
+A: Yes -- across all states. Cost is N40,000 or N50,000 depending on freezer size.
+
+Q: Why is installation not included in the price?
+A: Customers are in different locations and some prefer pickup or use their own engineer. Koolbuy's team is recommended to protect your warranty.
+
+### WARRANTY & RETURNS
+Q: What warranty do you provide?
+A: 3-year warranty on the freezer, 1-year on components, 1-3 years on batteries, and 1-year inventory insurance against spoilage.
+
+Q: Can I return a faulty product?
+A: Yes -- within 3-7 days of delivery with proof of purchase. Contact support first for approval.
+
+Q: Can I exchange my old freezer for a new one?
+A: Yes -- via our Scrap4New programme. We evaluate your old unit and you pay the balance for a new one. Up to N50,000 off.

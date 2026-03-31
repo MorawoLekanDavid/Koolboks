@@ -1,0 +1,7 @@
+#### to turn memurai
+PS C:\Windows\system32> Set-Service -Name Memurai -StartupType Automatic
+PS C:\Windows\system32>
+
+#### to run uvicorn server
+
+uvicorn app:app --reload
