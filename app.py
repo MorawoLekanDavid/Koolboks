@@ -6,13 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from contextlib import asynccontextmanager
 from datetime import datetime
-import csv
+from sqlalchemy import create_engine, select, func, and_
+from sqlalchemy.orm import sessionmaker, Session
 import re
-import pandas as pdcurl http: // localhost: 8001/health
 import redis.asyncio as aioredis
 import os
 import json
 import logging
+
+from models import Product, Lead, init_db
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
@@ -21,6 +23,8 @@ log = logging.getLogger('koolbuy')
 load_dotenv()
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://koolbuy:koolbuy_secure_password_2026@localhost:5432/koolbuy")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 CHAT_TTL = int(os.environ.get("REDIS_CHAT_TTL", 3600))
@@ -28,25 +32,8 @@ MAX_HISTORY = int(os.environ.get("MAX_HISTORY_MESSAGES", 20))
 IDLE_THRESHOLD = 5 * 60  # seconds — gaps longer than this are treated as idle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LEADS_FILE = os.path.join(BASE_DIR, "leads.csv")
-PRODUCTS_FILE = os.path.join(BASE_DIR, "products.csv")
 PROMPT_FILE = os.path.join(BASE_DIR, "system_prompt.txt")
 KB_FILE = os.path.join(BASE_DIR, "knowledge_base.txt")
-
-# ── Lead CSV columns — edit here to rename headers ────────────────────────────
-LEAD_FIELDS = [
-    "name",
-    "phone",
-    "business",
-    "product_interest",
-    "amount",
-    "payment_plan",
-    "pain_point",
-    "power_type",
-    "address",
-    "active_duration",
-    "timestamp",
-]
 
 
 def load_text_file(path: str, label: str) -> str:
@@ -64,24 +51,43 @@ SYSTEM_PROMPT_TEMPLATE = load_text_file(PROMPT_FILE, "system prompt")
 KNOWLEDGE_BASE = load_text_file(KB_FILE, "knowledge base")
 
 redis_client = None
+db_engine = None
+SessionLocal = None
+
+
+def init_database():
+    """Initialize database connection and session factory"""
+    global db_engine, SessionLocal
+    db_engine = init_db(DATABASE_URL)
+    SessionLocal = sessionmaker(bind=db_engine)
+    log.info("Database initialized successfully")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_client
+
+    # Initialize database
+    init_database()
+
+    # Initialize Redis
     try:
         redis_client = await aioredis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
-        # Test the connection
         await redis_client.ping()
         log.info("Redis connected successfully")
     except Exception as e:
         log.warning(
             f"Redis connection failed: {e}. Chat history will not be persisted.")
         redis_client = None
+
     yield
+
     if redis_client:
         await redis_client.close()
         log.info("Redis disconnected")
+    if db_engine:
+        db_engine.dispose()
+        log.info("Database disconnected")
 
 app = FastAPI(title="Koolbuy Chatbot API", lifespan=lifespan)
 groq_client = AsyncGroq(api_key=GROQ_API_KEY)
@@ -111,43 +117,54 @@ class ChatResponse(BaseModel):
     products:      List[ProductCard] = []
     lead_captured: bool = False
 
-# ── Inventory ──────────────────────────────────────────────────────────────────
+# ── Inventory (Database) ──────────────────────────────────────────────────────
 
 
-def load_products() -> pd.DataFrame:
+def get_db():
+    """Get database session"""
+    return SessionLocal()
+
+
+def load_products() -> List[Product]:
+    """Load all products from database"""
     try:
-        return pd.read_csv(PRODUCTS_FILE)
-    except FileNotFoundError:
-        return pd.DataFrame()
-
-
-def inventory_text(df: pd.DataFrame) -> str:
-    if df.empty:
-        return "No inventory loaded."
-    name_col = "product" if "product" in df.columns else "name"
-    cols = [c for c in [name_col, "price"] if c in df.columns]
-    if not cols:
-        return "No inventory loaded."
-    slim = df[cols].drop_duplicates(subset=[name_col]).head(60)
-    return slim.to_string(index=False)
-
-
-def match_products(df: pd.DataFrame, names: List[str]) -> List[ProductCard]:
-    if df.empty or not names:
+        db = get_db()
+        products = db.query(Product).all()
+        db.close()
+        return products
+    except Exception as e:
+        log.warning(f"Failed to load products from DB: {e}")
         return []
-    name_col = "product" if "product" in df.columns else "name"
+
+
+def inventory_text(products: List[Product]) -> str:
+    """Format products for the system prompt"""
+    if not products:
+        return "No inventory loaded."
+
+    lines = ["name,price"]
+    for p in products[:60]:
+        lines.append(f"{p.name},{p.price}")
+    return "\n".join(lines)
+
+
+def match_products(products: List[Product], names: List[str]) -> List[ProductCard]:
+    """Match requested product names with available products"""
+    if not products or not names:
+        return []
+
     cards = []
-    for name in names:
-        mask = df[name_col].str.contains(name.strip(), case=False, na=False)
-        for _, row in df[mask].head(1).iterrows():
-            cards.append(ProductCard(
-                name=str(row.get(name_col, "")),
-                price=str(row.get("price", "")),
-                image_url=str(row["image_url"]) if "image_url" in row and pd.notna(
-                    row["image_url"]) else None,
-                product_url=str(row["product_url"]) if "product_url" in row and pd.notna(
-                    row["product_url"]) else None,
-            ))
+    for req_name in names:
+        req_lower = req_name.strip().lower()
+        for p in products:
+            if req_lower in p.name.lower():
+                cards.append(ProductCard(
+                    name=p.name,
+                    price=str(p.price),
+                    image_url=p.image_url,
+                    product_url=p.product_url,
+                ))
+                break
     return cards
 
 # ── Redis ──────────────────────────────────────────────────────────────────────
@@ -241,6 +258,22 @@ async def save_lead(user_name: str, phone: str, history: list):
     duration = calc_active_duration(history)
 
     data = {}
+
+
+async def save_lead(user_name: str, phone: str, history: list):
+    """Extract rich lead data from conversation and save to database"""
+    lines = []
+    for msg in history:
+        role = "Customer" if msg.get("role") == "user" else "KoolBot"
+        content = re.sub(r'\[[^\]]*\]', '', msg.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content}")
+    transcript = "\n".join(lines[-40:])
+
+    # Calculate active duration before the Groq call
+    duration = calc_active_duration(history)
+
+    data = {}
     try:
         prompt = (
             "Read this sales conversation and extract the following fields. "
@@ -273,29 +306,28 @@ async def save_lead(user_name: str, phone: str, history: list):
     except Exception as e:
         log.warning(f"Lead extraction failed: {e}")
 
-    file_exists = os.path.isfile(LEADS_FILE)
     try:
-        with open(LEADS_FILE, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=LEAD_FIELDS)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow({
-                "name":             clean_name(data.get("name") or user_name),
-                "phone":            phone,
-                "business":         data.get("business", ""),
-                "product_interest": data.get("product_interest", ""),
-                "amount":           data.get("amount", ""),
-                "payment_plan":     data.get("payment_plan", ""),
-                "pain_point":       data.get("pain_point", ""),
-                "power_type":       data.get("power_type", ""),
-                "address":          data.get("address", ""),
-                "active_duration":  duration,
-                "timestamp":        datetime.now().strftime("%Y-%m-%d %H:%M"),
-            })
+        db = get_db()
+        lead = Lead(
+            name=clean_name(data.get("name") or user_name),
+            phone=phone,
+            business=data.get("business", ""),
+            product_interest=data.get("product_interest", ""),
+            amount=data.get("amount", ""),
+            payment_plan=data.get("payment_plan", ""),
+            pain_point=data.get("pain_point", ""),
+            power_type=data.get("power_type", ""),
+            address=data.get("address", ""),
+            active_duration=duration,
+        )
+        db.add(lead)
+        db.commit()
+        db.close()
         log.info(
             f"Lead saved: {clean_name(data.get('name') or user_name)} | {phone} | duration={duration}")
     except Exception as e:
-        log.error(f"Failed to write lead: {e}")
+        log.error(f"Failed to save lead to DB: {e}")
+
 
 # ── Lead address updater ───────────────────────────────────────────────────────
 
@@ -309,25 +341,23 @@ def phone_from_history(history: list) -> str:
 
 
 async def update_lead_address(phone: str, address: str):
+    """Update delivery address for a lead in database"""
     if not phone or not address:
         return
     try:
-        rows = []
-        if not os.path.isfile(LEADS_FILE):
-            return
-        with open(LEADS_FILE, "r", newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rows.append(dict(row))
-        for row in reversed(rows):
-            if row.get("phone", "").strip() == phone.strip() and not row.get("address", "").strip():
-                row["address"] = address
-                break
-        with open(LEADS_FILE, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=LEAD_FIELDS)
-            writer.writeheader()
-            writer.writerows(rows)
-        log.info(f"Lead address updated: {phone} -> {address}")
+        db = get_db()
+        lead = db.query(Lead).filter(
+            and_(
+                Lead.phone == phone.strip(),
+                (Lead.address == None) | (Lead.address == "")
+            )
+        ).order_by(Lead.created_at.desc()).first()
+
+        if lead:
+            lead.address = address.strip()
+            db.commit()
+            log.info(f"Lead address updated: {phone} -> {address}")
+        db.close()
     except Exception as e:
         log.warning(f"Failed to update lead address: {e}")
 

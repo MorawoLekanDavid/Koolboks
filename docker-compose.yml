@@ -1,4 +1,24 @@
 services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: koolbuy-postgres
+    environment:
+      POSTGRES_DB: koolbuy
+      POSTGRES_USER: koolbuy
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-koolbuy_secure_password_2026}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U koolbuy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - koolbuy-network
+
   # Redis service for chat history and caching
   redis:
     image: redis:7-alpine
@@ -26,16 +46,17 @@ services:
       - "8001:8000"  # Host:Container - using 8001 to avoid local conflicts
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - DATABASE_URL=postgresql://koolbuy:${DB_PASSWORD:-koolbuy_secure_password_2026}@postgres:5432/koolbuy
       - REDIS_URL=redis://redis:6379
       - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
       - CHAT_TTL=${CHAT_TTL:-3600}
       - MAX_HISTORY_MESSAGES=${MAX_HISTORY_MESSAGES:-20}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      - ./leads.csv:/app/leads.csv
-      - ./products.csv:/app/products.csv
       - ./knowledge_base.txt:/app/knowledge_base.txt
       - ./system_prompt.txt:/app/system_prompt.txt
     networks:
@@ -43,6 +64,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data:
   redis_data:
 
 networks:
