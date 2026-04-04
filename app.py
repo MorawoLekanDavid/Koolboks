@@ -4,6 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from datetime import datetime
 from sqlalchemy import create_engine, select, func, and_
@@ -581,3 +582,7 @@ async def health():
         return {"status": "ok", "redis": "connected" if ping else "error"}
     except Exception:
         return {"status": "ok", "redis": "connection failed"}
+
+@app.get("/")
+async def serve_frontend():
+    return FileResponse(os.path.join(BASE_DIR, "index.html"))
