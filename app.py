@@ -3,8 +3,8 @@ from groq import AsyncGroq
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi.responses import FileResponse, Response
 from contextlib import asynccontextmanager
 from datetime import datetime
 from sqlalchemy import create_engine, select, func, and_
@@ -14,6 +14,8 @@ import redis.asyncio as aioredis
 import os
 import json
 import logging
+import hashlib
+import httpx
 
 from models import Product, Lead, init_db
 
@@ -143,10 +145,20 @@ def inventory_text(products: List[Product]) -> str:
     if not products:
         return "No inventory loaded."
 
-    lines = ["name,price"]
+    lines = ["name | price | description (features and capacities)"]
     for p in products[:60]:
-        lines.append(f"{p.name},{p.price}")
+        desc = str(p.description)[:250].replace('\n', ' ') if p.description else ''
+        lines.append(f"{p.name} | {p.price} | {desc}")
     return "\n".join(lines)
+
+
+def proxy_image_url(original_url: Optional[str]) -> Optional[str]:
+    """Rewrite an S3 image URL to go through our /img-proxy endpoint.
+    This avoids CORS / direct-access errors in the browser."""
+    if not original_url:
+        return None
+    from urllib.parse import quote
+    return f"/img-proxy?url={quote(original_url, safe='')}"
 
 
 def match_products(products: List[Product], names: List[str]) -> List[ProductCard]:
@@ -155,18 +167,94 @@ def match_products(products: List[Product], names: List[str]) -> List[ProductCar
         return []
 
     cards = []
+    seen = set()
     for req_name in names:
         req_lower = req_name.strip().lower()
         for p in products:
-            if req_lower in p.name.lower():
+            if req_lower in p.name.lower() and p.id not in seen:
                 cards.append(ProductCard(
                     name=p.name,
                     price=str(p.price),
-                    image_url=p.image_url,
+                    image_url=proxy_image_url(p.image_url),
                     product_url=p.product_url,
                 ))
+                seen.add(p.id)
                 break
     return cards
+
+
+def auto_detect_products(products: List[Product], text: str) -> List[ProductCard]:
+    """Fallback: scan AI response text for any product names mentioned.
+    This catches cases where the LLM forgets to output PRODUCTS: tag.
+    Uses three strategies: capacity markers, product name keywords, and price matching."""
+    if not products or not text:
+        return []
+
+    text_lower = text.lower()
+    # Normalize text for price matching: remove commas and spaces in numbers
+    text_normalized = text.replace(',', '').replace(' ', '')
+    cards = []
+    seen = set()
+
+    # Sort by name length descending so longer (more specific) names match first
+    sorted_products = sorted(products, key=lambda p: len(p.name), reverse=True)
+
+    # Strategy 1: Match by capacity markers like "530L", "208L"
+    for p in sorted_products:
+        name_lower = p.name.lower()
+        capacity_match = re.search(r'(\d{3,4})\s*l', name_lower)
+        if capacity_match:
+            capacity = capacity_match.group(1) + 'l'
+            if capacity in text_lower and p.id not in seen:
+                cards.append(ProductCard(
+                    name=p.name,
+                    price=str(p.price),
+                    image_url=proxy_image_url(p.image_url),
+                    product_url=p.product_url,
+                ))
+                seen.add(p.id)
+
+    if cards:
+        return cards[:3]
+
+    # Strategy 2: Match by product name keywords (e.g. "koolboks" + "530")
+    for p in sorted_products:
+        name_lower = p.name.lower()
+        # Check if significant portions of the name appear in text
+        name_words = [w for w in name_lower.split() if len(w) > 3]
+        matches = sum(1 for w in name_words if w in text_lower)
+        if matches >= 2 and p.id not in seen:
+            cards.append(ProductCard(
+                name=p.name,
+                price=str(p.price),
+                image_url=proxy_image_url(p.image_url),
+                product_url=p.product_url,
+            ))
+            seen.add(p.id)
+
+    if cards:
+        return cards[:3]
+
+    # Strategy 3: Match by price — the AI almost always mentions the price
+    prices_in_text = re.findall(r'[\d,]+(?:\.\d+)?', text.replace('N', '').replace('₦', ''))
+    for price_str in prices_in_text:
+        try:
+            price_val = float(price_str.replace(',', ''))
+            if price_val < 10000:  # Skip small numbers (not prices)
+                continue
+            for p in sorted_products:
+                if abs(p.price - price_val) < 100 and p.id not in seen:
+                    cards.append(ProductCard(
+                        name=p.name,
+                        price=str(p.price),
+                        image_url=proxy_image_url(p.image_url),
+                        product_url=p.product_url,
+                    ))
+                    seen.add(p.id)
+        except (ValueError, TypeError):
+            continue
+
+    return cards[:3]
 
 # ── Redis ──────────────────────────────────────────────────────────────────────
 
@@ -462,25 +550,33 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     history_for_groq = [
         {"role": m["role"], "content": m["content"]} for m in history]
 
-    already_captured = any(
-        "[VALID phone captured" in msg.get("content", "")
-        for msg in history
+    phone_redis = await redis_client.get(f"koolbuy:phone:{request.session_id}") if redis_client else None
+    delivery_redis = await redis_client.get(f"koolbuy:delivery:{request.session_id}") if redis_client else None
+
+    already_captured = bool(phone_redis) or any(
+        "[VALID phone captured" in msg.get("content", "") for msg in history
     )
 
-    delivery_captured = any(
-        "[DELIVERY confirmed" in msg.get("content", "")
-        for msg in history
+    delivery_captured = bool(delivery_redis) or any(
+        "[DELIVERY confirmed" in msg.get("content", "") for msg in history
     )
 
     # Build state summary for clarity
     state_summary = "─── CAPTURED STATE ───\n"
     if already_captured:
-        extracted_phone = phone_from_history(history)
+        if phone_redis:
+            extracted_phone = phone_redis.decode('utf-8') if isinstance(phone_redis, bytes) else phone_redis
+        else:
+            extracted_phone = phone_from_history(history)
+            if redis_client and extracted_phone:
+                await redis_client.set(f"koolbuy:phone:{request.session_id}", extracted_phone, ex=CHAT_TTL)
         state_summary += f"✓ Phone CAPTURED: {extracted_phone}\n"
     else:
         state_summary += "× Phone: NOT YET CAPTURED\n"
 
     if delivery_captured:
+        if redis_client and not delivery_redis:
+             await redis_client.set(f"koolbuy:delivery:{request.session_id}", "captured", ex=CHAT_TTL)
         state_summary += "✓ Delivery location CAPTURED\n"
     elif already_captured:
         state_summary += "× Delivery location: NOT YET CAPTURED\n"
@@ -497,6 +593,8 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     if phone and not already_captured:
         background_tasks.add_task(save_lead, request.user_name, phone, history)
         lead_captured = True
+        if redis_client:
+            await redis_client.set(f"koolbuy:phone:{request.session_id}", phone, ex=CHAT_TTL)
         messages[-1]["content"] = (
             f"{request.message}\n\n"
             f"[VALID phone captured: {phone}. "
@@ -523,9 +621,11 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         if is_address:
             background_tasks.add_task(
                 update_lead_address,
-                phone_from_history(history),
+                phone_from_history(history) or (phone_redis.decode('utf-8') if phone_redis else ""),
                 request.message.strip()
             )
+            if redis_client:
+                await redis_client.set(f"koolbuy:delivery:{request.session_id}", "captured", ex=CHAT_TTL)
             # Add delivery address confirmation marker
             messages[-1]["content"] = (
                 f"{request.message}\n\n"
@@ -546,6 +646,18 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     if m:
         names = [n.strip() for n in m.group(1).split("|")]
         cards = match_products(df, names)
+
+    # FALLBACK: If no PRODUCTS: tag found, auto-detect product names in the response
+    if not cards:
+        cards = auto_detect_products(df, raw)
+
+    # Debug: log what product cards we're sending to frontend
+    if cards:
+        for c in cards:
+            log.info(f"PRODUCT CARD → name={c.name} | price={c.price} | image_url={c.image_url}")
+    else:
+        log.info("NO product cards matched for this response")
+
     clean = re.sub(r'PRODUCTS:\s*.+\n?', '', raw, flags=re.IGNORECASE).strip()
 
     now = datetime.now().isoformat()
@@ -582,6 +694,52 @@ async def health():
         return {"status": "ok", "redis": "connected" if ping else "error"}
     except Exception:
         return {"status": "ok", "redis": "connection failed"}
+
+# ── Image proxy ────────────────────────────────────────────────────────────────
+_img_cache: dict = {}  # Simple in-memory cache: url -> (content_type, bytes)
+_http_client: Optional[httpx.AsyncClient] = None
+
+
+async def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=15.0, follow_redirects=True)
+    return _http_client
+
+
+@app.get("/img-proxy")
+async def image_proxy(url: str = Query(...)):
+    """Proxy S3 product images to avoid CORS / direct-access issues in browser."""
+    # Security: only allow proxying from our S3 bucket
+    if "koolbuy-assets.s3" not in url and "amazonaws.com" not in url:
+        raise HTTPException(status_code=403, detail="Forbidden: only koolbuy S3 URLs allowed")
+
+    # Check cache
+    if url in _img_cache:
+        ct, data = _img_cache[url]
+        return Response(content=data, media_type=ct,
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+    try:
+        client = await _get_http_client()
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            log.warning(f"Image proxy: S3 returned {resp.status_code} for {url}")
+            raise HTTPException(status_code=resp.status_code, detail="Image fetch failed")
+
+        content_type = resp.headers.get("content-type", "image/jpeg")
+        img_bytes = resp.content
+
+        # Cache it (limit cache to ~100 images to avoid memory bloat)
+        if len(_img_cache) < 100:
+            _img_cache[url] = (content_type, img_bytes)
+
+        return Response(content=img_bytes, media_type=content_type,
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except httpx.RequestError as e:
+        log.error(f"Image proxy error: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {str(e)}")
+
 
 @app.get("/")
 async def serve_frontend():

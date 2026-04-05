@@ -256,7 +256,8 @@
 
         .product-card {
             flex-shrink: 0;
-            width: 160px;
+            width: 170px;
+            min-height: 180px;
             background: var(--white);
             border: 1.5px solid var(--gray-200);
             border-radius: 14px;
@@ -264,7 +265,8 @@
             box-shadow: var(--shadow-sm);
             transition: box-shadow 0.2s, transform 0.15s;
             text-decoration: none;
-            display: block;
+            display: flex;
+            flex-direction: column;
         }
 
         .product-card:hover {
@@ -275,8 +277,9 @@
 
         .product-img-wrap {
             width: 100%;
-            height: 110px;
-            background: var(--orange-soft);
+            height: 120px;
+            min-height: 120px;
+            background: linear-gradient(135deg, var(--orange-soft) 0%, #FFE0C2 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -288,24 +291,23 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            display: block;
+        }
+
+        .product-img-wrap img.img-hidden {
+            display: none;
         }
 
         .product-img-wrap .no-img {
             font-size: 36px;
+            line-height: 1;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
-        .product-card:hover .product-img-wrap::after {
-            content: '🔍 View';
-            position: absolute;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.45);
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        /* Overlay removed */
 
         .product-info {
             padding: 9px 10px 10px;
@@ -319,6 +321,7 @@
             margin-bottom: 4px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
@@ -614,26 +617,65 @@
             if (save) saveMessages();
         }
 
+        function formatPrice(raw) {
+            // Convert "1950000.0" or "1950000" to "₦1,950,000"
+            let n = parseFloat(String(raw).replace(/[^\d.]/g, ''));
+            if (isNaN(n)) return raw;
+            n = Math.round(n);
+            return '₦' + n.toLocaleString('en-NG');
+        }
+
         function appendProductCards(products) {
-            if (!products || !products.length) return;
+            if (!products || !products.length) {
+                console.log('[KoolBot] No products to display');
+                return;
+            }
+            console.log('[KoolBot] Rendering product cards:', JSON.stringify(products, null, 2));
             const box = document.getElementById('messages');
             const strip = document.createElement('div');
             strip.className = 'product-strip';
             products.forEach(q => {
-                const card = document.createElement('a');
+                console.log(`[KoolBot] Card: name=${q.name}, price=${q.price}, image_url=${q.image_url}`);
+                const card = document.createElement('div');
                 card.className = 'product-card';
-                card.href = q.product_url || 'https://koolbuystore.com';
-                card.target = '_blank'; card.rel = 'noopener';
-                const img = q.image_url
-                    ? `<img src="${escHtml(q.image_url)}" alt="${escHtml(q.name)}" loading="lazy" onerror="this.style.display='none';this.parentElement.innerHTML='<span class=no-img>❄️</span>'" />`
-                    : `<span class="no-img">❄️</span>`;
-                card.innerHTML = `
-                <div class="product-img-wrap">${img}</div>
-                <div class="product-info">
+
+                // Build image element safely via DOM
+                const imgWrap = document.createElement('div');
+                imgWrap.className = 'product-img-wrap';
+
+                // Always add snowflake fallback first (shows if image fails)
+                const fallback = document.createElement('span');
+                fallback.className = 'no-img';
+                fallback.textContent = '❄️';
+                imgWrap.appendChild(fallback);
+
+                if (q.image_url) {
+                    const imgEl = document.createElement('img');
+                    imgEl.alt = q.name || 'Product';
+                    imgEl.loading = 'lazy';
+                    // On success — hide the fallback emoji
+                    imgEl.onload = function() {
+                        console.log('[KoolBot] Image loaded OK:', q.image_url);
+                        fallback.style.display = 'none';
+                    };
+                    // On error — hide the broken img, fallback emoji stays visible
+                    imgEl.onerror = function() {
+                        console.warn('[KoolBot] Image FAILED to load:', q.image_url);
+                        this.classList.add('img-hidden');
+                    };
+                    imgEl.src = q.image_url;
+                    imgWrap.appendChild(imgEl);
+                }
+
+                const info = document.createElement('div');
+                info.className = 'product-info';
+                info.innerHTML = `
                     <div class="prod-name">${escHtml(q.name)}</div>
-                    <div class="prod-price">${escHtml(q.price)}</div>
-                    <span class="shop-link">View Product →</span>
-                </div>`;
+                    <div class="prod-price">${formatPrice(q.price)}</div>
+                `;
+
+                card.appendChild(imgWrap);
+                card.appendChild(info);
                 strip.appendChild(card);
             });
             box.appendChild(strip);
