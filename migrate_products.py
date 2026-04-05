@@ -13,7 +13,7 @@ load_dotenv()
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://koolbuy:koolbuy_secure_password_2026@localhost:5432/koolbuy")
-CSV_FILE = os.path.join(os.path.dirname(__file__), "products.csv")
+CSV_FILE = os.path.join(os.path.dirname(__file__), "product_catalog.csv")
 
 
 def migrate_products():
@@ -21,29 +21,41 @@ def migrate_products():
 
     # Create engine and tables
     engine = create_engine(DATABASE_URL, echo=True)
+    
+    # Drop old table to apply new schema (description column) safely
+    Product.__table__.drop(engine, checkfirst=True)
     Base.metadata.create_all(bind=engine)
+    
     Session = sessionmaker(bind=engine)
     session = Session()
 
     try:
         # Read CSV
         products_added = 0
-        with open(CSV_FILE, 'r', encoding='utf-8') as f:
+        with open(CSV_FILE, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Clean price: remove "NGN" and whitespace
-                price_str = row.get('price', '0').replace('NGN', '').strip()
+                name = row.get('Product Name', '').strip()
+                if not name or name.startswith('©'):
+                    continue
+                
+                # Clean price: remove commas
+                price_str = row.get('Price (₦)', '0').replace(',', '').strip()
                 try:
                     price = float(price_str)
                 except ValueError:
                     print(f"⚠️  Skipping invalid price: {price_str}")
                     price = 0.0
 
+                img_url = row.get('Image Link', '').strip()
+                description = row.get('Description', '').strip()
+
                 # Create product
                 product = Product(
-                    name=row.get('product', '').strip(),
+                    name=name,
                     price=price,
-                    image_url=None,
+                    image_url=img_url if img_url else None,
+                    description=description,
                     product_url=None,
                 )
                 session.add(product)
