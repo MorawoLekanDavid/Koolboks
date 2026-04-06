@@ -248,6 +248,8 @@
             overflow-x: auto;
             padding: 2px 4px 6px;
             scrollbar-width: none;
+            flex-shrink: 0;
+            width: 100%;
         }
 
         .product-strip::-webkit-scrollbar {
@@ -651,7 +653,7 @@
 
                 if (q.image_url) {
                     const imgEl = document.createElement('img');
-                    imgEl.alt = q.name || 'Product';
+                    imgEl.alt = ''; // Clear to prevent duplicated fallback text
                     imgEl.loading = 'lazy';
                     // On success — hide the fallback emoji
                     imgEl.onload = function() {
@@ -663,7 +665,13 @@
                         console.warn('[KoolBot] Image FAILED to load:', q.image_url);
                         this.classList.add('img-hidden');
                     };
-                    imgEl.src = q.image_url;
+                    
+                    let absoluteImg = q.image_url;
+                    if (absoluteImg && absoluteImg.startsWith('/')) {
+                        absoluteImg = API_URL + absoluteImg;
+                    }
+                    imgEl.src = absoluteImg;
+                    
                     imgWrap.appendChild(imgEl);
                 }
 
