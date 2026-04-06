@@ -185,77 +185,62 @@ def match_products(products: List[Product], names: List[str]) -> List[ProductCar
 
 def auto_detect_products(products: List[Product], text: str) -> List[ProductCard]:
     """Fallback: scan AI response text for any product names mentioned.
-    This catches cases where the LLM forgets to output PRODUCTS: tag.
-    Uses three strategies: price matching, capacity markers, and product name keywords."""
+    This catches cases where the LLM writes the name incorrectly or forgets PRODUCTS: tag."""
     if not products or not text:
         return []
 
     text_lower = text.lower()
-    cards = []
-    seen = set()
+    
+    # Strategy 1: Word Intersection Scoring (Find the closest name match)
+    # Score each product based on how many of its significant name keywords are in the text
+    best_product = None
+    highest_score = 0
+    
+    for p in products:
+        name_lower = p.name.lower()
+        # Extract meaningful alphanumeric words (e.g. "208L", "45Ah", "koolboks", "solar")
+        name_words = re.findall(r'[a-z0-9]+', name_lower)
+        # Filter short common words
+        sig_words = set(w for w in name_words if len(w) > 2)
+        
+        if not sig_words:
+            continue
+            
+        # Count how many of these significant words appear in the text
+        score = sum(1 for w in sig_words if w in text_lower)
+        
+        # We need a minimum threshold of matches to consider it a real match usually (e.g. brand + capacity)
+        if score > highest_score and score >= 2:
+            highest_score = score
+            best_product = p
+            
+    if best_product:
+        return [ProductCard(
+            name=best_product.name,
+            price=str(best_product.price),
+            image_url=proxy_image_url(best_product.image_url),
+            product_url=best_product.product_url,
+        )]
 
-    # Sort by name length descending so longer (more specific) names match first
-    sorted_products = sorted(products, key=lambda p: len(p.name), reverse=True)
-
-    # Strategy 1: Match by price — the AI almost always mentions the price, and it uniquely identifies the exact bundle
+    # Strategy 2: Absolute Fallback - Match by exact price mentioned if name scoring completely failed
     prices_in_text = re.findall(r'[\d,]+(?:\.\d+)?', text.replace('N', '').replace('₦', ''))
     for price_str in prices_in_text:
         try:
             price_val = float(price_str.replace(',', ''))
-            if price_val < 10000:  # Skip small numbers (not prices)
+            if price_val < 10000:
                 continue
-            for p in sorted_products:
-                if abs(p.price - price_val) < 100 and p.id not in seen:
-                    cards.append(ProductCard(
+            for p in products:
+                if abs(p.price - price_val) < 100:
+                    return [ProductCard(
                         name=p.name,
                         price=str(p.price),
                         image_url=proxy_image_url(p.image_url),
                         product_url=p.product_url,
-                    ))
-                    seen.add(p.id)
+                    )]
         except (ValueError, TypeError):
             continue
-            
-    if cards:
-        return cards[:1]
 
-    # Strategy 2: Match by capacity markers like "530L", "208L"
-    for p in sorted_products:
-        name_lower = p.name.lower()
-        capacity_match = re.search(r'(\d{3,4})\s*l', name_lower)
-        if capacity_match:
-            capacity = capacity_match.group(1) + 'l'
-            if capacity in text_lower and p.id not in seen:
-                cards.append(ProductCard(
-                    name=p.name,
-                    price=str(p.price),
-                    image_url=proxy_image_url(p.image_url),
-                    product_url=p.product_url,
-                ))
-                seen.add(p.id)
-
-    if cards:
-        return cards[:1]
-
-    # Strategy 3: Match by product name keywords (e.g. "koolboks" + "530")
-    for p in sorted_products:
-        name_lower = p.name.lower()
-        # Check if significant portions of the name appear in text
-        name_words = [w for w in name_lower.split() if len(w) > 3]
-        matches = sum(1 for w in name_words if w in text_lower)
-        if matches >= 2 and p.id not in seen:
-            cards.append(ProductCard(
-                name=p.name,
-                price=str(p.price),
-                image_url=proxy_image_url(p.image_url),
-                product_url=p.product_url,
-            ))
-            seen.add(p.id)
-
-    if cards:
-        return cards[:1]
-
-    return cards
+    return []
 
 # ── Redis ──────────────────────────────────────────────────────────────────────
 
