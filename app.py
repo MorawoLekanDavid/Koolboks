@@ -632,10 +632,11 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     if m:
         names = [n.strip() for n in m.group(1).split("|")]
         cards = match_products(df, names)
-
-    # FALLBACK: If no PRODUCTS: tag found, auto-detect product names in the response
-    if not cards:
-        cards = auto_detect_products(df, raw)
+        
+        # FALLBACK: If the AI tried to use the PRODUCTS: tag but hallucinated the name, 
+        # use the intelligent text-scoring fallback on its response to figure out what it meant
+        if not cards:
+            cards = auto_detect_products(df, raw)
 
     # Debug: log what product cards we're sending to frontend
     if cards:
