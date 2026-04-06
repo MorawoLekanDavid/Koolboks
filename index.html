@@ -464,7 +464,7 @@
     </div>
 
     <script>
-        const API = window.location.origin;
+        const API = "http://44.192.21.1:8001";
 
         // ── Session persistence ───────────────────────────────────────────────────
         // Keep the same sessionId and userName across page refreshes
@@ -669,7 +669,7 @@
                     
                     let absoluteImg = q.image_url;
                     if (absoluteImg && absoluteImg.startsWith('/')) {
-                        absoluteImg = API_URL + absoluteImg;
+                        absoluteImg = API + absoluteImg; // Fixed ReferenceError
                     }
                     imgEl.src = absoluteImg;
                     
