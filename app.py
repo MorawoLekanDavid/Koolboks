@@ -183,13 +183,15 @@ def match_products(products: List[Product], names: List[str]) -> List[ProductCar
     return cards
 
 
-def auto_detect_products(products: List[Product], text: str) -> List[ProductCard]:
+def auto_detect_products(products: List[Product], raw_text: str, product_hint: str = None) -> List[ProductCard]:
     """Fallback: scan AI response text for any product names mentioned.
     This catches cases where the LLM writes the name incorrectly or forgets PRODUCTS: tag."""
-    if not products or not text:
+    if not products or not raw_text:
         return []
 
-    text_lower = text.lower()
+    # If we have a specific product name hallucinated by the AI, score against THAT strictly.
+    # Otherwise, score against the entire conversational text.
+    text_to_score = product_hint.lower() if product_hint else raw_text.lower()
     
     # Strategy 1: Word Intersection Scoring (Find the closest name match)
     # Score each product based on how many of its significant name keywords are in the text
@@ -207,7 +209,7 @@ def auto_detect_products(products: List[Product], text: str) -> List[ProductCard
             continue
             
         # Count how many of these significant words appear in the text
-        score = sum(1 for w in sig_words if w in text_lower)
+        score = sum(1 for w in sig_words if w in text_to_score)
         
         # We need a minimum threshold of matches to consider it a real match usually (e.g. brand + capacity)
         if score > highest_score and score >= 2:
@@ -223,7 +225,7 @@ def auto_detect_products(products: List[Product], text: str) -> List[ProductCard
         )]
 
     # Strategy 2: Absolute Fallback - Match by exact price mentioned if name scoring completely failed
-    prices_in_text = re.findall(r'[\d,]+(?:\.\d+)?', text.replace('N', '').replace('₦', ''))
+    prices_in_text = re.findall(r'[\d,]+(?:\.\d+)?', raw_text.replace('N', '').replace('₦', ''))
     for price_str in prices_in_text:
         try:
             price_val = float(price_str.replace(',', ''))
@@ -636,7 +638,7 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         # FALLBACK: If the AI tried to use the PRODUCTS: tag but hallucinated the name, 
         # use the intelligent text-scoring fallback on its response to figure out what it meant
         if not cards:
-            cards = auto_detect_products(df, raw)
+            cards = auto_detect_products(df, raw, product_hint=m.group(1))
 
     # Debug: log what product cards we're sending to frontend
     if cards:
