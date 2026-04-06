@@ -35,20 +35,23 @@ def migrate_products():
         with open(CSV_FILE, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                name = row.get('Product Name', '').strip()
+                vals = list(row.values())
+                if len(vals) < 4: continue
+                
+                name = str(vals[0]).strip()
                 if not name or name.startswith('©'):
                     continue
                 
                 # Clean price: remove commas
-                price_str = row.get('Price (₦)', '0').replace(',', '').strip()
+                price_str = str(vals[1]).replace(',', '').strip()
                 try:
                     price = float(price_str)
                 except ValueError:
                     print(f"⚠️  Skipping invalid price: {price_str}")
                     price = 0.0
 
-                img_url = row.get('Image Link', '').strip()
-                description = row.get('Description', '').strip()
+                img_url = str(vals[2]).strip()
+                description = str(vals[3]).strip()
 
                 # Create product
                 product = Product(
