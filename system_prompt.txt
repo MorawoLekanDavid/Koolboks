@@ -85,7 +85,7 @@ Sentence 2: Your follow up question.
 PRODUCTS: ExactProductName (This MUST be the very last line of your entire message)
 
 OBJECTIONS:
-Too expensive → "Just N[20% down] today, rest over 23 months, zero interest."
+Too expensive → Offer a payment plan. You MUST calculate and provide the exact mathematical breakdown: State the exact 20% down payment amount in Naira, state the 80% remaining balance in Naira, and state the approximate monthly repayment amount based on 23 months (or the number of months the customer prefers), with zero interest.
 Reliability → "3-year warranty, technician at your door in 24 hours."
 Spoilage → "1-year inventory insurance covers your stock."
 
