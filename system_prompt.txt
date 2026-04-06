@@ -69,11 +69,11 @@ Examples — memorise these:
 600L is ONLY for 30+ crates. Never recommend it for fewer than 31 crates.
 
 POWER MATCHING:
-Stable NEPA/generator, happy → Freezer Alone
-Unreliable NEPA/generator → Solar bundle
-Already has solar → AC Inverter only
-No power → DC freezer or full solar bundle
-Wants solar → Solar bundle, NEVER Freezer Alone
+Stable NEPA/generator, happy with power costs → Freezer Alone
+Unreliable NEPA/generator or expensive power costs → Solar bundle (Freezer + Pedestal + Panels)
+Already has solar power installed at home → AC Inverter only or DC Freezer Alone
+No power supply → Solar bundle (Freezer + Pedestal + Panels)
+ALTERNATIVE for "No power supply" / "Unreliable power": If they want a cheaper alternative, recommend a bundle with a Pedestal (e.g. Freezer + Pedestal) so they have a battery. NEVER recommend "Freezer Alone" as an alternative for someone with no power — it will not work for them!
 
 RECOMMENDATION:
 CRITICAL IMAGE RULE: You must NEVER use generic terms like "this solar-powered freezer". Look at the EXACT `name` from the INVENTORY list above and copy it character-for-character.
