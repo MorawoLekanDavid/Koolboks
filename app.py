@@ -186,56 +186,18 @@ def match_products(products: List[Product], names: List[str]) -> List[ProductCar
 def auto_detect_products(products: List[Product], text: str) -> List[ProductCard]:
     """Fallback: scan AI response text for any product names mentioned.
     This catches cases where the LLM forgets to output PRODUCTS: tag.
-    Uses three strategies: capacity markers, product name keywords, and price matching."""
+    Uses three strategies: price matching, capacity markers, and product name keywords."""
     if not products or not text:
         return []
 
     text_lower = text.lower()
-    # Normalize text for price matching: remove commas and spaces in numbers
-    text_normalized = text.replace(',', '').replace(' ', '')
     cards = []
     seen = set()
 
     # Sort by name length descending so longer (more specific) names match first
     sorted_products = sorted(products, key=lambda p: len(p.name), reverse=True)
 
-    # Strategy 1: Match by capacity markers like "530L", "208L"
-    for p in sorted_products:
-        name_lower = p.name.lower()
-        capacity_match = re.search(r'(\d{3,4})\s*l', name_lower)
-        if capacity_match:
-            capacity = capacity_match.group(1) + 'l'
-            if capacity in text_lower and p.id not in seen:
-                cards.append(ProductCard(
-                    name=p.name,
-                    price=str(p.price),
-                    image_url=proxy_image_url(p.image_url),
-                    product_url=p.product_url,
-                ))
-                seen.add(p.id)
-
-    if cards:
-        return cards[:3]
-
-    # Strategy 2: Match by product name keywords (e.g. "koolboks" + "530")
-    for p in sorted_products:
-        name_lower = p.name.lower()
-        # Check if significant portions of the name appear in text
-        name_words = [w for w in name_lower.split() if len(w) > 3]
-        matches = sum(1 for w in name_words if w in text_lower)
-        if matches >= 2 and p.id not in seen:
-            cards.append(ProductCard(
-                name=p.name,
-                price=str(p.price),
-                image_url=proxy_image_url(p.image_url),
-                product_url=p.product_url,
-            ))
-            seen.add(p.id)
-
-    if cards:
-        return cards[:3]
-
-    # Strategy 3: Match by price — the AI almost always mentions the price
+    # Strategy 1: Match by price — the AI almost always mentions the price, and it uniquely identifies the exact bundle
     prices_in_text = re.findall(r'[\d,]+(?:\.\d+)?', text.replace('N', '').replace('₦', ''))
     for price_str in prices_in_text:
         try:
@@ -253,8 +215,47 @@ def auto_detect_products(products: List[Product], text: str) -> List[ProductCard
                     seen.add(p.id)
         except (ValueError, TypeError):
             continue
+            
+    if cards:
+        return cards[:1]
 
-    return cards[:3]
+    # Strategy 2: Match by capacity markers like "530L", "208L"
+    for p in sorted_products:
+        name_lower = p.name.lower()
+        capacity_match = re.search(r'(\d{3,4})\s*l', name_lower)
+        if capacity_match:
+            capacity = capacity_match.group(1) + 'l'
+            if capacity in text_lower and p.id not in seen:
+                cards.append(ProductCard(
+                    name=p.name,
+                    price=str(p.price),
+                    image_url=proxy_image_url(p.image_url),
+                    product_url=p.product_url,
+                ))
+                seen.add(p.id)
+
+    if cards:
+        return cards[:1]
+
+    # Strategy 3: Match by product name keywords (e.g. "koolboks" + "530")
+    for p in sorted_products:
+        name_lower = p.name.lower()
+        # Check if significant portions of the name appear in text
+        name_words = [w for w in name_lower.split() if len(w) > 3]
+        matches = sum(1 for w in name_words if w in text_lower)
+        if matches >= 2 and p.id not in seen:
+            cards.append(ProductCard(
+                name=p.name,
+                price=str(p.price),
+                image_url=proxy_image_url(p.image_url),
+                product_url=p.product_url,
+            ))
+            seen.add(p.id)
+
+    if cards:
+        return cards[:1]
+
+    return cards
 
 # ── Redis ──────────────────────────────────────────────────────────────────────
 
