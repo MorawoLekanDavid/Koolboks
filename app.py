@@ -33,7 +33,7 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
 MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")  # 24h — leads outlive chat sessions
-WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348106912022")
+WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
 
 CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
 MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
@@ -379,23 +379,37 @@ async def save_lead(user_name: str, phone: str, history: list):
 
     try:
         db = get_db()
-        lead = Lead(
-            name=clean_name(data.get("name") or user_name),
-            phone=phone,
-            business=data.get("business", ""),
-            product_interest=data.get("product_interest", ""),
-            amount=data.get("amount", ""),
-            payment_plan=data.get("payment_plan", ""),
-            pain_point=data.get("pain_point", ""),
-            power_type=data.get("power_type", ""),
-            address=data.get("address", ""),
-            active_duration=duration,
-        )
-        db.add(lead)
+        clean = clean_name(data.get("name") or user_name)
+        existing = db.query(Lead).filter(Lead.phone == phone.strip()).first()
+        if existing:
+            if data.get("name"):        existing.name             = clean
+            if data.get("business"):    existing.business         = data["business"]
+            if data.get("product_interest"): existing.product_interest = data["product_interest"]
+            if data.get("amount"):      existing.amount           = data["amount"]
+            if data.get("payment_plan"): existing.payment_plan    = data["payment_plan"]
+            if data.get("pain_point"):  existing.pain_point       = data["pain_point"]
+            if data.get("power_type"):  existing.power_type       = data["power_type"]
+            if data.get("address"):     existing.address          = data["address"]
+            existing.active_duration = duration
+            existing.updated_at = datetime.utcnow()
+            log.info(f"Lead updated: {clean} | {phone} | duration={duration}")
+        else:
+            lead = Lead(
+                name=clean,
+                phone=phone,
+                business=data.get("business", ""),
+                product_interest=data.get("product_interest", ""),
+                amount=data.get("amount", ""),
+                payment_plan=data.get("payment_plan", ""),
+                pain_point=data.get("pain_point", ""),
+                power_type=data.get("power_type", ""),
+                address=data.get("address", ""),
+                active_duration=duration,
+            )
+            db.add(lead)
+            log.info(f"Lead saved: {clean} | {phone} | duration={duration}")
         db.commit()
         db.close()
-        log.info(
-            f"Lead saved: {clean_name(data.get('name') or user_name)} | {phone} | duration={duration}")
     except Exception as e:
         log.error(f"Failed to save lead to DB: {e}")
 
@@ -434,6 +448,8 @@ async def update_lead_address(phone: str, address: str):
 
 # ── Phone validation ───────────────────────────────────────────────────────────
 PHONE_RE = re.compile(r'(?<!\d)(0[789]\d{9}|[789]\d{9}|\+234[789]\d{9})(?!\d)')
+SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]{8,120}$')
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT_MESSAGES", "50"))
 
 
 def extract_valid_phone(text: str) -> Optional[str]:
@@ -499,6 +515,24 @@ async def call_groq(messages: list, max_tokens: int = 600) -> str:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
+    # Validate session ID format
+    if not SESSION_ID_RE.match(request.session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID.")
+
+    # Rate limiting: max RATE_LIMIT user messages per session per hour
+    if redis_client and request.message.strip() != "__welcome__":
+        try:
+            rate_key = f"koolbuy:rate:{request.session_id}"
+            count = await redis_client.incr(rate_key)
+            if count == 1:
+                await redis_client.expire(rate_key, 3600)
+            if count > RATE_LIMIT:
+                raise HTTPException(status_code=429, detail="Message limit reached. Please start a new conversation.")
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.warning(f"Rate limit check failed: {e}")
+
     df = load_products()
     inv = inventory_text(df)
     system = build_system_prompt(request.user_name, inv)

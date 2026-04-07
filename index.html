@@ -574,7 +574,9 @@
         let nameCollected = sessionStorage.getItem('kb_named') === '1';
 
         if (!sessionId) {
-            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'session_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
             sessionStorage.setItem('kb_session', sessionId);
         }
 
@@ -635,7 +637,8 @@
                 nameCollected = true;
                 showTyping();
                 try {
-                    const res = await fetch(`${API}/chat`, {
+                    const minDelay = new Promise(r => setTimeout(r, 1500));
+                    const [res] = await Promise.all([fetch(`${API}/chat`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -644,7 +647,7 @@
                             user_name: userName,
                             business_type: '',
                         }),
-                    });
+                    }), minDelay]);
                     const data = await res.json();
                     removeTyping();
                     appendBot((data.response || '').trim() ||
@@ -660,7 +663,8 @@
             // Normal AI chat
             showTyping();
             try {
-                const res = await fetch(`${API}/chat`, {
+                const minDelay = new Promise(r => setTimeout(r, 1500));
+                const [res] = await Promise.all([fetch(`${API}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -669,7 +673,7 @@
                         user_name: userName,
                         business_type: '',
                     }),
-                });
+                }), minDelay]);
 
                 if (!res.ok) { removeTyping(); appendBot('⚠️ Something went wrong. Please try again.', true); return; }
 
