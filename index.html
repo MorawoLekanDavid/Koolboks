@@ -60,6 +60,101 @@
             align-items: center;
             gap: 12px;
             flex-shrink: 0;
+            position: relative;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .header-btn {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.15s;
+            line-height: 1;
+        }
+
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+            transform: scale(1.1);
+        }
+
+        .header-btn.close-btn:hover {
+            background: rgba(220, 38, 38, 0.7);
+        }
+
+        /* Minimized state */
+        #shell.minimized #chat {
+            height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: height 0.3s ease, opacity 0.2s ease;
+        }
+
+        #shell:not(.minimized) #chat {
+            transition: height 0.3s ease, opacity 0.2s ease 0.1s;
+            opacity: 1;
+        }
+
+        #shell.minimized {
+            border-radius: 20px;
+        }
+
+        #shell.minimized .header {
+            border-radius: 20px;
+        }
+
+        /* Closed state */
+        #shell.closed {
+            display: none;
+        }
+
+        /* Floating re-open bubble */
+        #chat-bubble {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--orange);
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(255, 107, 0, 0.4);
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            z-index: 9999;
+            animation: bubblePop 0.3s ease-out;
+        }
+
+        #chat-bubble:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 28px rgba(255, 107, 0, 0.55);
+        }
+
+        #chat-bubble.visible {
+            display: flex;
+        }
+
+        @keyframes bubblePop {
+            from { transform: scale(0); opacity: 0; }
+            to   { transform: scale(1); opacity: 1; }
         }
 
         .header-logo {
@@ -446,6 +541,10 @@
                 <h3>KoolBot</h3>
                 <span><span class="dot"></span>Online · Koolbuy Assistant</span>
             </div>
+            <div class="header-actions">
+                <button class="header-btn minimize-btn" id="minimize-btn" onclick="toggleMinimize()" title="Minimize">─</button>
+                <button class="header-btn close-btn" id="close-btn" onclick="closeChat()" title="Close">✕</button>
+            </div>
         </div>
         <div id="chat">
             <div id="messages"></div>
@@ -462,6 +561,8 @@
             </div>
         </div>
     </div>
+
+    <button id="chat-bubble" onclick="openChat()" title="Chat with KoolBot">💬</button>
 
     <script>
         const API = window.location.origin;
@@ -703,6 +804,32 @@
         }
 
         function removeTyping() { const el = document.getElementById('typing-row'); if (el) el.remove(); }
+
+        // ── Minimize / Close / Open ──────────────────────────────────────────────
+        function toggleMinimize() {
+            const shell = document.getElementById('shell');
+            shell.classList.toggle('minimized');
+            const btn = document.getElementById('minimize-btn');
+            btn.textContent = shell.classList.contains('minimized') ? '□' : '─';
+            btn.title = shell.classList.contains('minimized') ? 'Expand' : 'Minimize';
+        }
+
+        function closeChat() {
+            const shell = document.getElementById('shell');
+            shell.classList.add('closed');
+            document.getElementById('chat-bubble').classList.add('visible');
+        }
+
+        function openChat() {
+            const shell = document.getElementById('shell');
+            shell.classList.remove('closed', 'minimized');
+            document.getElementById('chat-bubble').classList.remove('visible');
+            document.getElementById('minimize-btn').textContent = '─';
+            document.getElementById('minimize-btn').title = 'Minimize';
+            // Scroll to bottom of messages
+            const box = document.getElementById('messages');
+            if (box) box.scrollTop = box.scrollHeight;
+        }
 
         function escHtml(s) {
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
