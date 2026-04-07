@@ -30,8 +30,11 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://koolbuy:koolbuy_secure_password_2026@localhost:5432/koolbuy")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-CHAT_TTL = int(os.environ.get("REDIS_CHAT_TTL", 3600))
-MAX_HISTORY = int(os.environ.get("MAX_HISTORY_MESSAGES", 20))
+CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
+MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
+
+CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
+MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
 IDLE_THRESHOLD = 5 * 60  # seconds — gaps longer than this are treated as idle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
