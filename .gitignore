@@ -1,4 +1,4 @@
-﻿.env
+.env
 __pycache__/
 *.pyc
 *.pyo
@@ -7,3 +7,7 @@ venv/
 redis_data/
 leads.csv
 .vscode/
+*.pem
+error_local.log
+new_config.txt
+.claude/

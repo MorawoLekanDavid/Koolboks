@@ -10,11 +10,11 @@ from datetime import datetime
 from sqlalchemy import create_engine, select, func, and_
 from sqlalchemy.orm import sessionmaker, Session
 import re
+import asyncio
 import redis.asyncio as aioredis
 import os
 import json
 import logging
-import hashlib
 import httpx
 
 from models import Product, Lead, init_db
@@ -32,9 +32,12 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
 MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
+LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")  # 24h — leads outlive chat sessions
+WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348106912022")
 
 CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
 MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
+LEAD_TTL = int(LEAD_TTL_STR) if LEAD_TTL_STR and LEAD_TTL_STR.isdigit() else 86400
 IDLE_THRESHOLD = 5 * 60  # seconds — gaps longer than this are treated as idle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -325,22 +328,6 @@ def clean_name(raw: str) -> str:
 
 
 async def save_lead(user_name: str, phone: str, history: list):
-    """Extract rich lead data from conversation and save to leads.csv."""
-    lines = []
-    for msg in history:
-        role = "Customer" if msg.get("role") == "user" else "KoolBot"
-        content = re.sub(r'\[[^\]]*\]', '', msg.get("content", "")).strip()
-        if content:
-            lines.append(f"{role}: {content}")
-    transcript = "\n".join(lines[-40:])
-
-    # Calculate active duration before the Groq call
-    duration = calc_active_duration(history)
-
-    data = {}
-
-
-async def save_lead(user_name: str, phone: str, history: list):
     """Extract rich lead data from conversation and save to database"""
     lines = []
     for msg in history:
@@ -381,7 +368,11 @@ async def save_lead(user_name: str, phone: str, history: list):
         raw = (completion.choices[0].message.content or "").strip()
         raw = re.sub(r'^```[a-z]*\n?', '', raw).strip()
         raw = re.sub(r'\n?```$', '', raw).strip()
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as json_err:
+            log.warning(f"Lead JSON parse failed: {json_err} | raw={raw[:200]}")
+            data = {}
         log.info(f"Lead extracted: {data}")
     except Exception as e:
         log.warning(f"Lead extraction failed: {e}")
@@ -501,7 +492,7 @@ async def call_groq(messages: list, max_tokens: int = 600) -> str:
         raise
     except Exception as e:
         log.error(f"Groq failed: {e}")
-        raise HTTPException(status_code=502, detail=f"AI error: {str(e)}")
+        raise HTTPException(status_code=502, detail="AI service error. Please try again.")
 
 # ── Chat endpoint ──────────────────────────────────────────────────────────────
 
@@ -541,8 +532,13 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     history_for_groq = [
         {"role": m["role"], "content": m["content"]} for m in history]
 
-    phone_redis = await redis_client.get(f"koolbuy:phone:{request.session_id}") if redis_client else None
-    delivery_redis = await redis_client.get(f"koolbuy:delivery:{request.session_id}") if redis_client else None
+    try:
+        phone_redis = await redis_client.get(f"koolbuy:phone:{request.session_id}") if redis_client else None
+        delivery_redis = await redis_client.get(f"koolbuy:delivery:{request.session_id}") if redis_client else None
+    except Exception as e:
+        log.warning(f"Redis read failed in chat handler: {e}")
+        phone_redis = None
+        delivery_redis = None
 
     already_captured = bool(phone_redis) or any(
         "[VALID phone captured" in msg.get("content", "") for msg in history
@@ -556,18 +552,18 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     state_summary = "─── CAPTURED STATE ───\n"
     if already_captured:
         if phone_redis:
-            extracted_phone = phone_redis.decode('utf-8') if isinstance(phone_redis, bytes) else phone_redis
+            extracted_phone = phone_redis
         else:
             extracted_phone = phone_from_history(history)
             if redis_client and extracted_phone:
-                await redis_client.set(f"koolbuy:phone:{request.session_id}", extracted_phone, ex=CHAT_TTL)
+                await redis_client.set(f"koolbuy:phone:{request.session_id}", extracted_phone, ex=LEAD_TTL)
         state_summary += f"✓ Phone CAPTURED: {extracted_phone}\n"
     else:
         state_summary += "× Phone: NOT YET CAPTURED\n"
 
     if delivery_captured:
         if redis_client and not delivery_redis:
-             await redis_client.set(f"koolbuy:delivery:{request.session_id}", "captured", ex=CHAT_TTL)
+             await redis_client.set(f"koolbuy:delivery:{request.session_id}", "captured", ex=LEAD_TTL)
         state_summary += "✓ Delivery location CAPTURED\n"
     elif already_captured:
         state_summary += "× Delivery location: NOT YET CAPTURED\n"
@@ -585,13 +581,13 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         background_tasks.add_task(save_lead, request.user_name, phone, history)
         lead_captured = True
         if redis_client:
-            await redis_client.set(f"koolbuy:phone:{request.session_id}", phone, ex=CHAT_TTL)
+            await redis_client.set(f"koolbuy:phone:{request.session_id}", phone, ex=LEAD_TTL)
         messages[-1]["content"] = (
             f"{request.message}\n\n"
             f"[VALID phone captured: {phone}. "
             f"Your NEXT message MUST do these three things in order: "
             f"1) Thank the customer warmly by name in one sentence. "
-            f"2) Say our agent will call soon, also reachable on WhatsApp +2348106912022. "
+            f"2) Say our agent will call soon, also reachable on WhatsApp {WHATSAPP_CONTACT}. "
             f"3) Ask EXACTLY: 'What area or city should we deliver to?' "
             f"Do NOT skip the delivery question. Do NOT end without asking it.]"
         )
@@ -612,11 +608,11 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         if is_address:
             background_tasks.add_task(
                 update_lead_address,
-                phone_from_history(history) or (phone_redis.decode('utf-8') if phone_redis else ""),
+                phone_from_history(history) or (phone_redis if phone_redis else ""),
                 request.message.strip()
             )
             if redis_client:
-                await redis_client.set(f"koolbuy:delivery:{request.session_id}", "captured", ex=CHAT_TTL)
+                await redis_client.set(f"koolbuy:delivery:{request.session_id}", "captured", ex=LEAD_TTL)
             # Add delivery address confirmation marker
             messages[-1]["content"] = (
                 f"{request.message}\n\n"
@@ -689,6 +685,7 @@ async def health():
 
 # ── Image proxy ────────────────────────────────────────────────────────────────
 _img_cache: dict = {}  # Simple in-memory cache: url -> (content_type, bytes)
+_img_cache_lock = asyncio.Lock()
 _http_client: Optional[httpx.AsyncClient] = None
 
 
@@ -723,8 +720,9 @@ async def image_proxy(url: str = Query(...)):
         img_bytes = resp.content
 
         # Cache it (limit cache to ~100 images to avoid memory bloat)
-        if len(_img_cache) < 100:
-            _img_cache[url] = (content_type, img_bytes)
+        async with _img_cache_lock:
+            if len(_img_cache) < 100:
+                _img_cache[url] = (content_type, img_bytes)
 
         return Response(content=img_bytes, media_type=content_type,
                         headers={"Cache-Control": "public, max-age=86400"})
