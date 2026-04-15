@@ -34,6 +34,7 @@ CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
 MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")  # 24h — leads outlive chat sessions
 WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
+ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
 
 CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
 MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
@@ -412,6 +413,28 @@ async def save_lead(user_name: str, phone: str, history: list):
         db.close()
     except Exception as e:
         log.error(f"Failed to save lead to DB: {e}")
+
+    # ── Push to CRM via Zapier webhook ─────────────────────────────────────────
+    if ZAPIER_WEBHOOK:
+        try:
+            payload = {
+                "name":             clean_name(data.get("name") or user_name),
+                "phone":            phone,
+                "business":         data.get("business", ""),
+                "product_interest": data.get("product_interest", ""),
+                "amount":           data.get("amount", ""),
+                "payment_plan":     data.get("payment_plan", ""),
+                "pain_point":       data.get("pain_point", ""),
+                "power_type":       data.get("power_type", ""),
+                "address":          data.get("address", ""),
+                "active_duration":  duration,
+                "source":           "koolbuy_chatbot",
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(ZAPIER_WEBHOOK, json=payload)
+            log.info(f"Zapier webhook sent: status={resp.status_code}")
+        except Exception as e:
+            log.warning(f"Zapier webhook failed: {e}")
 
 
 # ── Lead address updater ───────────────────────────────────────────────────────
