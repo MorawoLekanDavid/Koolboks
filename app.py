@@ -102,7 +102,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Koolbuy Chatbot API", lifespan=lifespan)
 groq_client = AsyncGroq(
     api_key=GROQ_API_KEY,
-    http_client=httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=30.0)),
+    http_client=httpx.AsyncClient(
+        timeout=httpx.Timeout(60.0, connect=10.0),
+        transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0"),
+    ),
 )
 app.add_middleware(CORSMiddleware, allow_origins=[
                    "*"], allow_methods=["*"], allow_headers=["*"])
