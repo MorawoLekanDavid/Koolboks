@@ -100,7 +100,10 @@ async def lifespan(app: FastAPI):
         log.info("Database disconnected")
 
 app = FastAPI(title="Koolbuy Chatbot API", lifespan=lifespan)
-groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+groq_client = AsyncGroq(
+    api_key=GROQ_API_KEY,
+    http_client=httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=30.0)),
+)
 app.add_middleware(CORSMiddleware, allow_origins=[
                    "*"], allow_methods=["*"], allow_headers=["*"])
 
