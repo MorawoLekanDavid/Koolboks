@@ -64,6 +64,8 @@ services:
     networks:
       - koolbuy-network
     restart: unless-stopped
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
 
 volumes:
   postgres_data:
