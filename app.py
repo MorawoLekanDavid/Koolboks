@@ -119,6 +119,7 @@ class ProductCard(BaseModel):
     price:       str
     image_url:   Optional[str] = None
     product_url: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -184,6 +185,7 @@ def match_products(products: List[Product], names: List[str]) -> List[ProductCar
                     price=str(p.price),
                     image_url=proxy_image_url(p.image_url),
                     product_url=p.product_url,
+                    description=p.description,
                 ))
                 seen.add(p.id)
                 break
@@ -229,6 +231,7 @@ def auto_detect_products(products: List[Product], raw_text: str, product_hint: s
             price=str(best_product.price),
             image_url=proxy_image_url(best_product.image_url),
             product_url=best_product.product_url,
+            description=best_product.description,
         )]
 
     # Strategy 2: Absolute Fallback - Match by exact price mentioned if name scoring completely failed
@@ -245,6 +248,7 @@ def auto_detect_products(products: List[Product], raw_text: str, product_hint: s
                         price=str(p.price),
                         image_url=proxy_image_url(p.image_url),
                         product_url=p.product_url,
+                        description=p.description,
                     )]
         except (ValueError, TypeError):
             continue
