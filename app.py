@@ -3,7 +3,7 @@ from groq import AsyncGroq
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request
 from fastapi.responses import FileResponse, Response
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -801,3 +801,28 @@ async def image_proxy(url: str = Query(...)):
 @app.get("/")
 async def serve_frontend():
     return FileResponse(os.path.join(BASE_DIR, "index.html"))
+
+
+# ── WhatsApp Webhook ──────────────────────────────────────────────────────────
+
+WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "koolbuy_whatsapp_2026")
+
+
+@app.get("/webhook")
+async def whatsapp_verify(
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),
+):
+    if hub_mode == "subscribe" and hub_verify_token == WHATSAPP_VERIFY_TOKEN:
+        log.info("WhatsApp webhook verified successfully")
+        return Response(content=hub_challenge, media_type="text/plain")
+    log.warning("WhatsApp webhook verification failed")
+    raise HTTPException(status_code=403, detail="Verification failed")
+
+
+@app.post("/webhook")
+async def whatsapp_webhook(request: Request):
+    payload = await request.json()
+    log.info(f"WhatsApp webhook received: {payload}")
+    return Response(content="OK", status_code=200)
