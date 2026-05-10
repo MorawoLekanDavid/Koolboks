@@ -881,10 +881,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     # Check session state and send welcome for new/completed sessions
                     if redis_client:
                         history_key = f"koolbuy:chat:{session_id}"
-                        history = await redis_client.lrange(history_key, 0, -1)
-                        history_text = " ".join(history)
+                        raw_history = await redis_client.get(history_key)
+                        history_text = raw_history if raw_history else ""
                         is_complete = "[VALID phone captured" in history_text and "[DELIVERY confirmed" in history_text
-                        is_new = len(history) == 0
+                        is_new = not raw_history
 
                         if is_complete:
                             # Reset session so customer can start a new conversation
