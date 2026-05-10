@@ -811,15 +811,31 @@ WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
 WHATSAPP_API_URL       = "https://graph.facebook.com/v19.0"
 
 
-async def send_whatsapp_message(to: str, text: str):
+async def mark_whatsapp_read(message_id: str):
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        return
+    url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    payload = {"messaging_product": "whatsapp", "status": "read", "message_id": message_id}
+    try:
+        async with httpx.AsyncClient(timeout=5.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            await client.post(url, json=payload, headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"})
+    except Exception as e:
+        log.warning(f"Failed to mark message as read: {e}")
+
+
+async def send_whatsapp_message(to: str, text: str, image_url: str = None):
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         log.warning("WhatsApp credentials not configured")
         return
     url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
-    payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+    headers = {"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
     try:
         async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
-            resp = await client.post(url, json=payload, headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"})
+            if image_url:
+                img_payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": {"link": image_url}}
+                await client.post(url, json=img_payload, headers=headers)
+            text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+            resp = await client.post(url, json=text_payload, headers=headers)
         log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
@@ -855,16 +871,34 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     contacts = value.get("contacts", [{}])
                     name     = contacts[0].get("profile", {}).get("name", "Customer") if contacts else "Customer"
                     session_id = f"wa_{wa_from}"
+                    msg_id = msg.get("id")
                     log.info(f"WhatsApp message from {wa_from} ({name}): {text}")
+
+                    # Mark message as read immediately
+                    if msg_id:
+                        background_tasks.add_task(mark_whatsapp_read, msg_id)
+
+                    # Send welcome message for new sessions
+                    if redis_client:
+                        history_key = f"koolbuy:chat:{session_id}"
+                        existing = await redis_client.llen(history_key)
+                        if existing == 0:
+                            welcome_req = ChatRequest(session_id=session_id, message="__welcome__", user_name=name)
+                            welcome_resp = await chat_handler(welcome_req, background_tasks)
+                            if welcome_resp.response:
+                                background_tasks.add_task(send_whatsapp_message, wa_from, welcome_resp.response)
+
                     chat_req = ChatRequest(session_id=session_id, message=text, user_name=name)
                     chat_resp = await chat_handler(chat_req, background_tasks)
                     reply_text = chat_resp.response
+                    image_url = None
                     if chat_resp.products:
                         product = chat_resp.products[0]
                         reply_text += f"\n\n🛒 *{product.name}*\n💰 N{float(product.price):,.0f}"
-                        if product.description:
-                            reply_text += f"\n\n{product.description[:300]}..."
-                    background_tasks.add_task(send_whatsapp_message, wa_from, reply_text)
+                        if product.image_url and "img-proxy?url=" in product.image_url:
+                            from urllib.parse import unquote
+                            image_url = unquote(product.image_url.split("img-proxy?url=")[1])
+                    background_tasks.add_task(send_whatsapp_message, wa_from, reply_text, image_url)
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
     return Response(content="OK", status_code=200)
