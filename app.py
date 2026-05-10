@@ -440,7 +440,7 @@ async def save_lead(user_name: str, phone: str, history: list):
                 "active_duration":  duration,
                 "source":           "koolbuy_chatbot",
             }
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
                 resp = await client.post(ZAPIER_WEBHOOK, json=payload)
             log.info(f"Zapier webhook sent: status={resp.status_code}")
         except Exception as e:
