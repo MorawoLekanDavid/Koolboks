@@ -805,7 +805,24 @@ async def serve_frontend():
 
 # ── WhatsApp Webhook ──────────────────────────────────────────────────────────
 
-WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "koolbuy_whatsapp_2026")
+WHATSAPP_VERIFY_TOKEN  = os.environ.get("WHATSAPP_VERIFY_TOKEN", "koolbuy_whatsapp_2026")
+WHATSAPP_API_TOKEN     = os.environ.get("WHATSAPP_API_TOKEN", "")
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_API_URL       = "https://graph.facebook.com/v19.0"
+
+
+async def send_whatsapp_message(to: str, text: str):
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        log.warning("WhatsApp credentials not configured")
+        return
+    url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+    try:
+        async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            resp = await client.post(url, json=payload, headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"})
+        log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
+    except Exception as e:
+        log.error(f"Failed to send WhatsApp message: {e}")
 
 
 @app.get("/webhook")
@@ -822,7 +839,32 @@ async def whatsapp_verify(
 
 
 @app.post("/webhook")
-async def whatsapp_webhook(request: Request):
+async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     log.info(f"WhatsApp webhook received: {payload}")
+    try:
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                messages = value.get("messages", [])
+                for msg in messages:
+                    if msg.get("type") != "text":
+                        continue
+                    wa_from  = msg["from"]
+                    text     = msg["text"]["body"]
+                    contacts = value.get("contacts", [{}])
+                    name     = contacts[0].get("profile", {}).get("name", "Customer") if contacts else "Customer"
+                    session_id = f"wa_{wa_from}"
+                    log.info(f"WhatsApp message from {wa_from} ({name}): {text}")
+                    chat_req = ChatRequest(session_id=session_id, message=text, user_name=name)
+                    chat_resp = await chat_handler(chat_req, background_tasks)
+                    reply_text = chat_resp.response
+                    if chat_resp.products:
+                        product = chat_resp.products[0]
+                        reply_text += f"\n\n🛒 *{product.name}*\n💰 N{float(product.price):,.0f}"
+                        if product.description:
+                            reply_text += f"\n\n{product.description[:300]}..."
+                    background_tasks.add_task(send_whatsapp_message, wa_from, reply_text)
+    except Exception as e:
+        log.error(f"WhatsApp webhook processing error: {e}")
     return Response(content="OK", status_code=200)
