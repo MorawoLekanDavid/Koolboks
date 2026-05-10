@@ -53,6 +53,11 @@ services:
       - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
       - CHAT_TTL=${CHAT_TTL:-3600}
       - MAX_HISTORY_MESSAGES=${MAX_HISTORY_MESSAGES:-20}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - ZAPIER_WEBHOOK=${ZAPIER_WEBHOOK}
+      - WHATSAPP_CONTACT=${WHATSAPP_CONTACT}
     depends_on:
       postgres:
         condition: service_healthy
