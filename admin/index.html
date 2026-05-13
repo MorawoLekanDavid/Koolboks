@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KoolBot Admin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #1a73e8; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 13px; opacity: 0.85; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { width: 300px; background: white; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; }
+  .sidebar-header { padding: 14px 16px; border-bottom: 1px solid #e0e0e0; font-weight: 600; font-size: 14px; color: #333; }
+  .conv-list { flex: 1; overflow-y: auto; }
+  .conv-item { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: background 0.15s; }
+  .conv-item:hover { background: #f5f5f5; }
+  .conv-item.active { background: #e8f0fe; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #1a73e8; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; flex-shrink: 0; }
+  .conv-info { flex: 1; min-width: 0; }
+  .conv-name { font-weight: 600; font-size: 14px; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-phone { font-size: 12px; color: #666; }
+  .conv-time { font-size: 11px; color: #999; white-space: nowrap; }
+  .mode-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .mode-bot { background: #e6f4ea; color: #1e7e34; }
+  .mode-agent { background: #fff3e0; color: #e65100; }
+
+  /* Chat area */
+  .chat-area { flex: 1; display: flex; flex-direction: column; background: #f0f2f5; }
+  .chat-header { background: white; padding: 14px 20px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
+  .chat-header-info h2 { font-size: 16px; font-weight: 600; }
+  .chat-header-info p { font-size: 13px; color: #666; }
+  .handoff-btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+  .handoff-btn.take-over { background: #ff9800; color: white; }
+  .handoff-btn.hand-back { background: #4caf50; color: white; }
+  .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 65%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+  .msg.inbound { background: white; align-self: flex-start; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .msg.outbound { background: #dcf8c6; align-self: flex-end; border-radius: 12px 0 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .msg-meta { font-size: 11px; color: #999; margin-top: 4px; }
+  .msg-sender { font-size: 11px; font-weight: 600; color: #1a73e8; margin-bottom: 2px; }
+  .reply-box { background: white; border-top: 1px solid #e0e0e0; padding: 12px 16px; display: flex; gap: 10px; align-items: flex-end; }
+  .reply-box textarea { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 10px 16px; font-size: 14px; resize: none; outline: none; font-family: inherit; max-height: 120px; min-height: 44px; }
+  .reply-box textarea:focus { border-color: #1a73e8; }
+  .send-btn { background: #1a73e8; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .send-btn:hover { background: #1558b0; }
+  .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; flex-direction: column; gap: 8px; }
+  .empty-state svg { opacity: 0.3; }
+  .login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
+  .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); width: 320px; text-align: center; }
+  .login-card h2 { margin-bottom: 8px; color: #1a73e8; }
+  .login-card p { color: #666; font-size: 14px; margin-bottom: 24px; }
+  .login-card input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 12px; outline: none; }
+  .login-card input:focus { border-color: #1a73e8; }
+  .login-card button { width: 100%; padding: 10px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .login-card button:hover { background: #1558b0; }
+  .hidden { display: none !important; }
+  .no-conv { padding: 20px; text-align: center; color: #999; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h2>KoolBot Admin</h2>
+    <p>Enter your admin key to continue</p>
+    <input type="password" id="keyInput" placeholder="Admin key" />
+    <button onclick="login()">Sign In</button>
+  </div>
+</div>
+
+<div id="appScreen" class="hidden" style="display:flex;flex-direction:column;height:100vh;">
+  <header>
+    <h1>KoolBot Admin Dashboard</h1>
+    <span id="headerStatus">Loading conversations...</span>
+  </header>
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-header">Conversations</div>
+      <div class="conv-list" id="convList"></div>
+    </div>
+    <div class="chat-area" id="chatArea">
+      <div class="empty-state" id="emptyState">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        <span>Select a conversation to view messages</span>
+      </div>
+      <div id="chatView" class="hidden" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+        <div class="chat-header">
+          <div class="chat-header-info">
+            <h2 id="chatName">-</h2>
+            <p id="chatPhone">-</p>
+          </div>
+          <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()">Take Over</button>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="reply-box">
+          <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
+          <button class="send-btn" onclick="sendReply()">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let adminKey = '';
+  let selectedPhone = null;
+  let selectedMode = 'bot';
+  let pollInterval = null;
+  let msgPollInterval = null;
+
+  function login() {
+    const k = document.getElementById('keyInput').value.trim();
+    if (!k) return;
+    adminKey = k;
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('appScreen').classList.remove('hidden');
+    document.getElementById('appScreen').style.display = 'flex';
+    loadConversations();
+    pollInterval = setInterval(loadConversations, 5000);
+  }
+
+  document.getElementById('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+  async function loadConversations() {
+    try {
+      const res = await fetch(`/admin/conversations?key=${adminKey}`);
+      if (res.status === 403) { alert('Invalid admin key'); return; }
+      const data = await res.json();
+      const list = document.getElementById('convList');
+      const status = document.getElementById('headerStatus');
+      status.textContent = `${data.length} conversation${data.length !== 1 ? 's' : ''}`;
+      if (data.length === 0) { list.innerHTML = '<div class="no-conv">No conversations yet</div>'; return; }
+      list.innerHTML = data.map(c => `
+        <div class="conv-item ${selectedPhone === c.phone ? 'active' : ''}" onclick="selectConv('${c.phone}', '${c.name || 'Customer'}', '${c.mode}')">
+          <div class="avatar">${(c.name || 'C')[0].toUpperCase()}</div>
+          <div class="conv-info">
+            <div class="conv-name">${c.name || 'Customer'}</div>
+            <div class="conv-phone">${c.phone}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+            <div class="conv-time">${timeAgo(c.last_message)}</div>
+            <div class="mode-badge mode-${c.mode}">${c.mode === 'bot' ? '🤖 Bot' : '👤 Agent'}</div>
+          </div>
+        </div>
+      `).join('');
+    } catch(e) { console.error(e); }
+  }
+
+  async function selectConv(phone, name, mode) {
+    selectedPhone = phone;
+    selectedMode = mode;
+    document.getElementById('emptyState').classList.add('hidden');
+    const chatView = document.getElementById('chatView');
+    chatView.classList.remove('hidden');
+    chatView.style.display = 'flex';
+    document.getElementById('chatName').textContent = name;
+    document.getElementById('chatPhone').textContent = phone;
+    updateHandoffBtn(mode);
+    await loadMessages();
+    if (msgPollInterval) clearInterval(msgPollInterval);
+    msgPollInterval = setInterval(loadMessages, 3000);
+    loadConversations();
+  }
+
+  async function loadMessages() {
+    if (!selectedPhone) return;
+    try {
+      const res = await fetch(`/admin/conversations/${selectedPhone}?key=${adminKey}`);
+      const msgs = await res.json();
+      const container = document.getElementById('messages');
+      const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+      container.innerHTML = msgs.map(m => `
+        <div class="msg ${m.direction}">
+          <div class="msg-sender">${m.direction === 'inbound' ? m.name || 'Customer' : (m.name === 'Agent' ? '👤 Agent' : '🤖 KoolBot')}</div>
+          ${m.content}
+          <div class="msg-meta">${formatTime(m.timestamp)}</div>
+        </div>
+      `).join('');
+      if (wasAtBottom) container.scrollTop = container.scrollHeight;
+    } catch(e) { console.error(e); }
+  }
+
+  async function sendReply() {
+    const text = document.getElementById('replyText').value.trim();
+    if (!text || !selectedPhone) return;
+    document.getElementById('replyText').value = '';
+    try {
+      await fetch(`/admin/conversations/${selectedPhone}/reply?key=${adminKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      await loadMessages();
+    } catch(e) { console.error(e); }
+  }
+
+  async function toggleHandoff() {
+    if (!selectedPhone) return;
+    try {
+      const res = await fetch(`/admin/handoff/${selectedPhone}?key=${adminKey}`, { method: 'POST' });
+      const data = await res.json();
+      selectedMode = data.mode;
+      updateHandoffBtn(data.mode);
+      loadConversations();
+    } catch(e) { console.error(e); }
+  }
+
+  function updateHandoffBtn(mode) {
+    const btn = document.getElementById('handoffBtn');
+    if (mode === 'agent') {
+      btn.textContent = '🤖 Hand Back to Bot';
+      btn.className = 'handoff-btn hand-back';
+    } else {
+      btn.textContent = '👤 Take Over';
+      btn.className = 'handoff-btn take-over';
+    }
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    const diff = (Date.now() - new Date(iso + 'Z').getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+    return `${Math.floor(diff/86400)}d ago`;
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '';
+    return new Date(iso + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+</script>
+</body>
+</html>

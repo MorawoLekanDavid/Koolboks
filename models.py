@@ -40,6 +40,19 @@ class Lead(Base):
                         onupdate=datetime.utcnow)
 
 
+class Message(Base):
+    """WhatsApp conversation message"""
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(100), index=True)
+    phone = Column(String(20), index=True)
+    name = Column(String(255), nullable=True)
+    direction = Column(String(10))  # inbound / outbound
+    content = Column(String(4000))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)

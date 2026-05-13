@@ -58,6 +58,7 @@ services:
       - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
       - ZAPIER_WEBHOOK=${ZAPIER_WEBHOOK}
       - WHATSAPP_CONTACT=${WHATSAPP_CONTACT}
+      - ADMIN_KEY=${ADMIN_KEY:-koolbuy_admin_2026}
     depends_on:
       postgres:
         condition: service_healthy

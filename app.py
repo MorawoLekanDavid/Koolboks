@@ -17,7 +17,7 @@ import json
 import logging
 import httpx
 
-from models import Product, Lead, init_db
+from models import Product, Lead, Message, init_db
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
@@ -35,6 +35,7 @@ MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")  # 24h — leads outlive chat sessions
 WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
 ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "koolbuy_admin_2026")
 
 CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
 MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
@@ -803,6 +804,93 @@ async def serve_frontend():
     return FileResponse(os.path.join(BASE_DIR, "index.html"))
 
 
+# ── Admin Dashboard ───────────────────────────────────────────────────────────
+
+def require_admin(key: str = Query(...)):
+    if key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+
+@app.get("/admin")
+async def admin_dashboard():
+    return FileResponse(os.path.join(BASE_DIR, "admin", "index.html"))
+
+
+@app.get("/admin/conversations")
+async def list_conversations(key: str = Query(...)):
+    require_admin(key)
+    db = get_db()
+    try:
+        rows = db.execute(
+            select(
+                Message.phone, Message.name,
+                func.max(Message.created_at).label("last_message"),
+                func.count(Message.id).label("total")
+            ).group_by(Message.phone, Message.name)
+            .order_by(func.max(Message.created_at).desc())
+        ).all()
+        result = []
+        for r in rows:
+            session_id = f"wa_{r.phone}"
+            handoff = await redis_client.get(f"koolbuy:handoff:{session_id}") if redis_client else None
+            result.append({
+                "phone": r.phone,
+                "name": r.name,
+                "last_message": r.last_message.isoformat() if r.last_message else None,
+                "total_messages": r.total,
+                "mode": "agent" if handoff else "bot",
+            })
+        return result
+    finally:
+        db.close()
+
+
+@app.get("/admin/conversations/{phone}")
+async def get_conversation(phone: str, key: str = Query(...)):
+    require_admin(key)
+    db = get_db()
+    try:
+        rows = db.execute(
+            select(Message).where(Message.phone == phone)
+            .order_by(Message.created_at.asc())
+        ).scalars().all()
+        return [{"direction": m.direction, "content": m.content, "timestamp": m.created_at.isoformat(), "name": m.name} for m in rows]
+    finally:
+        db.close()
+
+
+class AgentReply(BaseModel):
+    message: str
+
+
+@app.post("/admin/conversations/{phone}/reply")
+async def agent_reply(phone: str, body: AgentReply, key: str = Query(...)):
+    require_admin(key)
+    session_id = f"wa_{phone}"
+    background_tasks = BackgroundTasks()
+    background_tasks.add_task(save_message_db, session_id, phone, "Agent", "outbound", body.message)
+    await send_whatsapp_message(phone, body.message)
+    return {"status": "sent"}
+
+
+@app.post("/admin/handoff/{phone}")
+async def toggle_handoff(phone: str, key: str = Query(...)):
+    require_admin(key)
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+    session_id = f"wa_{phone}"
+    handoff_key = f"koolbuy:handoff:{session_id}"
+    current = await redis_client.get(handoff_key)
+    if current:
+        await redis_client.delete(handoff_key)
+        mode = "bot"
+    else:
+        await redis_client.set(handoff_key, "1", ex=86400)
+        mode = "agent"
+    log.info(f"Handoff toggled for {phone}: now {mode}")
+    return {"phone": phone, "mode": mode}
+
+
 # ── WhatsApp Webhook ──────────────────────────────────────────────────────────
 
 WHATSAPP_VERIFY_TOKEN  = os.environ.get("WHATSAPP_VERIFY_TOKEN", "koolbuy_whatsapp_2026")
@@ -839,6 +927,16 @@ async def send_whatsapp_message(to: str, text: str, image_url: str = None):
         log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
+
+
+def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str):
+    try:
+        db = get_db()
+        db.add(Message(session_id=session_id, phone=phone, name=name, direction=direction, content=content))
+        db.commit()
+        db.close()
+    except Exception as e:
+        log.error(f"Failed to save message: {e}")
 
 
 @app.get("/webhook")
@@ -878,6 +976,16 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     if msg_id:
                         background_tasks.add_task(mark_whatsapp_read, msg_id)
 
+                    # Save inbound message to DB
+                    background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text)
+
+                    # Check if agent has taken over this session
+                    handoff_key = f"koolbuy:handoff:{session_id}"
+                    in_handoff = await redis_client.get(handoff_key) if redis_client else None
+                    if in_handoff:
+                        log.info(f"Session {session_id} is in handoff mode — bot silent")
+                        continue
+
                     # Check session state and reset completed sessions
                     if redis_client:
                         history_key = f"koolbuy:chat:{session_id}"
@@ -901,6 +1009,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         if product.image_url and "img-proxy?url=" in product.image_url:
                             from urllib.parse import unquote
                             image_url = unquote(product.image_url.split("img-proxy?url=")[1])
+                    background_tasks.add_task(save_message_db, session_id, wa_from, name, "outbound", reply_text)
                     background_tasks.add_task(send_whatsapp_message, wa_from, reply_text, image_url)
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
