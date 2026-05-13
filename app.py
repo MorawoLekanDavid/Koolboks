@@ -867,9 +867,8 @@ class AgentReply(BaseModel):
 async def agent_reply(phone: str, body: AgentReply, key: str = Query(...)):
     require_admin(key)
     session_id = f"wa_{phone}"
-    background_tasks = BackgroundTasks()
-    background_tasks.add_task(save_message_db, session_id, phone, "Agent", "outbound", body.message)
     await send_whatsapp_message(phone, body.message)
+    save_message_db(session_id, phone, "Agent", "outbound", body.message)
     return {"status": "sent"}
 
 
