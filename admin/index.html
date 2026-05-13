@@ -4,102 +4,154 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KoolBot Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --orange: #FF6B00;
+    --orange-deep: #E05A00;
+    --orange-soft: #FFF3E8;
+    --white: #FFFFFF;
+    --gray-50: #FAFAFA;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-400: #9CA3AF;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
-  header { background: #1a73e8; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
-  header h1 { font-size: 18px; font-weight: 600; }
-  header span { font-size: 13px; opacity: 0.85; }
+  body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--gray-100); height: 100vh; display: flex; flex-direction: column; }
+
+  /* Login */
+  .login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--gray-100); }
+  .login-card { background: var(--white); padding: 40px; border-radius: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.12); width: 360px; text-align: center; }
+  .login-logo { width: 56px; height: 56px; background: var(--orange); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 26px; }
+  .login-card h2 { font-size: 22px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+  .login-card p { color: var(--gray-400); font-size: 14px; margin-bottom: 28px; }
+  .login-card input { width: 100%; padding: 11px 16px; border: 1.5px solid var(--gray-200); border-radius: 10px; font-size: 14px; margin-bottom: 12px; outline: none; font-family: inherit; color: var(--gray-900); }
+  .login-card input:focus { border-color: var(--orange); }
+  .login-card button { width: 100%; padding: 12px; background: var(--orange); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .login-card button:hover { background: var(--orange-deep); }
+  .login-error { color: #e53e3e; font-size: 13px; margin-top: -6px; margin-bottom: 10px; display: none; }
+
+  /* App */
+  header { background: var(--orange); color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-logo { width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  header h1 { font-size: 17px; font-weight: 700; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .agent-badge { background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+  .logout-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .logout-btn:hover { background: rgba(255,255,255,0.25); }
+
   .main { display: flex; flex: 1; overflow: hidden; }
 
   /* Sidebar */
-  .sidebar { width: 300px; background: white; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; }
-  .sidebar-header { padding: 14px 16px; border-bottom: 1px solid #e0e0e0; font-weight: 600; font-size: 14px; color: #333; }
+  .sidebar { width: 310px; background: var(--white); border-right: 1px solid var(--gray-200); display: flex; flex-direction: column; }
+  .sidebar-header { padding: 16px; border-bottom: 1px solid var(--gray-200); }
+  .sidebar-header h3 { font-size: 14px; font-weight: 700; color: var(--gray-900); }
+  .sidebar-header span { font-size: 12px; color: var(--gray-400); }
   .conv-list { flex: 1; overflow-y: auto; }
-  .conv-item { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: background 0.15s; }
-  .conv-item:hover { background: #f5f5f5; }
-  .conv-item.active { background: #e8f0fe; }
-  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #1a73e8; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; flex-shrink: 0; }
+  .conv-item { padding: 14px 16px; border-bottom: 1px solid var(--gray-100); cursor: pointer; display: flex; align-items: center; gap: 12px; transition: background 0.15s; }
+  .conv-item:hover { background: var(--gray-50); }
+  .conv-item.active { background: var(--orange-soft); border-left: 3px solid var(--orange); }
+  .avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--orange); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+  .avatar.agent-av { background: var(--gray-700); }
   .conv-info { flex: 1; min-width: 0; }
-  .conv-name { font-weight: 600; font-size: 14px; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .conv-phone { font-size: 12px; color: #666; }
-  .conv-time { font-size: 11px; color: #999; white-space: nowrap; }
-  .mode-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .conv-name { font-weight: 600; font-size: 14px; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-phone { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+  .conv-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .conv-time { font-size: 11px; color: var(--gray-400); }
+  .mode-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; }
   .mode-bot { background: #e6f4ea; color: #1e7e34; }
-  .mode-agent { background: #fff3e0; color: #e65100; }
+  .mode-agent { background: var(--orange-soft); color: var(--orange-deep); }
+  .no-conv { padding: 40px 20px; text-align: center; color: var(--gray-400); font-size: 14px; }
 
-  /* Chat area */
-  .chat-area { flex: 1; display: flex; flex-direction: column; background: #f0f2f5; }
-  .chat-header { background: white; padding: 14px 20px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
-  .chat-header-info h2 { font-size: 16px; font-weight: 600; }
-  .chat-header-info p { font-size: 13px; color: #666; }
-  .handoff-btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
-  .handoff-btn.take-over { background: #ff9800; color: white; }
-  .handoff-btn.hand-back { background: #4caf50; color: white; }
+  /* Chat */
+  .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--gray-100); }
+  .chat-header { background: var(--white); padding: 14px 20px; border-bottom: 1px solid var(--gray-200); display: flex; align-items: center; justify-content: space-between; }
+  .chat-header-info h2 { font-size: 16px; font-weight: 700; color: var(--gray-900); }
+  .chat-header-info p { font-size: 13px; color: var(--gray-400); margin-top: 2px; }
+  .handoff-btn { padding: 8px 18px; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; transition: background 0.2s; }
+  .handoff-btn.take-over { background: var(--orange); color: white; }
+  .handoff-btn.take-over:hover { background: var(--orange-deep); }
+  .handoff-btn.hand-back { background: #22c55e; color: white; }
+  .handoff-btn.hand-back:hover { background: #16a34a; }
   .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-  .msg { max-width: 65%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
-  .msg.inbound { background: white; align-self: flex-start; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-  .msg.outbound { background: #dcf8c6; align-self: flex-end; border-radius: 12px 0 12px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-  .msg-meta { font-size: 11px; color: #999; margin-top: 4px; }
-  .msg-sender { font-size: 11px; font-weight: 600; color: #1a73e8; margin-bottom: 2px; }
-  .reply-box { background: white; border-top: 1px solid #e0e0e0; padding: 12px 16px; display: flex; gap: 10px; align-items: flex-end; }
-  .reply-box textarea { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 10px 16px; font-size: 14px; resize: none; outline: none; font-family: inherit; max-height: 120px; min-height: 44px; }
-  .reply-box textarea:focus { border-color: #1a73e8; }
-  .send-btn { background: #1a73e8; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .send-btn:hover { background: #1558b0; }
-  .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; flex-direction: column; gap: 8px; }
-  .empty-state svg { opacity: 0.3; }
-  .login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
-  .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); width: 320px; text-align: center; }
-  .login-card h2 { margin-bottom: 8px; color: #1a73e8; }
-  .login-card p { color: #666; font-size: 14px; margin-bottom: 24px; }
-  .login-card input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 12px; outline: none; }
-  .login-card input:focus { border-color: #1a73e8; }
-  .login-card button { width: 100%; padding: 10px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
-  .login-card button:hover { background: #1558b0; }
+  .msg { max-width: 65%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; word-break: break-word; }
+  .msg.inbound { background: var(--white); align-self: flex-start; border-radius: 0 12px 12px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .msg.outbound { background: var(--orange-soft); align-self: flex-end; border-radius: 12px 0 12px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .msg-sender { font-size: 11px; font-weight: 700; color: var(--orange); margin-bottom: 3px; }
+  .msg-sender.bot { color: var(--orange); }
+  .msg-sender.agent-name { color: var(--gray-700); }
+  .msg-sender.customer { color: var(--gray-700); }
+  .msg-meta { font-size: 11px; color: var(--gray-400); margin-top: 4px; text-align: right; }
+  .reply-box { background: var(--white); border-top: 1px solid var(--gray-200); padding: 12px 16px; display: flex; gap: 10px; align-items: flex-end; }
+  .reply-box textarea { flex: 1; border: 1.5px solid var(--gray-200); border-radius: 20px; padding: 10px 16px; font-size: 14px; resize: none; outline: none; font-family: inherit; max-height: 120px; min-height: 44px; color: var(--gray-900); }
+  .reply-box textarea:focus { border-color: var(--orange); }
+  .send-btn { background: var(--orange); color: white; border: none; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .send-btn:hover { background: var(--orange-deep); }
+  .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--gray-400); font-size: 15px; flex-direction: column; gap: 12px; }
+  .empty-icon { width: 64px; height: 64px; background: var(--orange-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+  .reply-disabled { padding: 12px 16px; background: var(--gray-50); border-top: 1px solid var(--gray-200); text-align: center; font-size: 13px; color: var(--gray-400); }
   .hidden { display: none !important; }
-  .no-conv { padding: 20px; text-align: center; color: #999; font-size: 14px; }
 </style>
 </head>
 <body>
 
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
+    <div class="login-logo">🤖</div>
     <h2>KoolBot Admin</h2>
-    <p>Enter your admin key to continue</p>
+    <p>Sign in to manage customer conversations</p>
+    <input type="text" id="agentNameInput" placeholder="Your name (e.g. John)" autocomplete="off" />
     <input type="password" id="keyInput" placeholder="Admin key" />
+    <div class="login-error" id="loginError">Invalid admin key. Please try again.</div>
     <button onclick="login()">Sign In</button>
   </div>
 </div>
 
 <div id="appScreen" class="hidden" style="display:flex;flex-direction:column;height:100vh;">
   <header>
-    <h1>KoolBot Admin Dashboard</h1>
-    <span id="headerStatus">Loading conversations...</span>
+    <div class="header-left">
+      <div class="header-logo">🤖</div>
+      <div>
+        <h1>KoolBot Admin</h1>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="agent-badge">👤 <span id="agentNameDisplay"></span></div>
+      <button class="logout-btn" onclick="logout()">Sign Out</button>
+    </div>
   </header>
   <div class="main">
     <div class="sidebar">
-      <div class="sidebar-header">Conversations</div>
+      <div class="sidebar-header">
+        <h3>Conversations</h3>
+        <span id="convCount">Loading...</span>
+      </div>
       <div class="conv-list" id="convList"></div>
     </div>
     <div class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-        <span>Select a conversation to view messages</span>
+        <div class="empty-icon">💬</div>
+        <span>Select a conversation to get started</span>
       </div>
       <div id="chatView" class="hidden" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
         <div class="chat-header">
           <div class="chat-header-info">
             <h2 id="chatName">-</h2>
-            <p id="chatPhone">-</p>
+            <p id="chatSubtitle">-</p>
           </div>
-          <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()">Take Over</button>
+          <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()">👤 Take Over</button>
         </div>
         <div class="messages" id="messages"></div>
-        <div class="reply-box">
-          <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
-          <button class="send-btn" onclick="sendReply()">➤</button>
+        <div id="replyArea">
+          <div class="reply-box">
+            <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
+            <button class="send-btn" onclick="sendReply()">➤</button>
+          </div>
         </div>
+        <div class="reply-disabled hidden" id="replyDisabled">🤖 Bot is handling this conversation — click "Take Over" to reply</div>
       </div>
     </div>
   </div>
@@ -107,50 +159,91 @@
 
 <script>
   let adminKey = '';
+  let agentName = '';
   let selectedPhone = null;
   let selectedMode = 'bot';
   let pollInterval = null;
   let msgPollInterval = null;
 
+  // Restore session from localStorage
+  window.onload = () => {
+    const saved = localStorage.getItem('koolbot_agent');
+    if (saved) {
+      const data = JSON.parse(saved);
+      adminKey = data.key;
+      agentName = data.name;
+      showApp();
+    }
+  };
+
   function login() {
-    const k = document.getElementById('keyInput').value.trim();
-    if (!k) return;
-    adminKey = k;
+    const name = document.getElementById('agentNameInput').value.trim();
+    const key = document.getElementById('keyInput').value.trim();
+    if (!name || !key) return;
+    // Verify key by making a test API call
+    fetch(`/admin/conversations?key=${key}`)
+      .then(r => {
+        if (r.status === 403) {
+          document.getElementById('loginError').style.display = 'block';
+          return;
+        }
+        adminKey = key;
+        agentName = name;
+        localStorage.setItem('koolbot_agent', JSON.stringify({ key, name }));
+        document.getElementById('loginError').style.display = 'none';
+        showApp();
+      })
+      .catch(() => { document.getElementById('loginError').style.display = 'block'; });
+  }
+
+  function showApp() {
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('appScreen').classList.remove('hidden');
     document.getElementById('appScreen').style.display = 'flex';
+    document.getElementById('agentNameDisplay').textContent = agentName;
     loadConversations();
     pollInterval = setInterval(loadConversations, 5000);
   }
 
-  document.getElementById('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  function logout() {
+    localStorage.removeItem('koolbot_agent');
+    adminKey = ''; agentName = ''; selectedPhone = null;
+    clearInterval(pollInterval); clearInterval(msgPollInterval);
+    document.getElementById('appScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('agentNameInput').value = '';
+    document.getElementById('keyInput').value = '';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('loginScreen').style.display !== 'none' && !document.getElementById('loginScreen').classList.contains('hidden')) login();
+  });
 
   async function loadConversations() {
     try {
       const res = await fetch(`/admin/conversations?key=${adminKey}`);
-      if (res.status === 403) { alert('Invalid admin key'); return; }
+      if (res.status === 403) { logout(); return; }
       const data = await res.json();
+      document.getElementById('convCount').textContent = `${data.length} conversation${data.length !== 1 ? 's' : ''}`;
       const list = document.getElementById('convList');
-      const status = document.getElementById('headerStatus');
-      status.textContent = `${data.length} conversation${data.length !== 1 ? 's' : ''}`;
       if (data.length === 0) { list.innerHTML = '<div class="no-conv">No conversations yet</div>'; return; }
       list.innerHTML = data.map(c => `
-        <div class="conv-item ${selectedPhone === c.phone ? 'active' : ''}" onclick="selectConv('${c.phone}', '${c.name || 'Customer'}', '${c.mode}')">
-          <div class="avatar">${(c.name || 'C')[0].toUpperCase()}</div>
+        <div class="conv-item ${selectedPhone === c.phone ? 'active' : ''}" onclick="selectConv('${c.phone}', '${(c.name||'Customer').replace(/'/g,"\\'")}', '${c.mode}', '${c.agent||''}')">
+          <div class="avatar ${c.mode==='agent'?'agent-av':''}">${(c.name||'C')[0].toUpperCase()}</div>
           <div class="conv-info">
             <div class="conv-name">${c.name || 'Customer'}</div>
             <div class="conv-phone">${c.phone}</div>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+          <div class="conv-meta">
             <div class="conv-time">${timeAgo(c.last_message)}</div>
-            <div class="mode-badge mode-${c.mode}">${c.mode === 'bot' ? '🤖 Bot' : '👤 Agent'}</div>
+            <div class="mode-badge mode-${c.mode}">${c.mode==='bot' ? '🤖 Bot' : `👤 ${c.agent||'Agent'}`}</div>
           </div>
         </div>
       `).join('');
     } catch(e) { console.error(e); }
   }
 
-  async function selectConv(phone, name, mode) {
+  async function selectConv(phone, name, mode, agent) {
     selectedPhone = phone;
     selectedMode = mode;
     document.getElementById('emptyState').classList.add('hidden');
@@ -159,7 +252,7 @@
     chatView.style.display = 'flex';
     document.getElementById('chatName').textContent = name;
     document.getElementById('chatPhone').textContent = phone;
-    updateHandoffBtn(mode);
+    updateChatUI(mode, agent);
     await loadMessages();
     if (msgPollInterval) clearInterval(msgPollInterval);
     msgPollInterval = setInterval(loadMessages, 3000);
@@ -172,14 +265,18 @@
       const res = await fetch(`/admin/conversations/${selectedPhone}?key=${adminKey}`);
       const msgs = await res.json();
       const container = document.getElementById('messages');
-      const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-      container.innerHTML = msgs.map(m => `
-        <div class="msg ${m.direction}">
-          <div class="msg-sender">${m.direction === 'inbound' ? m.name || 'Customer' : (m.name === 'Agent' ? '👤 Agent' : '🤖 KoolBot')}</div>
+      const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 60;
+      container.innerHTML = msgs.map(m => {
+        const isBot = m.direction === 'outbound' && m.name !== 'Agent' && !m.name?.includes(' ') === false || (m.direction==='outbound' && m.name==='KoolBot');
+        const isAgent = m.direction === 'outbound' && m.name === 'Agent' || (m.direction==='outbound' && m.name && m.name !== 'KoolBot');
+        const senderClass = m.direction==='inbound' ? 'customer' : (isAgent ? 'agent-name' : 'bot');
+        const senderLabel = m.direction==='inbound' ? (m.name||'Customer') : (m.name==='Agent'||isAgent ? `👤 ${m.name}` : '🤖 KoolBot');
+        return `<div class="msg ${m.direction}">
+          <div class="msg-sender ${senderClass}">${senderLabel}</div>
           ${m.content}
           <div class="msg-meta">${formatTime(m.timestamp)}</div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
       if (wasAtBottom) container.scrollTop = container.scrollHeight;
     } catch(e) { console.error(e); }
   }
@@ -201,22 +298,36 @@
   async function toggleHandoff() {
     if (!selectedPhone) return;
     try {
-      const res = await fetch(`/admin/handoff/${selectedPhone}?key=${adminKey}`, { method: 'POST' });
+      const res = await fetch(`/admin/handoff/${selectedPhone}?key=${adminKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_name: agentName })
+      });
       const data = await res.json();
       selectedMode = data.mode;
-      updateHandoffBtn(data.mode);
+      updateChatUI(data.mode, data.agent);
+      document.getElementById('chatSubtitle').textContent = data.mode === 'agent' ? `Handled by ${data.agent}` : selectedPhone;
       loadConversations();
     } catch(e) { console.error(e); }
   }
 
-  function updateHandoffBtn(mode) {
+  function updateChatUI(mode, agent) {
     const btn = document.getElementById('handoffBtn');
+    const replyArea = document.getElementById('replyArea');
+    const replyDisabled = document.getElementById('replyDisabled');
+    const subtitle = document.getElementById('chatSubtitle');
     if (mode === 'agent') {
       btn.textContent = '🤖 Hand Back to Bot';
       btn.className = 'handoff-btn hand-back';
+      replyArea.classList.remove('hidden');
+      replyDisabled.classList.add('hidden');
+      subtitle.textContent = `Handled by ${agent || agentName}`;
     } else {
       btn.textContent = '👤 Take Over';
       btn.className = 'handoff-btn take-over';
+      replyArea.classList.add('hidden');
+      replyDisabled.classList.remove('hidden');
+      subtitle.textContent = selectedPhone || '';
     }
   }
 

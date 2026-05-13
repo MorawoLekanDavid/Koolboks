@@ -839,6 +839,7 @@ async def list_conversations(key: str = Query(...)):
                 "last_message": r.last_message.isoformat() if r.last_message else None,
                 "total_messages": r.total,
                 "mode": "agent" if handoff else "bot",
+                "agent": handoff if handoff and handoff != "1" else None,
             })
         return result
     finally:
@@ -861,6 +862,7 @@ async def get_conversation(phone: str, key: str = Query(...)):
 
 class AgentReply(BaseModel):
     message: str
+    agent_name: str = "Agent"
 
 
 @app.post("/admin/conversations/{phone}/reply")
@@ -868,12 +870,16 @@ async def agent_reply(phone: str, body: AgentReply, key: str = Query(...)):
     require_admin(key)
     session_id = f"wa_{phone}"
     await send_whatsapp_message(phone, body.message)
-    save_message_db(session_id, phone, "Agent", "outbound", body.message)
+    save_message_db(session_id, phone, body.agent_name, "outbound", body.message)
     return {"status": "sent"}
 
 
+class HandoffRequest(BaseModel):
+    agent_name: str = "Agent"
+
+
 @app.post("/admin/handoff/{phone}")
-async def toggle_handoff(phone: str, key: str = Query(...)):
+async def toggle_handoff(phone: str, body: HandoffRequest = HandoffRequest(), key: str = Query(...)):
     require_admin(key)
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis unavailable")
@@ -883,11 +889,13 @@ async def toggle_handoff(phone: str, key: str = Query(...)):
     if current:
         await redis_client.delete(handoff_key)
         mode = "bot"
+        agent = None
     else:
-        await redis_client.set(handoff_key, "1", ex=86400)
+        await redis_client.set(handoff_key, body.agent_name, ex=86400)
         mode = "agent"
-    log.info(f"Handoff toggled for {phone}: now {mode}")
-    return {"phone": phone, "mode": mode}
+        agent = body.agent_name
+    log.info(f"Handoff toggled for {phone}: now {mode} ({agent})")
+    return {"phone": phone, "mode": mode, "agent": agent}
 
 
 # ── WhatsApp Webhook ──────────────────────────────────────────────────────────
