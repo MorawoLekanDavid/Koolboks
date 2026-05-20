@@ -269,6 +269,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .agt-table th{text-align:left;padding:6px 8px;font-size:11px;color:var(--g400);font-weight:700;text-transform:uppercase;border-bottom:2px solid var(--g200)}
 .agt-table td{padding:9px 8px;border-bottom:1px solid var(--g100);color:var(--g700)}
 .agt-table tr:last-child td{border:none}
+.role-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
+.role-badge.super_admin{background:#fef3c7;color:#92400e}
+.role-badge.admin{background:var(--orange-s);color:var(--orange)}
+.role-badge.agent{background:var(--g100);color:var(--g500)}
 /* Leads */
 .leads-summary-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
 .lead-stat-c{flex:1;min-width:120px;background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:var(--sh);cursor:pointer;border:2px solid transparent;transition:all .15s}
@@ -342,8 +346,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
     <p>Sign in to manage conversations</p>
     <input type="email"    id="loginEmail"    placeholder="Email address" autocomplete="email"/>
     <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password"/>
-    <div class="login-divider">Super admin? Use your admin key instead</div>
-    <input type="password" id="loginKey" placeholder="Admin key (optional)"/>
+    <div class="login-divider">First time as super admin? Enter email + password + key below</div>
+    <input type="password" id="loginKey" placeholder="Admin key (super admin only)"/>
     <div class="login-error" id="loginError"></div>
     <button class="login-btn" onclick="login()">Sign In</button>
   </div>
@@ -542,10 +546,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   <!-- Team tab -->
   <div id="teamTab" class="tab-full hidden">
     <div class="card">
-      <h3>Registered Agents</h3>
-      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Agents log in with their email and password. Only the super admin can add or remove them.</p>
-      <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
-      <div class="add-agent-form">
+      <h3>Team Members</h3>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add agents. Only the super admin can promote or demote roles.</p>
+      <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
+      <div class="add-agent-form" style="margin-top:18px">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
         <input type="email"    id="newAgentEmail"    placeholder="Email address"/>
         <input type="password" id="newAgentPassword" placeholder="Password"/>
@@ -669,18 +673,12 @@ async function login(){
   const pass=document.getElementById('loginPassword').value;
   const key=document.getElementById('loginKey').value.trim();
   document.getElementById('loginError').style.display='none';
-  if(key){
-    const r=await fetch(`/admin/me?key=${encodeURIComponent(key)}`).catch(()=>null);
-    if(r&&r.ok){
-      const me=await r.json();
-      adminKey=key;agentName=me.name||'Admin';agentRole=me.role||'super_admin';save();showApp();return;
-    }
-    showErr('Invalid admin key.');return;
-  }
   if(!email||!pass){showErr('Please enter your email and password.');return;}
   try{
-    const r=await fetch('/admin/agent-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.toLowerCase(),password:pass})});
-    if(r.ok){const d=await r.json();adminKey=d.token;agentName=d.name;agentRole='agent';save();showApp();}
+    const body={email:email.toLowerCase(),password:pass};
+    if(key)body.admin_key=key;
+    const r=await fetch('/admin/agent-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(r.ok){const d=await r.json();adminKey=d.token;agentName=d.name;agentRole=d.role;save();showApp();}
     else{const e=await r.json().catch(()=>({}));showErr(e.detail||'Login failed.');}
   }catch{showErr('Connection error.');}
 }
@@ -690,9 +688,10 @@ function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   const a=document.getElementById('appScreen');a.classList.remove('hidden');a.style.display='flex';
   document.getElementById('agentNameDisplay').textContent=agentName;
-  document.getElementById('agentRoleDisplay').textContent=agentRole==='super_admin'?'Admin':'Agent';
+  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent'};
+  document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  if(agentRole==='super_admin'){
+  if(agentRole==='super_admin'||agentRole==='admin'){
     ['htabAnalytics','htabTeam','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
   }
   requestNotificationPermission();isFirstLoad=true;
@@ -1050,10 +1049,29 @@ async function loadAgentList(){
   try{
     const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`);if(!r.ok)return;
     const agents=await r.json();
+    const isSuperAdmin=agentRole==='super_admin';
     document.getElementById('agentTableBody').innerHTML=agents.length
-      ?agents.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td><button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button></td></tr>`).join('')
-      :'<tr><td colspan="3" style="color:var(--g400);font-size:13px;padding:12px 0">No agents registered yet</td></tr>';
+      ?agents.map(a=>{
+          const roleBadge=`<span class="role-badge ${a.role}">${a.role==='super_admin'?'Super Admin':a.role==='admin'?'Admin':'Agent'}</span>`;
+          const canRemove=(a.role!=='super_admin')&&(isSuperAdmin||(a.role==='agent'));
+          const removeBtn=canRemove?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
+          let promoteBtn='';
+          if(isSuperAdmin&&a.role!=='super_admin'){
+            promoteBtn=a.role==='agent'
+              ?`<button class="btn-primary" style="padding:4px 10px;font-size:11px;margin-right:4px" onclick="setRole(${a.id},'admin')">→ Admin</button>`
+              :`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:var(--g100);color:var(--g700);border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'agent')">→ Agent</button>`;
+          }
+          return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${removeBtn}</td></tr>`;
+        }).join('')
+      :'<tr><td colspan="4" style="color:var(--g400);font-size:13px;padding:12px 0">No team members yet</td></tr>';
   }catch(e){console.error(e);}
+}
+async function setRole(id,role){
+  const label=role==='admin'?'promote to Admin':'demote to Agent';
+  if(!confirm(`Are you sure you want to ${label} this person?`))return;
+  const r=await fetch(`/admin/agents/${id}/role?key=${encodeURIComponent(adminKey)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})}).catch(()=>null);
+  if(r&&r.ok)await loadAgentList();
+  else alert('Failed to update role.');
 }
 async function addAgent(){
   const name=document.getElementById('newAgentName').value.trim();

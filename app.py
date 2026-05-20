@@ -959,7 +959,14 @@ async def serve_frontend():
 
 async def get_admin_ctx(key: str = Query(...)) -> dict:
     if key == ADMIN_KEY:
-        return {"role": "super_admin", "name": "Admin"}
+        # Look up super_admin account for their real name
+        db = get_db()
+        try:
+            sa = db.query(Agent).filter(Agent.role == "super_admin").first()
+            name = sa.name if sa else "Admin"
+        finally:
+            db.close()
+        return {"role": "super_admin", "name": name}
     if redis_client:
         try:
             raw = await redis_client.get(f"koolbuy:agent_session:{key}")
@@ -973,6 +980,12 @@ async def get_admin_ctx(key: str = Query(...)) -> dict:
 async def require_super_admin(ctx: dict = Depends(get_admin_ctx)) -> dict:
     if ctx.get("role") != "super_admin":
         raise HTTPException(status_code=403, detail="Super admin access required")
+    return ctx
+
+
+async def require_admin(ctx: dict = Depends(get_admin_ctx)) -> dict:
+    if ctx.get("role") not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
     return ctx
 
 
@@ -991,36 +1004,61 @@ async def admin_dashboard():
 class AgentLoginRequest(BaseModel):
     email: str
     password: str
+    admin_key: Optional[str] = None  # provided only when registering/logging in as super_admin
 
 
 @app.post("/admin/agent-login")
 async def agent_login(body: AgentLoginRequest):
     db = get_db()
     try:
-        agent = db.query(Agent).filter(
-            func.lower(Agent.email) == body.email.strip().lower()
-        ).first()
+        email = body.email.strip().lower()
+
+        # Super admin path: valid key provided → register or login as super_admin
+        if body.admin_key and body.admin_key == ADMIN_KEY:
+            agent = db.query(Agent).filter(func.lower(Agent.email) == email).first()
+            if not agent:
+                # First-time super_admin registration
+                if not body.password:
+                    raise HTTPException(400, "Password is required to create your account.")
+                agent = Agent(name=body.email.split("@")[0].capitalize(),
+                              email=email,
+                              password_hash=hash_password(body.password),
+                              role="super_admin")
+                db.add(agent)
+                db.commit()
+                db.refresh(agent)
+                log.info(f"Super admin account created: {email}")
+            else:
+                if agent.role != "super_admin":
+                    raise HTTPException(403, "This email is registered as a regular agent, not super admin.")
+                if not verify_password(body.password, agent.password_hash):
+                    raise HTTPException(403, "Incorrect password.")
+            # Super admin token is always the ADMIN_KEY for backward compat
+            return {"token": ADMIN_KEY, "name": agent.name, "role": "super_admin"}
+
+        # Normal login path (agent or admin)
+        agent = db.query(Agent).filter(func.lower(Agent.email) == email).first()
         if not agent:
-            raise HTTPException(status_code=403, detail="Email not registered. Contact your admin.")
+            raise HTTPException(403, "Email not registered. Contact your admin.")
         if not agent.password_hash:
-            raise HTTPException(status_code=403, detail="Password not set. Ask your admin to reset it.")
+            raise HTTPException(403, "Password not set. Ask your admin to reset it.")
         if not verify_password(body.password, agent.password_hash):
-            raise HTTPException(status_code=403, detail="Incorrect password.")
+            raise HTTPException(403, "Incorrect password.")
         token = str(uuid.uuid4())
         session_data = json.dumps({
-            "role": "agent",
+            "role": agent.role,
             "name": agent.name,
             "email": agent.email,
             "agent_id": agent.id,
         })
         if redis_client:
             await redis_client.set(f"koolbuy:agent_session:{token}", session_data, ex=86400)
-        return {"token": token, "name": agent.name, "role": "agent"}
+        return {"token": token, "name": agent.name, "role": agent.role}
     finally:
         db.close()
 
 
-# ── Agent Management (super admin only) ──────────────────────────────────────
+# ── Agent Management ──────────────────────────────────────────────────────────
 
 class AgentCreate(BaseModel):
     name: str
@@ -1029,44 +1067,71 @@ class AgentCreate(BaseModel):
 
 
 @app.get("/admin/agents")
-async def list_agents(ctx: dict = Depends(require_super_admin)):
+async def list_agents(ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         agents = db.query(Agent).order_by(Agent.created_at.asc()).all()
-        return [{"id": a.id, "name": a.name, "email": a.email, "created_at": a.created_at.isoformat()} for a in agents]
+        return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
+                 "created_at": a.created_at.isoformat()} for a in agents]
     finally:
         db.close()
 
 
 @app.post("/admin/agents")
-async def register_agent(body: AgentCreate, ctx: dict = Depends(require_super_admin)):
+async def register_agent(body: AgentCreate, ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         existing = db.query(Agent).filter(
             func.lower(Agent.email) == body.email.strip().lower()
         ).first()
         if existing:
-            raise HTTPException(status_code=409, detail="An agent with this email already exists.")
+            raise HTTPException(409, "An agent with this email already exists.")
         agent = Agent(
             name=body.name.strip(),
             email=body.email.strip().lower(),
             password_hash=hash_password(body.password),
+            role="agent",
         )
         db.add(agent)
         db.commit()
         db.refresh(agent)
-        return {"id": agent.id, "name": agent.name, "email": agent.email}
+        return {"id": agent.id, "name": agent.name, "email": agent.email, "role": agent.role}
+    finally:
+        db.close()
+
+
+class RoleUpdate(BaseModel):
+    role: str  # "admin" or "agent"
+
+@app.patch("/admin/agents/{agent_id}/role")
+async def update_agent_role(agent_id: int, body: RoleUpdate, ctx: dict = Depends(require_super_admin)):
+    if body.role not in ("admin", "agent"):
+        raise HTTPException(400, "Role must be 'admin' or 'agent'")
+    db = get_db()
+    try:
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise HTTPException(404, "Agent not found.")
+        if agent.role == "super_admin":
+            raise HTTPException(403, "Cannot change the super admin's role.")
+        agent.role = body.role
+        db.commit()
+        return {"id": agent.id, "name": agent.name, "role": agent.role}
     finally:
         db.close()
 
 
 @app.delete("/admin/agents/{agent_id}")
-async def delete_agent(agent_id: int, ctx: dict = Depends(require_super_admin)):
+async def delete_agent(agent_id: int, ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         agent = db.query(Agent).filter(Agent.id == agent_id).first()
         if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found.")
+            raise HTTPException(404, "Agent not found.")
+        if agent.role == "super_admin":
+            raise HTTPException(403, "Cannot remove the super admin account.")
+        if agent.role == "admin" and ctx.get("role") != "super_admin":
+            raise HTTPException(403, "Only super admin can remove an admin account.")
         db.delete(agent)
         db.commit()
         return {"status": "deleted"}
@@ -1236,7 +1301,7 @@ async def toggle_handoff(phone: str, body: HandoffRequest = HandoffRequest(), ct
 # ── Follow-up management ─────────────────────────────────────────────────────
 
 @app.get("/admin/follow-up/config")
-async def get_follow_up_config(ctx: dict = Depends(require_super_admin)):
+async def get_follow_up_config(ctx: dict = Depends(require_admin)):
     return {
         "enabled": FOLLOW_UP_ENABLED,
         "hours": FOLLOW_UP_HOURS,
@@ -1246,7 +1311,7 @@ async def get_follow_up_config(ctx: dict = Depends(require_super_admin)):
 
 
 @app.get("/admin/follow-up/trigger")
-async def trigger_follow_ups(ctx: dict = Depends(require_super_admin)):
+async def trigger_follow_ups(ctx: dict = Depends(require_admin)):
     """Manually trigger a follow-up run (useful for testing)."""
     await run_follow_ups()
     return {"status": "done"}
@@ -1255,7 +1320,7 @@ async def trigger_follow_ups(ctx: dict = Depends(require_super_admin)):
 # ── Analytics (super admin only) ──────────────────────────────────────────────
 
 @app.get("/admin/analytics/conversations-handled")
-async def conversations_handled(ctx: dict = Depends(require_super_admin)):
+async def conversations_handled(ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         rows = db.execute(
@@ -1277,7 +1342,7 @@ async def conversations_handled(ctx: dict = Depends(require_super_admin)):
 
 
 @app.get("/admin/analytics/product-recommendations")
-async def product_recommendations(ctx: dict = Depends(require_super_admin)):
+async def product_recommendations(ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         rows = db.execute(
@@ -1294,7 +1359,7 @@ async def product_recommendations(ctx: dict = Depends(require_super_admin)):
 
 
 @app.get("/admin/analytics/lead-funnel")
-async def lead_funnel(ctx: dict = Depends(require_super_admin)):
+async def lead_funnel(ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         # WhatsApp sender phones (international format e.g. 2348012345678)
@@ -1497,7 +1562,7 @@ async def list_products(ctx: dict = Depends(get_admin_ctx)):
         db.close()
 
 @app.post("/admin/products")
-async def create_product(body: ProductIn, ctx: dict = Depends(require_super_admin)):
+async def create_product(body: ProductIn, ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         p = Product(name=body.name.strip(), price=body.price,
@@ -1512,7 +1577,7 @@ async def create_product(body: ProductIn, ctx: dict = Depends(require_super_admi
         db.close()
 
 @app.patch("/admin/products/{product_id}")
-async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(require_super_admin)):
+async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         p = db.query(Product).filter(Product.id == product_id).first()
@@ -1531,7 +1596,7 @@ async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(r
         db.close()
 
 @app.delete("/admin/products/{product_id}")
-async def delete_product(product_id: int, ctx: dict = Depends(require_super_admin)):
+async def delete_product(product_id: int, ctx: dict = Depends(require_admin)):
     db = get_db()
     try:
         p = db.query(Product).filter(Product.id == product_id).first()
@@ -1548,7 +1613,7 @@ class ProductBulkIn(BaseModel):
     products: List[ProductIn]
 
 @app.post("/admin/products/bulk")
-async def bulk_upsert_products(body: ProductBulkIn, ctx: dict = Depends(require_super_admin)):
+async def bulk_upsert_products(body: ProductBulkIn, ctx: dict = Depends(require_admin)):
     if not body.products:
         raise HTTPException(400, "No products provided")
     db = get_db()
