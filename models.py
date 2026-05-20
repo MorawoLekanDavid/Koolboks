@@ -35,6 +35,8 @@ class Lead(Base):
     power_type = Column(String(50), nullable=True)
     address = Column(String(512), nullable=True)
     active_duration = Column(String(50), nullable=True)
+    status = Column(String(50), default="new", index=True)  # new, interested, follow_up, drop_off, converted
+    assigned_to = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow,
                         onupdate=datetime.utcnow)
@@ -50,6 +52,29 @@ class Message(Base):
     name = Column(String(255), nullable=True)
     direction = Column(String(10))  # inbound / outbound
     content = Column(String(4000))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class Agent(Base):
+    """Registered agent for admin dashboard login"""
+    __tablename__ = "agents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255))
+    email = Column(String(255), unique=True, index=True)
+    password_hash = Column(String(255), nullable=True)
+    role = Column(String(20), default="agent")  # "agent" | "super_admin"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LeadNote(Base):
+    """Notes added by agents/admins on a lead"""
+    __tablename__ = "lead_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lead_phone = Column(String(25), index=True)
+    content = Column(String(2000))
+    created_by = Column(String(255))   # agent name or email
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 

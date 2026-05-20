@@ -3,25 +3,58 @@ from groq import AsyncGroq
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request, Depends
 from fastapi.responses import FileResponse, Response
 from contextlib import asynccontextmanager
-from datetime import datetime
-from sqlalchemy import create_engine, select, func, and_
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine, select, func, and_, case
 from sqlalchemy.orm import sessionmaker, Session
 import re
 import asyncio
+import uuid
+import hashlib
+import secrets
 import redis.asyncio as aioredis
 import os
 import json
 import logging
 import httpx
 
-from models import Product, Lead, Message, init_db
+from models import Product, Lead, Message, Agent, LeadNote, init_db
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger('koolbuy')
+
+
+def normalize_phone(phone: str) -> str:
+    """Normalize any Nigerian phone format to +234XXXXXXXXXX (E.164).
+    Handles: 07037428227, 7037428227, 2347037428227, +2347037428227
+    Returns original string unchanged if it doesn't match any known pattern."""
+    p = phone.strip().lstrip('+')
+    if p.startswith('234') and len(p) == 13:
+        digits = p[3:]           # 234XXXXXXXXXX → XXXXXXXXXX
+    elif p.startswith('0') and len(p) == 11:
+        digits = p[1:]           # 07037428227  → 7037428227
+    elif len(p) == 10 and p[0] in '789':
+        digits = p               # 7037428227   → 7037428227
+    else:
+        return phone.strip()
+    return '+234' + digits
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return f"{salt}:{h}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, h = stored.split(":", 1)
+        return hashlib.sha256(f"{salt}{password}".encode()).hexdigest() == h
+    except Exception:
+        return False
 
 load_dotenv()
 
@@ -35,7 +68,18 @@ MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")  # 24h — leads outlive chat sessions
 WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
 ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "koolbuy_admin_2026")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "KoolbotAdmin2026")
+BOT_RESPONSE_DELAY = int(os.environ.get("BOT_RESPONSE_DELAY_SECONDS", "10"))
+
+FOLLOW_UP_ENABLED = os.environ.get("FOLLOW_UP_ENABLED", "true").lower() == "true"
+FOLLOW_UP_HOURS   = int(os.environ.get("FOLLOW_UP_HOURS", "24"))
+FOLLOW_UP_RECHECK_DAYS = int(os.environ.get("FOLLOW_UP_RECHECK_DAYS", "7"))
+FOLLOW_UP_MESSAGE = os.environ.get(
+    "FOLLOW_UP_MESSAGE",
+    "Hi! 👋 We noticed you were checking out our products earlier and wanted to follow up.\n\n"
+    "Are you still interested? We're here to help you find the right solution — just reply "
+    "and we'll pick up right where we left off! 😊"
+)
 
 CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
 MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
@@ -91,7 +135,16 @@ async def lifespan(app: FastAPI):
             f"Redis connection failed: {e}. Chat history will not be persisted.")
         redis_client = None
 
+    # Start follow-up background worker
+    fu_task = asyncio.create_task(follow_up_worker())
+
     yield
+
+    fu_task.cancel()
+    try:
+        await fu_task
+    except asyncio.CancelledError:
+        pass
 
     if redis_client:
         await redis_client.close()
@@ -99,6 +152,103 @@ async def lifespan(app: FastAPI):
     if db_engine:
         db_engine.dispose()
         log.info("Database disconnected")
+
+async def run_follow_ups():
+    """Send a personalised follow-up WhatsApp message to conversations silent for
+    FOLLOW_UP_HOURS that never gave their phone number."""
+    if not redis_client or not WHATSAPP_API_TOKEN:
+        return
+    cutoff = datetime.utcnow() - timedelta(hours=FOLLOW_UP_HOURS)
+    db = get_db()
+    try:
+        rows = db.execute(
+            select(Message.phone, func.max(Message.created_at).label("last_msg"))
+            .where(Message.direction == "inbound")
+            .group_by(Message.phone)
+            .having(func.max(Message.created_at) < cutoff)
+        ).all()
+
+        sent = 0
+        for r in rows:
+            phone = r.phone
+            session_id = f"wa_{phone}"
+            if await redis_client.get(f"koolbuy:followup:{phone}"):
+                continue
+            if await redis_client.get(f"koolbuy:handoff:{session_id}"):
+                continue
+            lead = db.query(Lead).filter(Lead.phone == phone).first()
+            if lead:
+                continue
+
+            # Build a short transcript from DB for personalisation
+            msgs = db.execute(
+                select(Message).where(Message.phone == phone)
+                .order_by(Message.created_at.asc())
+            ).scalars().all()
+            lines = []
+            for m in msgs[-12:]:
+                role = "Customer" if m.direction == "inbound" else "KoolBot"
+                lines.append(f"{role}: {m.content[:200]}")
+            transcript = "\n".join(lines) or "No prior messages."
+
+            # Ask Groq to write a personalised, polite sales follow-up
+            prompt = (
+                "You are a friendly, professional sales representative for Koolbuy, "
+                "a Nigerian company that sells cooling and solar-powered products "
+                "(freezers, refrigerators, ice makers, solar kits).\n\n"
+                "A potential customer started a WhatsApp conversation but went silent "
+                f"without giving their phone number. Below is the conversation so far:\n\n"
+                f"{transcript}\n\n"
+                "Write a SHORT follow-up WhatsApp message (2-4 sentences). Rules:\n"
+                "- Sound warm and human, not like a bot\n"
+                "- Use the customer's name if you know it\n"
+                "- Reference what they were interested in if relevant\n"
+                "- Do NOT be pushy or desperate\n"
+                "- End with a gentle open question or offer to help\n"
+                "- No greetings like 'Dear Customer' — keep it casual and natural\n\n"
+                "Write ONLY the message text, nothing else:"
+            )
+            try:
+                completion = await groq_client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=180,
+                    temperature=0.75,
+                )
+                follow_up_text = (completion.choices[0].message.content or "").strip()
+            except Exception as e:
+                log.warning(f"Groq follow-up generation failed for {phone}: {e}")
+                follow_up_text = FOLLOW_UP_MESSAGE  # fallback to default
+
+            await send_whatsapp_message(phone, follow_up_text)
+            await redis_client.set(
+                f"koolbuy:followup:{phone}", "1",
+                ex=86400 * FOLLOW_UP_RECHECK_DAYS
+            )
+            log.info(f"Follow-up sent to {phone}: {follow_up_text[:60]}...")
+            sent += 1
+
+        if sent:
+            log.info(f"Follow-up run complete: {sent} message(s) sent")
+    except Exception as e:
+        log.error(f"Follow-up run error: {e}")
+    finally:
+        db.close()
+
+
+async def follow_up_worker():
+    """Hourly background task that triggers follow-up messages."""
+    log.info(f"Follow-up worker started (enabled={FOLLOW_UP_ENABLED}, hours={FOLLOW_UP_HOURS})")
+    while True:
+        try:
+            await asyncio.sleep(3600)
+            if FOLLOW_UP_ENABLED:
+                await run_follow_ups()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.error(f"Follow-up worker error: {e}")
+
 
 app = FastAPI(title="Koolbuy Chatbot API", lifespan=lifespan)
 groq_client = AsyncGroq(
@@ -392,7 +542,8 @@ async def save_lead(user_name: str, phone: str, history: list):
     try:
         db = get_db()
         clean = clean_name(data.get("name") or user_name)
-        existing = db.query(Lead).filter(Lead.phone == phone.strip()).first()
+        norm_phone = normalize_phone(phone)
+        existing = db.query(Lead).filter(Lead.phone == norm_phone).first()
         if existing:
             if data.get("name"):        existing.name             = clean
             if data.get("business"):    existing.business         = data["business"]
@@ -404,11 +555,11 @@ async def save_lead(user_name: str, phone: str, history: list):
             if data.get("address"):     existing.address          = data["address"]
             existing.active_duration = duration
             existing.updated_at = datetime.utcnow()
-            log.info(f"Lead updated: {clean} | {phone} | duration={duration}")
+            log.info(f"Lead updated: {clean} | {norm_phone} | duration={duration}")
         else:
             lead = Lead(
                 name=clean,
-                phone=phone,
+                phone=norm_phone,
                 business=data.get("business", ""),
                 product_interest=data.get("product_interest", ""),
                 amount=data.get("amount", ""),
@@ -467,7 +618,7 @@ async def update_lead_address(phone: str, address: str):
         db = get_db()
         lead = db.query(Lead).filter(
             and_(
-                Lead.phone == phone.strip(),
+                Lead.phone == normalize_phone(phone),
                 (Lead.address == None) | (Lead.address == "")
             )
         ).order_by(Lead.created_at.desc()).first()
@@ -806,9 +957,28 @@ async def serve_frontend():
 
 # ── Admin Dashboard ───────────────────────────────────────────────────────────
 
-def require_admin(key: str = Query(...)):
-    if key != ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+async def get_admin_ctx(key: str = Query(...)) -> dict:
+    if key == ADMIN_KEY:
+        return {"role": "super_admin", "name": "Admin"}
+    if redis_client:
+        try:
+            raw = await redis_client.get(f"koolbuy:agent_session:{key}")
+            if raw:
+                return json.loads(raw)
+        except Exception:
+            pass
+    raise HTTPException(status_code=403, detail="Unauthorized")
+
+
+async def require_super_admin(ctx: dict = Depends(get_admin_ctx)) -> dict:
+    if ctx.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    return ctx
+
+
+@app.get("/admin/me")
+async def get_me(ctx: dict = Depends(get_admin_ctx)):
+    return {"role": ctx.get("role", "agent"), "name": ctx.get("name", "")}
 
 
 @app.get("/admin")
@@ -816,23 +986,169 @@ async def admin_dashboard():
     return FileResponse(os.path.join(BASE_DIR, "admin", "index.html"))
 
 
+# ── Agent Auth ────────────────────────────────────────────────────────────────
+
+class AgentLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/admin/agent-login")
+async def agent_login(body: AgentLoginRequest):
+    db = get_db()
+    try:
+        agent = db.query(Agent).filter(
+            func.lower(Agent.email) == body.email.strip().lower()
+        ).first()
+        if not agent:
+            raise HTTPException(status_code=403, detail="Email not registered. Contact your admin.")
+        if not agent.password_hash:
+            raise HTTPException(status_code=403, detail="Password not set. Ask your admin to reset it.")
+        if not verify_password(body.password, agent.password_hash):
+            raise HTTPException(status_code=403, detail="Incorrect password.")
+        token = str(uuid.uuid4())
+        session_data = json.dumps({
+            "role": "agent",
+            "name": agent.name,
+            "email": agent.email,
+            "agent_id": agent.id,
+        })
+        if redis_client:
+            await redis_client.set(f"koolbuy:agent_session:{token}", session_data, ex=86400)
+        return {"token": token, "name": agent.name, "role": "agent"}
+    finally:
+        db.close()
+
+
+# ── Agent Management (super admin only) ──────────────────────────────────────
+
+class AgentCreate(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+@app.get("/admin/agents")
+async def list_agents(ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        agents = db.query(Agent).order_by(Agent.created_at.asc()).all()
+        return [{"id": a.id, "name": a.name, "email": a.email, "created_at": a.created_at.isoformat()} for a in agents]
+    finally:
+        db.close()
+
+
+@app.post("/admin/agents")
+async def register_agent(body: AgentCreate, ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        existing = db.query(Agent).filter(
+            func.lower(Agent.email) == body.email.strip().lower()
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="An agent with this email already exists.")
+        agent = Agent(
+            name=body.name.strip(),
+            email=body.email.strip().lower(),
+            password_hash=hash_password(body.password),
+        )
+        db.add(agent)
+        db.commit()
+        db.refresh(agent)
+        return {"id": agent.id, "name": agent.name, "email": agent.email}
+    finally:
+        db.close()
+
+
+@app.delete("/admin/agents/{agent_id}")
+async def delete_agent(agent_id: int, ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found.")
+        db.delete(agent)
+        db.commit()
+        return {"status": "deleted"}
+    finally:
+        db.close()
+
+
+# ── Conversations ─────────────────────────────────────────────────────────────
+
 @app.get("/admin/conversations")
-async def list_conversations(key: str = Query(...)):
-    require_admin(key)
+async def list_conversations(ctx: dict = Depends(get_admin_ctx)):
     db = get_db()
     try:
         rows = db.execute(
             select(
-                Message.phone, Message.name,
+                Message.phone,
+                func.max(
+                    case((Message.direction == "inbound", Message.name), else_=None)
+                ).label("name"),
                 func.max(Message.created_at).label("last_message"),
                 func.count(Message.id).label("total")
-            ).group_by(Message.phone, Message.name)
+            ).group_by(Message.phone)
             .order_by(func.max(Message.created_at).desc())
         ).all()
+        # Build phone → agents-involved map in one query
+        agent_rows = db.execute(
+            select(Message.phone, Message.name)
+            .where(and_(
+                Message.direction == "outbound",
+                Message.name != "KoolBot",
+                Message.name.isnot(None),
+                Message.name != "",
+            ))
+            .distinct()
+        ).all()
+        agent_map: dict = {}
+        for ar in agent_rows:
+            agent_map.setdefault(ar.phone, [])
+            if ar.name not in agent_map[ar.phone]:
+                agent_map[ar.phone].append(ar.name)
+
+        phones = [r.phone for r in rows]
+
+        # Batch all Redis calls — one mget for handoffs, one for read timestamps
+        if redis_client and phones:
+            handoff_keys   = [f"koolbuy:handoff:wa_{p}" for p in phones]
+            read_keys      = [f"koolbuy:conv_read:{p}"  for p in phones]
+            handoff_vals, read_vals = await asyncio.gather(
+                redis_client.mget(*handoff_keys),
+                redis_client.mget(*read_keys),
+            )
+            handoff_map  = {p: v for p, v in zip(phones, handoff_vals)}
+            read_map     = {p: v for p, v in zip(phones, read_vals)}
+        else:
+            handoff_map = {}; read_map = {}
+
+        # Batch unread counts — one query for all phones
+        inbound_totals = {r2.phone: r2.total for r2 in db.execute(
+            select(Message.phone, func.count(Message.id).label("total"))
+            .where(and_(Message.phone.in_(phones), Message.direction == "inbound"))
+            .group_by(Message.phone)
+        ).all()} if phones else {}
+
         result = []
         for r in rows:
-            session_id = f"wa_{r.phone}"
-            handoff = await redis_client.get(f"koolbuy:handoff:{session_id}") if redis_client else None
+            handoff    = handoff_map.get(r.phone)
+            last_read  = read_map.get(r.phone)
+            total_in   = inbound_totals.get(r.phone, 0)
+            if last_read:
+                try:
+                    lrdt = datetime.fromisoformat(last_read)
+                    unread = db.execute(
+                        select(func.count(Message.id)).where(and_(
+                            Message.phone == r.phone,
+                            Message.direction == "inbound",
+                            Message.created_at > lrdt,
+                        ))
+                    ).scalar() or 0
+                except Exception:
+                    unread = total_in
+            else:
+                unread = total_in
             result.append({
                 "phone": r.phone,
                 "name": r.name,
@@ -840,6 +1156,8 @@ async def list_conversations(key: str = Query(...)):
                 "total_messages": r.total,
                 "mode": "agent" if handoff else "bot",
                 "agent": handoff if handoff and handoff != "1" else None,
+                "unread": unread,
+                "agents_involved": agent_map.get(r.phone, []),
             })
         return result
     finally:
@@ -847,8 +1165,7 @@ async def list_conversations(key: str = Query(...)):
 
 
 @app.get("/admin/conversations/{phone}")
-async def get_conversation(phone: str, key: str = Query(...)):
-    require_admin(key)
+async def get_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
     db = get_db()
     try:
         rows = db.execute(
@@ -860,17 +1177,35 @@ async def get_conversation(phone: str, key: str = Query(...)):
         db.close()
 
 
+@app.post("/admin/conversations/{phone}/mark-read")
+async def mark_conversation_read(phone: str, ctx: dict = Depends(get_admin_ctx)):
+    if redis_client:
+        await redis_client.set(f"koolbuy:conv_read:{phone}", datetime.utcnow().isoformat(), ex=86400 * 7)
+    return {"status": "ok"}
+
+
 class AgentReply(BaseModel):
     message: str
     agent_name: str = "Agent"
 
 
 @app.post("/admin/conversations/{phone}/reply")
-async def agent_reply(phone: str, body: AgentReply, key: str = Query(...)):
-    require_admin(key)
+async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(get_admin_ctx)):
     session_id = f"wa_{phone}"
+    display_name = ctx.get("name") or body.agent_name or "Agent"
     await send_whatsapp_message(phone, body.message)
-    save_message_db(session_id, phone, body.agent_name, "outbound", body.message)
+    save_message_db(session_id, phone, display_name, "outbound", body.message)
+
+    # Keep Redis history in sync so the bot has full context when it resumes
+    if redis_client:
+        history = await get_history(session_id)
+        history.append({
+            "role": "assistant",
+            "content": f"[Agent {display_name}]: {body.message}",
+            "ts": datetime.now().isoformat(),
+        })
+        await save_history(session_id, history)
+
     return {"status": "sent"}
 
 
@@ -879,23 +1214,368 @@ class HandoffRequest(BaseModel):
 
 
 @app.post("/admin/handoff/{phone}")
-async def toggle_handoff(phone: str, body: HandoffRequest = HandoffRequest(), key: str = Query(...)):
-    require_admin(key)
+async def toggle_handoff(phone: str, body: HandoffRequest = HandoffRequest(), ctx: dict = Depends(get_admin_ctx)):
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis unavailable")
     session_id = f"wa_{phone}"
     handoff_key = f"koolbuy:handoff:{session_id}"
     current = await redis_client.get(handoff_key)
+    agent_display = ctx.get("name") or body.agent_name or "Agent"
     if current:
         await redis_client.delete(handoff_key)
         mode = "bot"
         agent = None
     else:
-        await redis_client.set(handoff_key, body.agent_name, ex=86400)
+        await redis_client.set(handoff_key, agent_display, ex=86400)
         mode = "agent"
-        agent = body.agent_name
+        agent = agent_display
     log.info(f"Handoff toggled for {phone}: now {mode} ({agent})")
     return {"phone": phone, "mode": mode, "agent": agent}
+
+
+# ── Follow-up management ─────────────────────────────────────────────────────
+
+@app.get("/admin/follow-up/config")
+async def get_follow_up_config(ctx: dict = Depends(require_super_admin)):
+    return {
+        "enabled": FOLLOW_UP_ENABLED,
+        "hours": FOLLOW_UP_HOURS,
+        "recheck_days": FOLLOW_UP_RECHECK_DAYS,
+        "message": FOLLOW_UP_MESSAGE,
+    }
+
+
+@app.get("/admin/follow-up/trigger")
+async def trigger_follow_ups(ctx: dict = Depends(require_super_admin)):
+    """Manually trigger a follow-up run (useful for testing)."""
+    await run_follow_ups()
+    return {"status": "done"}
+
+
+# ── Analytics (super admin only) ──────────────────────────────────────────────
+
+@app.get("/admin/analytics/conversations-handled")
+async def conversations_handled(ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        rows = db.execute(
+            select(
+                Message.name,
+                func.date(Message.created_at).label("date"),
+                func.count(func.distinct(Message.phone)).label("count"),
+            ).where(and_(
+                Message.direction == "outbound",
+                Message.name != "KoolBot",
+                Message.name.isnot(None),
+                Message.name != "",
+            )).group_by(Message.name, func.date(Message.created_at))
+            .order_by(func.date(Message.created_at).desc())
+        ).all()
+        return [{"agent": r.name, "date": str(r.date), "conversations": r.count} for r in rows]
+    finally:
+        db.close()
+
+
+@app.get("/admin/analytics/product-recommendations")
+async def product_recommendations(ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        rows = db.execute(
+            select(Lead.product_interest, func.count(Lead.id).label("count"))
+            .where(Lead.product_interest != None, Lead.product_interest != "")
+            .group_by(Lead.product_interest)
+            .order_by(func.count(Lead.id).desc())
+        ).all()
+        total = sum(r.count for r in rows)
+        return [{"product": r.product_interest, "count": r.count,
+                 "pct": round(r.count / total * 100) if total else 0} for r in rows]
+    finally:
+        db.close()
+
+
+@app.get("/admin/analytics/lead-funnel")
+async def lead_funnel(ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        # WhatsApp sender phones (international format e.g. 2348012345678)
+        msg_phones = {r.phone for r in db.execute(
+            select(Message.phone).where(Message.direction == "inbound").distinct()
+        ).all()}
+
+        # Lead phones normalized to local format for cross-format comparison
+        lead_phones_norm = {normalize_phone(r.phone) for r in db.query(Lead.phone).all()}
+        total_leads = len(lead_phones_norm)
+
+        # Drop-offs: WhatsApp senders who never gave their number (normalize WA phone before comparing)
+        drop_off = sum(1 for p in msg_phones if normalize_phone(p) not in lead_phones_norm)
+
+        # Total conversations = drop-offs + leads
+        # (leads' original WhatsApp messages may have been purged from messages table)
+        total_convs = drop_off + total_leads
+
+        return {
+            "funnel": [
+                {"stage": "Conversations Started", "count": total_convs},
+                {"stage": "Phone Captured", "count": total_leads},
+                {"stage": "Drop-off (no phone given)", "count": drop_off},
+            ]
+        }
+    finally:
+        db.close()
+
+
+# ── Lead Management ───────────────────────────────────────────────────────────
+
+@app.get("/admin/leads/by-phone/{phone}")
+async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx)):
+    db = get_db()
+    try:
+        norm = normalize_phone(phone)
+        lead = db.query(Lead).filter(Lead.phone == norm).first()
+        if not lead:
+            # try raw phone in case not yet normalized
+            lead = db.query(Lead).filter(Lead.phone == phone).first()
+        if not lead:
+            return None
+        s = 0
+        if lead.name and lead.name not in ("Customer", ""): s += 15
+        if lead.business: s += 10
+        if lead.product_interest: s += 25
+        if lead.amount: s += 15
+        if lead.payment_plan: s += 10
+        if lead.address: s += 25
+        score = min(s, 100)
+        interest = "High" if score >= 70 else "Medium" if score >= 40 else "Low"
+
+        # Activity from messages table
+        activity = db.execute(
+            select(
+                func.min(Message.created_at).label("first_seen"),
+                func.max(Message.created_at).label("last_seen"),
+                func.count(Message.id).label("total_messages"),
+            ).where(Message.phone == norm)
+        ).first()
+
+        return {
+            "name": lead.name, "phone": lead.phone,
+            "business": lead.business, "product_interest": lead.product_interest,
+            "amount": lead.amount, "payment_plan": lead.payment_plan,
+            "address": lead.address, "active_duration": lead.active_duration,
+            "created_at": lead.created_at.isoformat() if lead.created_at else None,
+            "score": score, "interest": interest,
+            "activity": {
+                "first_seen": activity.first_seen.isoformat() if activity and activity.first_seen else None,
+                "last_seen": activity.last_seen.isoformat() if activity and activity.last_seen else None,
+                "total_messages": activity.total_messages if activity else 0,
+            },
+        }
+    finally:
+        db.close()
+
+
+@app.get("/admin/leads/{phone}/notes")
+async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx)):
+    db = get_db()
+    try:
+        norm = normalize_phone(phone)
+        notes = db.query(LeadNote).filter(LeadNote.lead_phone == norm)\
+                  .order_by(LeadNote.created_at.desc()).all()
+        return [{"id": n.id, "content": n.content, "created_by": n.created_by,
+                 "created_at": n.created_at.isoformat()} for n in notes]
+    finally:
+        db.close()
+
+
+class NoteIn(BaseModel):
+    content: str
+    created_by: Optional[str] = "Agent"
+
+@app.post("/admin/leads/{phone}/notes")
+async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_ctx)):
+    if not body.content.strip():
+        raise HTTPException(400, "Note content cannot be empty")
+    db = get_db()
+    try:
+        norm = normalize_phone(phone)
+        note = LeadNote(lead_phone=norm, content=body.content.strip(),
+                        created_by=body.created_by or ctx.get("name") or ctx.get("email", "Agent"))
+        db.add(note)
+        db.commit()
+        db.refresh(note)
+        return {"id": note.id, "content": note.content, "created_by": note.created_by,
+                "created_at": note.created_at.isoformat()}
+    finally:
+        db.close()
+
+
+@app.get("/admin/leads")
+async def list_leads(
+    date_from: Optional[str] = Query(None),
+    date_to:   Optional[str] = Query(None),
+    ctx: dict = Depends(get_admin_ctx)
+):
+    """Returns leads who gave a valid phone number (Interested)."""
+    db = get_db()
+    try:
+        q = db.query(Lead).filter(Lead.phone != None, Lead.phone != "")
+        if date_from:
+            q = q.filter(Lead.created_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            q = q.filter(Lead.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+        leads = q.order_by(Lead.created_at.desc()).all()
+        return [{
+            "id": l.id,
+            "name": l.name,
+            "phone": l.phone,
+            "product_interest": l.product_interest,
+            "business": l.business,
+            "amount": l.amount,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        } for l in leads]
+    finally:
+        db.close()
+
+
+@app.get("/admin/leads/dropoffs")
+async def list_dropoffs(
+    date_from: Optional[str] = Query(None),
+    date_to:   Optional[str] = Query(None),
+    ctx: dict = Depends(get_admin_ctx)
+):
+    """Returns phones that messaged on WhatsApp but never gave their number (Drop-offs)."""
+    db = get_db()
+    try:
+        q = select(
+            Message.phone,
+            func.max(case((Message.direction == "inbound", Message.name), else_=None)).label("name"),
+            func.max(Message.created_at).label("last_message"),
+            func.count(Message.id).label("message_count"),
+        ).where(Message.direction == "inbound")
+        if date_from:
+            q = q.where(Message.created_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            q = q.where(Message.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+        msg_rows = db.execute(
+            q.group_by(Message.phone).order_by(func.max(Message.created_at).desc())
+        ).all()
+
+        lead_phones_norm = {normalize_phone(l.phone) for l in db.query(Lead.phone).all()}
+
+        return [
+            {
+                "phone": r.phone,
+                "name": r.name,
+                "last_message": r.last_message.isoformat() if r.last_message else None,
+                "message_count": r.message_count,
+            }
+            for r in msg_rows
+            if normalize_phone(r.phone) not in lead_phones_norm
+        ]
+    finally:
+        db.close()
+
+
+# ── Product Management ────────────────────────────────────────────────────────
+
+class ProductIn(BaseModel):
+    name: str
+    price: float
+    image_url: Optional[str] = ""
+    product_url: Optional[str] = ""
+    description: Optional[str] = ""
+
+@app.get("/admin/products")
+async def list_products(ctx: dict = Depends(get_admin_ctx)):
+    db = get_db()
+    try:
+        products = db.query(Product).order_by(Product.name).all()
+        return [{"id": p.id, "name": p.name, "price": p.price,
+                 "image_url": p.image_url, "product_url": p.product_url,
+                 "description": p.description,
+                 "created_at": p.created_at.isoformat() if p.created_at else None} for p in products]
+    finally:
+        db.close()
+
+@app.post("/admin/products")
+async def create_product(body: ProductIn, ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        p = Product(name=body.name.strip(), price=body.price,
+                    image_url=body.image_url or "", product_url=body.product_url or "",
+                    description=body.description or "")
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        return {"id": p.id, "name": p.name, "price": p.price,
+                "image_url": p.image_url, "product_url": p.product_url, "description": p.description}
+    finally:
+        db.close()
+
+@app.patch("/admin/products/{product_id}")
+async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        p = db.query(Product).filter(Product.id == product_id).first()
+        if not p:
+            raise HTTPException(404, "Product not found")
+        p.name = body.name.strip()
+        p.price = body.price
+        p.image_url = body.image_url or ""
+        p.product_url = body.product_url or ""
+        p.description = body.description or ""
+        p.updated_at = datetime.utcnow()
+        db.commit()
+        return {"id": p.id, "name": p.name, "price": p.price,
+                "image_url": p.image_url, "product_url": p.product_url, "description": p.description}
+    finally:
+        db.close()
+
+@app.delete("/admin/products/{product_id}")
+async def delete_product(product_id: int, ctx: dict = Depends(require_super_admin)):
+    db = get_db()
+    try:
+        p = db.query(Product).filter(Product.id == product_id).first()
+        if not p:
+            raise HTTPException(404, "Product not found")
+        db.delete(p)
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+class ProductBulkIn(BaseModel):
+    products: List[ProductIn]
+
+@app.post("/admin/products/bulk")
+async def bulk_upsert_products(body: ProductBulkIn, ctx: dict = Depends(require_super_admin)):
+    if not body.products:
+        raise HTTPException(400, "No products provided")
+    db = get_db()
+    try:
+        created, updated = 0, 0
+        for item in body.products:
+            name = item.name.strip()
+            if not name:
+                continue
+            existing = db.query(Product).filter(Product.name == name).first()
+            if existing:
+                existing.price = item.price
+                existing.image_url = item.image_url or ""
+                existing.product_url = item.product_url or ""
+                existing.description = item.description or ""
+                existing.updated_at = datetime.utcnow()
+                updated += 1
+            else:
+                db.add(Product(name=name, price=item.price,
+                               image_url=item.image_url or "",
+                               product_url=item.product_url or "",
+                               description=item.description or ""))
+                created += 1
+        db.commit()
+        return {"created": created, "updated": updated}
+    finally:
+        db.close()
 
 
 # ── WhatsApp Webhook ──────────────────────────────────────────────────────────
@@ -939,11 +1619,55 @@ async def send_whatsapp_message(to: str, text: str, image_url: str = None):
 def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str):
     try:
         db = get_db()
-        db.add(Message(session_id=session_id, phone=phone, name=name, direction=direction, content=content))
+        db.add(Message(session_id=session_id, phone=normalize_phone(phone), name=name, direction=direction, content=content))
         db.commit()
         db.close()
     except Exception as e:
         log.error(f"Failed to save message: {e}")
+
+
+async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str):
+    """Wait for the agent takeover window, then respond if no agent claimed the session."""
+    if BOT_RESPONSE_DELAY > 0:
+        await asyncio.sleep(BOT_RESPONSE_DELAY)
+
+    # Re-check handoff — agent may have taken over during the delay
+    handoff_key = f"koolbuy:handoff:{session_id}"
+    in_handoff = await redis_client.get(handoff_key) if redis_client else None
+    if in_handoff:
+        log.info(f"[delay] {session_id} claimed by agent during window — bot silent")
+        return
+
+    # Generate bot response
+    bg = BackgroundTasks()
+    chat_req = ChatRequest(session_id=session_id, message=text, user_name=name)
+    try:
+        chat_resp = await chat_handler(chat_req, bg)
+    except Exception as e:
+        log.error(f"[delay] chat_handler failed for {session_id}: {e}")
+        return
+
+    reply_text = chat_resp.response
+    image_url = None
+    if chat_resp.products:
+        product = chat_resp.products[0]
+        reply_text += f"\n\n🛒 *{product.name}*\n💰 N{float(product.price):,.0f}"
+        if product.image_url and "img-proxy?url=" in product.image_url:
+            from urllib.parse import unquote
+            image_url = unquote(product.image_url.split("img-proxy?url=")[1])
+
+    save_message_db(session_id, wa_from, "KoolBot", "outbound", reply_text)
+    await send_whatsapp_message(wa_from, reply_text, image_url)
+
+    # Run background tasks queued by chat_handler (save_lead, update_lead_address, etc.)
+    for task in bg.tasks:
+        try:
+            if asyncio.iscoroutinefunction(task.func):
+                await task.func(*task.args, **task.kwargs)
+            else:
+                task.func(*task.args, **task.kwargs)
+        except Exception as e:
+            log.warning(f"[delay] bg task {task.func.__name__} failed: {e}")
 
 
 @app.get("/webhook")
@@ -991,6 +1715,14 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     in_handoff = await redis_client.get(handoff_key) if redis_client else None
                     if in_handoff:
                         log.info(f"Session {session_id} is in handoff mode — bot silent")
+                        # Still update Redis history so bot has context when it resumes
+                        history = await get_history(session_id)
+                        history.append({
+                            "role": "user",
+                            "content": text,
+                            "ts": datetime.now().isoformat(),
+                        })
+                        await save_history(session_id, history)
                         continue
 
                     # Check session state and reset completed sessions
@@ -1006,18 +1738,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                             await redis_client.delete(f"koolbuy:delivery:{session_id}")
                             log.info(f"Session {session_id} reset for new conversation")
 
-                    chat_req = ChatRequest(session_id=session_id, message=text, user_name=name)
-                    chat_resp = await chat_handler(chat_req, background_tasks)
-                    reply_text = chat_resp.response
-                    image_url = None
-                    if chat_resp.products:
-                        product = chat_resp.products[0]
-                        reply_text += f"\n\n🛒 *{product.name}*\n💰 N{float(product.price):,.0f}"
-                        if product.image_url and "img-proxy?url=" in product.image_url:
-                            from urllib.parse import unquote
-                            image_url = unquote(product.image_url.split("img-proxy?url=")[1])
-                    background_tasks.add_task(save_message_db, session_id, wa_from, name, "outbound", reply_text)
-                    background_tasks.add_task(send_whatsapp_message, wa_from, reply_text, image_url)
+                    # Fire delayed response — gives agents BOT_RESPONSE_DELAY seconds to take over
+                    asyncio.create_task(delayed_bot_response(session_id, wa_from, name, text))
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
     return Response(content="OK", status_code=200)
