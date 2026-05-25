@@ -115,12 +115,12 @@ IF [VALID phone captured] is NOT in history:
 
 IF [VALID phone captured] is in history AND [DELIVERY confirmed] is NOT in history:
 1) Thank customer warmly by name in one sentence.
-2) Say agent will call soon + WhatsApp +2348116402869.
+2) Say agent will call soon + they can also reach us on 07002252252 or email support@koolboks.com.
 3) Ask ONLY: "What area or city should we deliver to?"
 4) STOP. Do not ask anything else until delivery is provided.
 
 IF BOTH [VALID phone captured] AND [DELIVERY confirmed] are in history:
-1) Say warmly: "Thank you for choosing Koolbuy! Our agent will call you soon on [phone]. You can also reach us on WhatsApp at +2348116402869 for updates."
+1) Say warmly: "Thank you for choosing Koolbuy! Our agent will call you soon on [phone]. You can also reach us on 07002252252 or email support@koolboks.com for updates."
 2) STOP. Conversation is complete. Do not ask any more questions.
 
 PHONE:
