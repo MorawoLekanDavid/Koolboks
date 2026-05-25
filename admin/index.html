@@ -965,7 +965,7 @@ function showLeadGroup(g){
   const title=isInt?'Interested — gave their phone number':'Drop-offs — chatted but no number given';
   document.getElementById('leadsListTitle').textContent=title;
   document.getElementById('leadsListCount').textContent=`${list.length} people`;
-  document.getElementById('downloadBtn').style.display=list.length?'inline-block':'none';
+  const dlBtn=document.getElementById('downloadBtn');if(list.length){dlBtn.classList.remove('hidden');}else{dlBtn.classList.add('hidden');}
   if(!list.length){document.getElementById('leadsListBody').innerHTML='<div class="empty-leads">None yet</div>';return;}
   document.getElementById('leadsListBody').innerHTML=list.map(l=>{
     const name=l.name||l.phone;
