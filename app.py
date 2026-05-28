@@ -1282,7 +1282,7 @@ class HandoffRequest(BaseModel):
 async def toggle_handoff(phone: str, body: HandoffRequest = HandoffRequest(), ctx: dict = Depends(get_admin_ctx)):
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis unavailable")
-    session_id = f"wa_{phone}"
+    session_id = f"wa_{normalize_phone(phone)}"
     handoff_key = f"koolbuy:handoff:{session_id}"
     current = await redis_client.get(handoff_key)
     agent_display = ctx.get("name") or body.agent_name or "Agent"
@@ -1760,7 +1760,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 for msg in messages:
                     if msg.get("type") != "text":
                         continue
-                    wa_from  = msg["from"]
+                    wa_from  = normalize_phone(msg["from"])
                     text     = msg["text"]["body"]
                     contacts = value.get("contacts", [{}])
                     name     = contacts[0].get("profile", {}).get("name", "Customer") if contacts else "Customer"
