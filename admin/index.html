@@ -251,6 +251,40 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .modal-actions .btn-primary{flex:1}
 .modal-actions .btn-cancel{flex:1;padding:9px;border:1.5px solid var(--g200);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--g600)}
 .modal-actions .btn-cancel:hover{background:var(--g50)}
+/* Templates tab */
+.tmpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.tmpl-card{background:#fff;border-radius:12px;border:1.5px solid var(--g200);padding:18px;display:flex;flex-direction:column;gap:10px}
+.tmpl-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.tmpl-name{font-size:14px;font-weight:700;color:var(--g900);word-break:break-all}
+.tmpl-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.tmpl-status{font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;text-transform:uppercase}
+.tmpl-status.APPROVED{background:#dcfce7;color:#15803d}
+.tmpl-status.PENDING{background:#fef9c3;color:#854d0e}
+.tmpl-status.REJECTED{background:#fee2e2;color:#b91c1c}
+.tmpl-status.PAUSED{background:var(--g100);color:var(--g500)}
+.tmpl-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--orange-s);color:var(--orange-d)}
+.tmpl-lang{font-size:10px;color:var(--g400);font-weight:600;text-transform:uppercase}
+.tmpl-body{font-size:12px;color:var(--g700);line-height:1.5;background:var(--g50);border-radius:8px;padding:10px;font-family:inherit;white-space:pre-wrap;word-break:break-word;max-height:80px;overflow:hidden}
+.tmpl-footer-row{display:flex;align-items:center;justify-content:space-between}
+.btn-tmpl-del{padding:5px 12px;background:none;border:1.5px solid #fecaca;color:#ef4444;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-tmpl-del:hover{background:#fee2e2}
+.btn-tmpl-send{padding:5px 12px;background:var(--orange-s);border:1.5px solid var(--orange-b);color:var(--orange-d);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-tmpl-send:hover{background:var(--orange);color:#fff}
+.reeng-config-card{background:var(--g50);border-radius:10px;padding:16px;border:1.5px solid var(--g200)}
+.reeng-config-card h4{font-size:13px;font-weight:700;color:var(--g900);margin-bottom:10px}
+.reeng-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.reeng-row select,.reeng-row input{padding:7px 10px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;outline:none;color:var(--g700);background:#fff}
+.reeng-row select:focus,.reeng-row input:focus{border-color:var(--orange)}
+.reeng-status{font-size:12px;font-weight:600}
+.reeng-status.active{color:#15803d}
+.reeng-status.inactive{color:var(--g400)}
+.modal-field select{width:100%;border:1px solid var(--g200);border-radius:8px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;color:var(--g800)}
+.modal-field select:focus{border-color:var(--orange)}
+.var-hint{font-size:11px;color:var(--g400);margin-top:4px}
+.send-tmpl-preview{background:var(--g50);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--g700);line-height:1.5;white-space:pre-wrap;word-break:break-word;min-height:48px;border:1px solid var(--g200);margin-bottom:8px}
+.send-tmpl-btn{padding:8px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.send-tmpl-btn:hover{background:var(--orange-d)}
+
 /* Other tabs */
 .tab-full{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px}
 .card{background:#fff;border-radius:12px;padding:22px;box-shadow:var(--sh)}
@@ -363,8 +397,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
       <button class="htab active" id="htabConv"      onclick="switchTab('conv')">Conversations</button>
       <button class="htab"        id="htabLeads"     onclick="switchTab('leads')">Leads</button>
       <button class="htab"        id="htabProducts"  onclick="switchTab('products')">Products</button>
-      <button class="htab hidden" id="htabAnalytics" onclick="switchTab('analytics')">Analytics</button>
-      <button class="htab hidden" id="htabTeam"      onclick="switchTab('team')">Team</button>
+      <button class="htab hidden" id="htabAnalytics"  onclick="switchTab('analytics')">Analytics</button>
+      <button class="htab hidden" id="htabTeam"       onclick="switchTab('team')">Team</button>
+      <button class="htab hidden" id="htabTemplates"  onclick="switchTab('templates')">Templates</button>
     </nav>
     <div class="header-user">
       <div class="notif-wrap">
@@ -433,6 +468,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
             <button class="detail-toggle" onclick="toggleDetailPanel()" id="detailToggleBtn">👤 Details</button>
           </div>
           <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()">👤 Take Over</button>
+          <button class="handoff-btn take-over" id="sendTmplBtn" onclick="openSendTemplateModal()" style="background:var(--g700);margin-left:6px">📨 Template</button>
         </div>
         <div class="messages" id="messages"></div>
         <div class="quick-actions" id="quickActions">
@@ -543,6 +579,41 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
     </div>
   </div>
 
+  <!-- Templates tab -->
+  <div id="templatesTab" class="tab-full hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin-bottom:4px">Message Templates</h3>
+          <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
+        </div>
+        <button class="btn-primary" id="createTmplBtn" onclick="document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
+      </div>
+
+      <!-- Auto re-engagement config -->
+      <div class="reeng-config-card" style="margin-bottom:20px">
+        <h4>Auto Re-engagement</h4>
+        <p style="font-size:12px;color:var(--g500);margin-bottom:12px">Bot automatically sends this template to drop-offs 24–72h after their last message. Only fires if the customer hasn't given their number yet.</p>
+        <div class="reeng-row">
+          <select id="reengTmplSelect" style="flex:1;min-width:160px">
+            <option value="">— disabled —</option>
+          </select>
+          <select id="reengLangSelect">
+            <option value="en">en</option>
+            <option value="en_US">en_US</option>
+          </select>
+          <button class="btn-primary" onclick="saveReengConfig()" style="white-space:nowrap">Save</button>
+          <span class="reeng-status inactive" id="reengStatus">Not configured</span>
+        </div>
+      </div>
+
+      <!-- Template list -->
+      <div id="tmplLoading" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading templates…</div>
+      <div class="tmpl-grid hidden" id="tmplGrid"></div>
+      <div id="tmplEmpty" class="hidden" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No templates yet. Create one above.</div>
+    </div>
+  </div>
+
   <!-- Team tab -->
   <div id="teamTab" class="tab-full hidden">
     <div class="card">
@@ -624,6 +695,68 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 
 </div><!-- /appScreen -->
 
+<!-- Create Template modal -->
+<div class="modal-overlay hidden" id="createTmplModal">
+  <div class="modal" style="max-width:520px">
+    <h3>Create Message Template</h3>
+    <div class="modal-field">
+      <label>Template Name *</label>
+      <input type="text" id="tmplName" placeholder="e.g. koolbuy_reengagement (lowercase, underscores)"/>
+    </div>
+    <div class="modal-field">
+      <label>Category *</label>
+      <select id="tmplCategory">
+        <option value="UTILITY">Utility — transactional, order updates, re-engagement</option>
+        <option value="MARKETING">Marketing — promotions, offers, announcements</option>
+        <option value="AUTHENTICATION">Authentication — OTPs (not needed here)</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Language</label>
+      <select id="tmplLang">
+        <option value="en">English</option>
+        <option value="en_US">English (US)</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Header (optional)</label>
+      <input type="text" id="tmplHeader" placeholder="Short bold heading (no variables allowed)"/>
+    </div>
+    <div class="modal-field">
+      <label>Body *</label>
+      <textarea id="tmplBody" style="min-height:100px" placeholder="Hi {{1}}, we noticed you were asking about our solar freezers. Just reply here and we&#39;ll help you out! 😊"></textarea>
+      <div class="var-hint">Use {{1}}, {{2}}, … for variable parts. {{1}} will be auto-filled with the customer's name.</div>
+    </div>
+    <div class="modal-field">
+      <label>Footer (optional)</label>
+      <input type="text" id="tmplFooter" placeholder="e.g. Reply STOP to opt out"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('createTmplModal').classList.add('hidden')">Cancel</button>
+      <button class="btn-primary" onclick="submitCreateTemplate()">Submit for Approval</button>
+    </div>
+  </div>
+</div>
+
+<!-- Send Template modal -->
+<div class="modal-overlay hidden" id="sendTmplModal">
+  <div class="modal" style="max-width:480px">
+    <h3>Send Template Message</h3>
+    <div class="modal-field">
+      <label>Select Template</label>
+      <select id="sendTmplSelect" onchange="onSendTmplSelect()"></select>
+    </div>
+    <div id="sendTmplPreviewWrap" class="hidden">
+      <div class="modal-field"><label>Preview</label><div class="send-tmpl-preview" id="sendTmplPreview"></div></div>
+      <div id="sendTmplVars"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('sendTmplModal').classList.add('hidden')">Cancel</button>
+      <button class="send-tmpl-btn" onclick="submitSendTemplate()">Send</button>
+    </div>
+  </div>
+</div>
+
 <!-- Product modal -->
 <div class="modal-overlay hidden" id="productModal">
   <div class="modal">
@@ -692,7 +825,7 @@ function showApp(){
   document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   if(agentRole==='super_admin'||agentRole==='admin'){
-    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
+    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
   }
   requestNotificationPermission();isFirstLoad=true;
   loadConversations();pollInterval=setInterval(loadConversations,2000);
@@ -707,13 +840,14 @@ function logout(){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',analytics:'analyticsTab',team:'teamTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',analytics:'htabAnalytics',team:'htabTeam'};
+const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates'};
 function switchTab(t){
   Object.keys(TABS).forEach(k=>{
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
     const ht=document.getElementById(HTABS[k]);if(ht)ht.classList.toggle('active',k===t);
   });
+  if(t==='templates')loadTemplates();
   if(t==='leads')loadLeads();
   if(t==='analytics')loadAnalytics();
   if(t==='team')loadAgentList();
@@ -1322,6 +1456,196 @@ function resetFileUpload(){
 // ── Notifications ──────────────────────────────────────────────────────
 function requestNotificationPermission(){if('Notification'in window&&Notification.permission==='default')Notification.requestPermission();}
 function fireNotification(title,body){if('Notification'in window&&Notification.permission==='granted')new Notification(title,{body});}
+
+// ── Templates ──────────────────────────────────────────────────────────
+let allTemplates=[];
+
+async function loadTemplates(){
+  document.getElementById('tmplLoading').classList.remove('hidden');
+  document.getElementById('tmplGrid').classList.add('hidden');
+  document.getElementById('tmplEmpty').classList.add('hidden');
+  try{
+    const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok){document.getElementById('tmplLoading').textContent='Failed to load templates.';return;}
+    const d=await r.json();
+    allTemplates=(d.data||[]).sort((a,b)=>a.name.localeCompare(b.name));
+    renderTemplates();
+    populateReengSelect();
+    await loadReengConfig();
+  }catch(e){document.getElementById('tmplLoading').textContent='Error: '+e.message;}
+}
+
+function renderTemplates(){
+  const grid=document.getElementById('tmplGrid');
+  document.getElementById('tmplLoading').classList.add('hidden');
+  if(!allTemplates.length){document.getElementById('tmplEmpty').classList.remove('hidden');grid.classList.add('hidden');return;}
+  grid.classList.remove('hidden');
+  const isAdmin=agentRole==='admin'||agentRole==='super_admin';
+  grid.innerHTML=allTemplates.map(t=>{
+    const body=t.components?.find(c=>c.type==='BODY')?.text||'';
+    const header=t.components?.find(c=>c.type==='HEADER')?.text||'';
+    const footer=t.components?.find(c=>c.type==='FOOTER')?.text||'';
+    const vars=(body.match(/\{\{\d+\}\}/g)||[]).length;
+    return`<div class="tmpl-card">
+      <div class="tmpl-card-top">
+        <div>
+          <div class="tmpl-name">${esc(t.name)}</div>
+          <div class="tmpl-badges">
+            <span class="tmpl-status ${t.status}">${t.status}</span>
+            <span class="tmpl-cat">${t.category}</span>
+            <span class="tmpl-lang">${t.language}</span>
+          </div>
+        </div>
+      </div>
+      ${header?`<div style="font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px">${esc(header)}</div>`:''}
+      <div class="tmpl-body">${esc(body)}</div>
+      ${footer?`<div style="font-size:11px;color:var(--g400);font-style:italic">${esc(footer)}</div>`:''}
+      <div class="tmpl-footer-row">
+        <span style="font-size:11px;color:var(--g400)">${vars} variable${vars===1?'':'s'}</span>
+        <div style="display:flex;gap:6px">
+          ${t.status==='APPROVED'?`<button class="btn-tmpl-send" onclick="openSendTemplateModalWith('${t.name}')">Send</button>`:''}
+          ${isAdmin?`<button class="btn-tmpl-del" onclick="deleteTemplate('${t.name}')">Delete</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function populateReengSelect(){
+  const sel=document.getElementById('reengTmplSelect');
+  const approved=allTemplates.filter(t=>t.status==='APPROVED');
+  sel.innerHTML='<option value="">— disabled —</option>'+approved.map(t=>`<option value="${t.name}">${t.name}</option>`).join('');
+}
+
+async function loadReengConfig(){
+  try{
+    const r=await fetch(`/admin/templates/reengagement-config?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    const cfg=await r.json();
+    document.getElementById('reengTmplSelect').value=cfg.name||'';
+    document.getElementById('reengLangSelect').value=cfg.lang||'en';
+    const status=document.getElementById('reengStatus');
+    if(cfg.name&&cfg.enabled){status.textContent='Active — '+cfg.name;status.className='reeng-status active';}
+    else{status.textContent='Not configured';status.className='reeng-status inactive';}
+  }catch(e){}
+}
+
+async function saveReengConfig(){
+  const name=document.getElementById('reengTmplSelect').value;
+  const lang=document.getElementById('reengLangSelect').value;
+  const r=await fetch(`/admin/templates/reengagement-config?key=${encodeURIComponent(adminKey)}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({template_name:name,language:lang,enabled:!!name})
+  });
+  if(r.ok){
+    const status=document.getElementById('reengStatus');
+    if(name){status.textContent='Active — '+name;status.className='reeng-status active';}
+    else{status.textContent='Not configured';status.className='reeng-status inactive';}
+    alert(name?`Auto re-engagement set to "${name}"`:'Auto re-engagement disabled.');
+  }
+}
+
+async function submitCreateTemplate(){
+  const name=document.getElementById('tmplName').value.trim().toLowerCase().replace(/\s+/g,'_');
+  const category=document.getElementById('tmplCategory').value;
+  const language=document.getElementById('tmplLang').value;
+  const header=document.getElementById('tmplHeader').value.trim();
+  const body=document.getElementById('tmplBody').value.trim();
+  const footer=document.getElementById('tmplFooter').value.trim();
+  if(!name||!body){alert('Name and body are required.');return;}
+  const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,category,language,body,header:header||null,footer:footer||null})
+  });
+  const d=await r.json();
+  if(r.ok){
+    document.getElementById('createTmplModal').classList.add('hidden');
+    ['tmplName','tmplHeader','tmplBody','tmplFooter'].forEach(id=>document.getElementById(id).value='');
+    alert('Template submitted! Meta usually approves within a few minutes to a few hours. Refresh the Templates tab to check status.');
+    loadTemplates();
+  }else{
+    alert('Error: '+(d.detail||JSON.stringify(d)));
+  }
+}
+
+async function deleteTemplate(name){
+  if(!confirm(`Delete template "${name}"? This cannot be undone.`))return;
+  const r=await fetch(`/admin/templates/${encodeURIComponent(name)}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+  if(r.ok)loadTemplates();
+  else alert('Delete failed.');
+}
+
+// Send Template modal
+function openSendTemplateModal(){
+  if(!selectedPhone){alert('Select a conversation first.');return;}
+  document.getElementById('sendTmplModal').classList.remove('hidden');
+  const approved=allTemplates.filter(t=>t.status==='APPROVED');
+  const sel=document.getElementById('sendTmplSelect');
+  sel.innerHTML=approved.length
+    ?'<option value="">— pick a template —</option>'+approved.map(t=>`<option value="${t.name}">${t.name}</option>`).join('')
+    :'<option value="">No approved templates yet</option>';
+  document.getElementById('sendTmplPreviewWrap').classList.add('hidden');
+  document.getElementById('sendTmplVars').innerHTML='';
+  // If no approved templates, load them first
+  if(!allTemplates.length)loadTemplates().then(()=>{
+    const a=allTemplates.filter(t=>t.status==='APPROVED');
+    sel.innerHTML=a.length?'<option value="">— pick a template —</option>'+a.map(t=>`<option value="${t.name}">${t.name}</option>`).join(''):'<option value="">No approved templates yet</option>';
+  });
+}
+
+function openSendTemplateModalWith(tmplName){
+  // Called from template card "Send" button — need a phone
+  if(!selectedPhone){
+    alert('Open a conversation first, then use the Send Template button in the chat.');return;
+  }
+  openSendTemplateModal();
+  document.getElementById('sendTmplSelect').value=tmplName;
+  onSendTmplSelect();
+}
+
+function onSendTmplSelect(){
+  const name=document.getElementById('sendTmplSelect').value;
+  const wrap=document.getElementById('sendTmplPreviewWrap');
+  const varsDiv=document.getElementById('sendTmplVars');
+  if(!name){wrap.classList.add('hidden');return;}
+  const t=allTemplates.find(x=>x.name===name);
+  if(!t){wrap.classList.add('hidden');return;}
+  const body=t.components?.find(c=>c.type==='BODY')?.text||'';
+  document.getElementById('sendTmplPreview').textContent=body;
+  wrap.classList.remove('hidden');
+  const vars=body.match(/\{\{(\d+)\}\}/g)||[];
+  const unique=[...new Set(vars)].sort();
+  varsDiv.innerHTML=unique.map((v,i)=>`
+    <div class="modal-field">
+      <label>Variable ${v} ${i===0?'(auto-filled with customer name — change if needed)':''}</label>
+      <input type="text" id="tmplVar_${v.replace(/[{}]/g,'')}" value="${i===0&&selectedPhone?esc(document.getElementById('chatName')?.textContent||''):''}"/>
+    </div>`).join('');
+}
+
+async function submitSendTemplate(){
+  const name=document.getElementById('sendTmplSelect').value;
+  if(!name){alert('Pick a template.');return;}
+  const t=allTemplates.find(x=>x.name===name);
+  const body=t?.components?.find(c=>c.type==='BODY')?.text||'';
+  const vars=body.match(/\{\{(\d+)\}\}/g)||[];
+  const unique=[...new Set(vars)].sort();
+  const variables=unique.map(v=>{
+    const el=document.getElementById('tmplVar_'+v.replace(/[{}]/g,''));
+    return el?el.value.trim():'';
+  });
+  const lang=t?.language||'en';
+  const r=await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/send-template?key=${encodeURIComponent(adminKey)}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({template_name:name,language:lang,variables})
+  });
+  if(r.ok){
+    document.getElementById('sendTmplModal').classList.add('hidden');
+    loadMessages(selectedPhone);
+  }else{
+    const d=await r.json().catch(()=>({}));
+    alert('Failed to send: '+(d.detail||JSON.stringify(d)));
+  }
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}

@@ -71,6 +71,10 @@ ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "KoolbotAdmin2026")
 BOT_RESPONSE_DELAY = int(os.environ.get("BOT_RESPONSE_DELAY_SECONDS", "10"))
 
+WABA_ID                    = os.environ.get("WABA_ID", "")
+REENGAGEMENT_TEMPLATE      = os.environ.get("REENGAGEMENT_TEMPLATE", "")
+REENGAGEMENT_TEMPLATE_LANG = os.environ.get("REENGAGEMENT_TEMPLATE_LANG", "en")
+
 FOLLOW_UP_ENABLED = os.environ.get("FOLLOW_UP_ENABLED", "true").lower() == "true"
 FOLLOW_UP_HOURS   = int(os.environ.get("FOLLOW_UP_HOURS", "24"))
 FOLLOW_UP_RECHECK_DAYS = int(os.environ.get("FOLLOW_UP_RECHECK_DAYS", "7"))
@@ -135,16 +139,18 @@ async def lifespan(app: FastAPI):
             f"Redis connection failed: {e}. Chat history will not be persisted.")
         redis_client = None
 
-    # Start follow-up background worker
+    # Start background workers
     fu_task = asyncio.create_task(follow_up_worker())
+    re_task = asyncio.create_task(reengagement_worker())
 
     yield
 
-    fu_task.cancel()
-    try:
-        await fu_task
-    except asyncio.CancelledError:
-        pass
+    for task in (fu_task, re_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     if redis_client:
         await redis_client.close()
@@ -234,6 +240,83 @@ async def run_follow_ups():
         log.error(f"Follow-up run error: {e}")
     finally:
         db.close()
+
+
+async def reengagement_worker():
+    """Hourly worker: sends a WhatsApp template to drop-offs whose 24h window has closed."""
+    log.info("Re-engagement worker started")
+    while True:
+        await asyncio.sleep(3600)
+        if not redis_client or not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+            continue
+        # Read config from Redis (set via dashboard) or fall back to env vars
+        cfg_raw = await redis_client.get("koolbuy:reengagement_config")
+        cfg = json.loads(cfg_raw) if cfg_raw else {}
+        tmpl_name = cfg.get("name") or REENGAGEMENT_TEMPLATE
+        tmpl_lang = cfg.get("lang") or REENGAGEMENT_TEMPLATE_LANG
+        enabled   = cfg.get("enabled", True) if cfg_raw else bool(REENGAGEMENT_TEMPLATE)
+        if not tmpl_name or not enabled:
+            continue
+        try:
+            cutoff_hi = datetime.utcnow() - timedelta(hours=24)
+            cutoff_lo = datetime.utcnow() - timedelta(hours=72)
+            db = get_db()
+            try:
+                rows = db.execute(
+                    select(Message.phone,
+                           func.max(Message.created_at).label("last_msg"),
+                           func.min(Message.name).label("cust_name"))
+                    .where(Message.direction == "inbound")
+                    .group_by(Message.phone)
+                    .having(and_(func.max(Message.created_at) <= cutoff_hi,
+                                 func.max(Message.created_at) >= cutoff_lo))
+                ).all()
+                lead_phones = {r.phone for r in db.query(Lead.phone).all()}
+            finally:
+                db.close()
+
+            sent = 0
+            for row in rows:
+                phone = row.phone
+                if phone in lead_phones:
+                    continue
+                if await redis_client.get(f"koolbuy:reengaged:{phone}"):
+                    continue
+                session_id = f"wa_{phone}"
+                if await redis_client.get(f"koolbuy:handoff:{session_id}"):
+                    continue
+                wa_to = phone.lstrip('+')
+                cust_name = row.cust_name or "there"
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": wa_to,
+                    "type": "template",
+                    "template": {
+                        "name": tmpl_name,
+                        "language": {"code": tmpl_lang},
+                        "components": [{"type": "body", "parameters": [{"type": "text", "text": cust_name}]}]
+                    }
+                }
+                try:
+                    async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+                        r = await client.post(
+                            f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages",
+                            json=payload,
+                            headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+                        )
+                    if r.is_success:
+                        await redis_client.set(f"koolbuy:reengaged:{phone}", "1", ex=7 * 86400)
+                        save_message_db(session_id, phone, "KoolBot", "outbound", f"[Auto re-engagement: {tmpl_name}]")
+                        sent += 1
+                        log.info(f"Re-engagement template sent to {phone}")
+                    else:
+                        log.warning(f"Re-engagement failed for {phone}: {r.text}")
+                except Exception as e:
+                    log.warning(f"Re-engagement send error for {phone}: {e}")
+            if sent:
+                log.info(f"Re-engagement worker: {sent} templates sent")
+        except Exception as e:
+            log.error(f"Re-engagement worker error: {e}")
 
 
 async def follow_up_worker():
@@ -1641,6 +1724,133 @@ async def bulk_upsert_products(body: ProductBulkIn, ctx: dict = Depends(require_
         return {"created": created, "updated": updated}
     finally:
         db.close()
+
+
+# ── WhatsApp Templates ────────────────────────────────────────────────────────
+
+class CreateTemplateRequest(BaseModel):
+    name: str
+    category: str = "UTILITY"
+    language: str = "en"
+    body: str
+    header: Optional[str] = None
+    footer: Optional[str] = None
+
+class SendTemplateRequest(BaseModel):
+    template_name: str
+    language: str = "en"
+    variables: List[str] = []
+
+
+@app.get("/admin/templates")
+async def list_templates(ctx: dict = Depends(get_admin_ctx)):
+    if not WABA_ID or not WHATSAPP_API_TOKEN:
+        raise HTTPException(status_code=400, detail="WABA_ID or API token not configured")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(
+            f"{WHATSAPP_API_URL}/{WABA_ID}/message_templates",
+            params={"access_token": WHATSAPP_API_TOKEN, "limit": 100,
+                    "fields": "id,name,status,category,language,components"}
+        )
+    if not r.is_success:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+    return r.json()
+
+
+@app.post("/admin/templates")
+async def create_template(body: CreateTemplateRequest, ctx: dict = Depends(require_admin)):
+    if not WABA_ID or not WHATSAPP_API_TOKEN:
+        raise HTTPException(status_code=400, detail="WABA_ID or API token not configured")
+    components = []
+    if body.header:
+        components.append({"type": "HEADER", "format": "TEXT", "text": body.header})
+    components.append({"type": "BODY", "text": body.body})
+    if body.footer:
+        components.append({"type": "FOOTER", "text": body.footer})
+    payload = {
+        "name": body.name.lower().replace(" ", "_"),
+        "category": body.category.upper(),
+        "language": body.language,
+        "components": components,
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.post(
+            f"{WHATSAPP_API_URL}/{WABA_ID}/message_templates",
+            json=payload,
+            headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+        )
+    if not r.is_success:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+    return r.json()
+
+
+@app.delete("/admin/templates/{template_name}")
+async def delete_template(template_name: str, ctx: dict = Depends(require_admin)):
+    if not WABA_ID or not WHATSAPP_API_TOKEN:
+        raise HTTPException(status_code=400, detail="WABA_ID or API token not configured")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.delete(
+            f"{WHATSAPP_API_URL}/{WABA_ID}/message_templates",
+            params={"name": template_name, "access_token": WHATSAPP_API_TOKEN}
+        )
+    return {"success": r.is_success}
+
+
+@app.post("/admin/conversations/{phone}/send-template")
+async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dict = Depends(get_admin_ctx)):
+    norm = normalize_phone(phone)
+    wa_to = norm.lstrip('+')
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": wa_to,
+        "type": "template",
+        "template": {
+            "name": body.template_name,
+            "language": {"code": body.language},
+        }
+    }
+    if body.variables:
+        payload["template"]["components"] = [{
+            "type": "body",
+            "parameters": [{"type": "text", "text": v} for v in body.variables]
+        }]
+    async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+        r = await client.post(
+            f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages",
+            json=payload,
+            headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+        )
+    if r.is_success:
+        session_id = f"wa_{norm}"
+        agent_name = ctx.get("name", "Agent")
+        save_message_db(session_id, norm, agent_name, "outbound",
+                        f"[Template: {body.template_name}]" + (f" — {', '.join(body.variables)}" if body.variables else ""))
+    data = r.json()
+    if not r.is_success:
+        raise HTTPException(status_code=r.status_code, detail=data)
+    return data
+
+
+@app.post("/admin/templates/reengagement-config")
+async def set_reengagement_template(body: dict, ctx: dict = Depends(require_admin)):
+    """Store the chosen re-engagement template name in Redis so the worker picks it up."""
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+    name = body.get("template_name", "")
+    lang = body.get("language", "en")
+    enabled = body.get("enabled", True)
+    await redis_client.set("koolbuy:reengagement_config", json.dumps({"name": name, "lang": lang, "enabled": enabled}))
+    return {"ok": True}
+
+
+@app.get("/admin/templates/reengagement-config")
+async def get_reengagement_config(ctx: dict = Depends(get_admin_ctx)):
+    if not redis_client:
+        return {"name": REENGAGEMENT_TEMPLATE, "lang": REENGAGEMENT_TEMPLATE_LANG, "enabled": bool(REENGAGEMENT_TEMPLATE)}
+    raw = await redis_client.get("koolbuy:reengagement_config")
+    if raw:
+        return json.loads(raw)
+    return {"name": REENGAGEMENT_TEMPLATE, "lang": REENGAGEMENT_TEMPLATE_LANG, "enabled": bool(REENGAGEMENT_TEMPLATE)}
 
 
 # ── WhatsApp Webhook ──────────────────────────────────────────────────────────
