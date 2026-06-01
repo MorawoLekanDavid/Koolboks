@@ -752,7 +752,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="document.getElementById('sendTmplModal').classList.add('hidden')">Cancel</button>
-      <button class="send-tmpl-btn" onclick="submitSendTemplate()">Send</button>
+      <button class="send-tmpl-btn" id="sendTmplSubmitBtn" onclick="submitSendTemplate()">Send</button>
     </div>
   </div>
 </div>
@@ -1630,6 +1630,8 @@ function onSendTmplSelect(){
 async function submitSendTemplate(){
   const name=document.getElementById('sendTmplSelect').value;
   if(!name){alert('Pick a template.');return;}
+  const btn=document.getElementById('sendTmplSubmitBtn');
+  btn.disabled=true;btn.textContent='Sending…';
   const t=allTemplates.find(x=>x.name===name);
   const body=t?.components?.find(c=>c.type==='BODY')?.text||'';
   const vars=body.match(/\{\{(\d+)\}\}/g)||[];
@@ -1639,16 +1641,20 @@ async function submitSendTemplate(){
     return el?el.value.trim():'';
   });
   const lang=t?.language||'en';
-  const r=await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/send-template?key=${encodeURIComponent(adminKey)}`,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({template_name:name,language:lang,variables})
-  });
-  if(r.ok){
-    document.getElementById('sendTmplModal').classList.add('hidden');
-    loadMessages();
-  }else{
-    const d=await r.json().catch(()=>({}));
-    alert('Failed to send: '+(d.detail||JSON.stringify(d)));
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/send-template?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({template_name:name,language:lang,variables})
+    });
+    if(r.ok){
+      document.getElementById('sendTmplModal').classList.add('hidden');
+      loadMessages();
+    }else{
+      const d=await r.json().catch(()=>({}));
+      alert('Failed to send: '+(d.detail||JSON.stringify(d)));
+    }
+  }finally{
+    btn.disabled=false;btn.textContent='Send';
   }
 }
 
