@@ -587,7 +587,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
           <h3 style="margin-bottom:4px">Message Templates</h3>
           <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
         </div>
-        <button class="btn-primary" id="createTmplBtn" onclick="document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
+        <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
       </div>
 
       <!-- Auto re-engagement config -->
@@ -731,9 +731,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
       <label>Footer (optional)</label>
       <input type="text" id="tmplFooter" placeholder="e.g. Reply STOP to opt out"/>
     </div>
+    <div id="createTmplError" style="display:none;color:#dc2626;font-size:12px;background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:8px"></div>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="document.getElementById('createTmplModal').classList.add('hidden')">Cancel</button>
-      <button class="btn-primary" onclick="submitCreateTemplate()">Submit for Approval</button>
+      <button class="btn-cancel" onclick="closeCreateTmplModal()">Cancel</button>
+      <button class="btn-primary" id="createTmplBtn2" onclick="submitCreateTemplate()">Submit for Approval</button>
     </div>
   </div>
 </div>
@@ -1550,6 +1551,11 @@ async function saveReengConfig(){
   }
 }
 
+function closeCreateTmplModal(){
+  document.getElementById('createTmplModal').classList.add('hidden');
+  document.getElementById('createTmplError').style.display='none';
+  ['tmplName','tmplHeader','tmplBody','tmplFooter'].forEach(id=>document.getElementById(id).value='');
+}
 async function submitCreateTemplate(){
   const name=document.getElementById('tmplName').value.trim().toLowerCase().replace(/\s+/g,'_');
   const category=document.getElementById('tmplCategory').value;
@@ -1557,19 +1563,34 @@ async function submitCreateTemplate(){
   const header=document.getElementById('tmplHeader').value.trim();
   const body=document.getElementById('tmplBody').value.trim();
   const footer=document.getElementById('tmplFooter').value.trim();
-  if(!name||!body){alert('Name and body are required.');return;}
-  const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name,category,language,body,header:header||null,footer:footer||null})
-  });
-  const d=await r.json();
-  if(r.ok){
-    document.getElementById('createTmplModal').classList.add('hidden');
-    ['tmplName','tmplHeader','tmplBody','tmplFooter'].forEach(id=>document.getElementById(id).value='');
-    alert('Template submitted! Meta usually approves within a few minutes to a few hours. Refresh the Templates tab to check status.');
-    loadTemplates();
-  }else{
-    alert('Error: '+(d.detail||JSON.stringify(d)));
+  const errEl=document.getElementById('createTmplError');
+  errEl.style.display='none';
+  if(!name||!body){errEl.textContent='Name and body are required.';errEl.style.display='block';return;}
+  const btn=document.getElementById('createTmplBtn2');
+  btn.disabled=true;btn.textContent='Submitting…';
+  try{
+    const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,category,language,body,header:header||null,footer:footer||null})
+    });
+    const d=await r.json();
+    if(r.ok){
+      closeCreateTmplModal();
+      loadTemplates();
+      // Show a brief success note in the templates tab instead of alert
+      document.getElementById('tmplLoading').textContent='✅ Template submitted! Meta usually approves within a few minutes to a few hours.';
+      document.getElementById('tmplLoading').classList.remove('hidden');
+      setTimeout(()=>loadTemplates(),3000);
+    }else{
+      // Parse the Meta error message if possible
+      let msg=d.detail||JSON.stringify(d);
+      try{const m=JSON.parse(msg);msg=m?.error?.error_user_msg||m?.error?.message||msg;}catch{}
+      errEl.textContent='Error: '+msg;errEl.style.display='block';
+    }
+  }catch(e){
+    errEl.textContent='Network error: '+e.message;errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='Submit for Approval';
   }
 }
 
