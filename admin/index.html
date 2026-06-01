@@ -913,27 +913,32 @@ function renderConversations(){
   }).join('');
 }
 async function selectConv(phone,name,mode,agent){
+  // Stop any previous poll immediately — must happen before the await
+  if(msgPollInterval){clearInterval(msgPollInterval);msgPollInterval=null;}
   selectedPhone=phone;selectedMode=mode;
   document.getElementById('emptyState').classList.add('hidden');
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
   document.getElementById('chatName').textContent=name;
   updateChatUI(mode,agent);
-  // Mobile: show chat panel
   document.getElementById('chatPanel').classList.add('mobile-open');
+  // Clear messages immediately so stale content never shows
+  document.getElementById('messages').innerHTML='<div style="padding:40px;text-align:center;color:var(--g400);font-size:13px">Loading…</div>';
   renderConversations();
-  await loadMessages();
+  loadMessages(); // fire without await — guard inside handles race
   loadLeadDetails(phone);
   fetch(`/admin/conversations/${phone}/mark-read?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>{});
   const conv=allConversations.find(c=>c.phone===phone);if(conv){conv.unread=0;renderConversations();}
-  if(msgPollInterval)clearInterval(msgPollInterval);
   msgPollInterval=setInterval(loadMessages,4000);
   loadConversations();
 }
 async function loadMessages(){
   if(!selectedPhone)return;
+  const phone=selectedPhone; // capture now — selectedPhone may change while awaiting
   try{
-    const r=await fetch(`/admin/conversations/${selectedPhone}?key=${encodeURIComponent(adminKey)}`);
+    const r=await fetch(`/admin/conversations/${phone}?key=${encodeURIComponent(adminKey)}`);
+    if(selectedPhone!==phone)return; // conversation switched while fetching — discard
     const msgs=await r.json();
+    if(selectedPhone!==phone)return; // switched again during JSON parse — discard
     const box=document.getElementById('messages');
     const atBottom=box.scrollHeight-box.scrollTop<=box.clientHeight+60;
     box.innerHTML=msgs.map(m=>{
@@ -1640,7 +1645,7 @@ async function submitSendTemplate(){
   });
   if(r.ok){
     document.getElementById('sendTmplModal').classList.add('hidden');
-    loadMessages(selectedPhone);
+    loadMessages();
   }else{
     const d=await r.json().catch(()=>({}));
     alert('Failed to send: '+(d.detail||JSON.stringify(d)));

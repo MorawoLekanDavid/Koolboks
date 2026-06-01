@@ -716,7 +716,7 @@ async def update_lead_address(phone: str, address: str):
 
 # ── Phone validation ───────────────────────────────────────────────────────────
 PHONE_RE = re.compile(r'(?<!\d)(0[789]\d{9}|[789]\d{9}|\+234[789]\d{9})(?!\d)')
-SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]{8,120}$')
+SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_\-\+]{8,120}$')
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT_MESSAGES", "50"))
 
 
@@ -1989,16 +1989,34 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     handoff_key = f"koolbuy:handoff:{session_id}"
                     in_handoff = await redis_client.get(handoff_key) if redis_client else None
                     if in_handoff:
-                        log.info(f"Session {session_id} is in handoff mode — bot silent")
-                        # Still update Redis history so bot has context when it resumes
-                        history = await get_history(session_id)
-                        history.append({
-                            "role": "user",
-                            "content": text,
-                            "ts": datetime.now().isoformat(),
-                        })
-                        await save_history(session_id, history)
-                        continue
+                        # Auto-reset stale handoffs — if no agent has replied in 8+ hours,
+                        # the conversation was abandoned. Let the bot resume.
+                        auto_reset_h = int(os.environ.get("HANDOFF_AUTO_RESET_HOURS", "8"))
+                        stale = False
+                        try:
+                            _db = get_db()
+                            last_out = _db.execute(
+                                select(func.max(Message.created_at))
+                                .where(and_(Message.phone == wa_from,
+                                            Message.direction == "outbound"))
+                            ).scalar()
+                            _db.close()
+                            if last_out is None or \
+                               (datetime.utcnow() - last_out).total_seconds() > auto_reset_h * 3600:
+                                stale = True
+                        except Exception as _e:
+                            log.warning(f"Handoff stale-check failed: {_e}")
+                        if stale:
+                            await redis_client.delete(handoff_key)
+                            in_handoff = None
+                            log.info(f"Auto-reset stale handoff for {session_id} (no agent reply in {auto_reset_h}h)")
+                        else:
+                            log.info(f"Session {session_id} is in handoff mode — bot silent")
+                            history = await get_history(session_id)
+                            history.append({"role": "user", "content": text,
+                                            "ts": datetime.now().isoformat()})
+                            await save_history(session_id, history)
+                            continue
 
                     # Check session state and reset completed sessions
                     if redis_client:
