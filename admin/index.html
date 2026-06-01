@@ -724,8 +724,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
     </div>
     <div class="modal-field">
       <label>Body *</label>
-      <textarea id="tmplBody" style="min-height:100px" placeholder="Hi {{1}}, we noticed you were asking about our solar freezers. Just reply here and we&#39;ll help you out! 😊"></textarea>
+      <textarea id="tmplBody" style="min-height:100px" placeholder="Hi {{1}}, we noticed you were asking about our solar freezers. Just reply here and we&#39;ll help you out! 😊" oninput="updateBodySamples()"></textarea>
       <div class="var-hint">Use {{1}}, {{2}}, … for variable parts. {{1}} will be auto-filled with the customer's name.</div>
+    </div>
+    <div id="bodySamplesWrap" class="hidden">
+      <div class="var-hint" style="margin-bottom:6px;font-weight:700;color:var(--g700)">Sample values (required by Meta to review the template)</div>
+      <div id="bodySamplesFields"></div>
     </div>
     <div class="modal-field">
       <label>Footer (optional)</label>
@@ -1555,6 +1559,23 @@ function closeCreateTmplModal(){
   document.getElementById('createTmplModal').classList.add('hidden');
   document.getElementById('createTmplError').style.display='none';
   ['tmplName','tmplHeader','tmplBody','tmplFooter'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('bodySamplesWrap').classList.add('hidden');
+  document.getElementById('bodySamplesFields').innerHTML='';
+}
+function updateBodySamples(){
+  const body=document.getElementById('tmplBody').value;
+  const vars=[...new Set(body.match(/\{\{\d+\}\}/g)||[])].sort();
+  const wrap=document.getElementById('bodySamplesWrap');
+  const fields=document.getElementById('bodySamplesFields');
+  if(!vars.length){wrap.classList.add('hidden');fields.innerHTML='';return;}
+  wrap.classList.remove('hidden');
+  // Keep existing values if re-rendering
+  const existing={};fields.querySelectorAll('input').forEach(i=>existing[i.dataset.var]=i.value);
+  fields.innerHTML=vars.map(v=>`
+    <div class="modal-field" style="margin-bottom:8px">
+      <label>Sample for ${v}</label>
+      <input type="text" data-var="${v}" id="sample_${v.replace(/[{}]/g,'')}" value="${existing[v]||''}" placeholder="${v==='{{1}}'?'e.g. John Doe':'e.g. sample text'}"/>
+    </div>`).join('');
 }
 async function submitCreateTemplate(){
   const name=document.getElementById('tmplName').value.trim().toLowerCase().replace(/\s+/g,'_');
@@ -1566,12 +1587,18 @@ async function submitCreateTemplate(){
   const errEl=document.getElementById('createTmplError');
   errEl.style.display='none';
   if(!name||!body){errEl.textContent='Name and body are required.';errEl.style.display='block';return;}
+  // Collect sample values for variables
+  const vars=[...new Set(body.match(/\{\{\d+\}\}/g)||[])].sort();
+  const body_samples=vars.map(v=>{
+    const el=document.getElementById('sample_'+v.replace(/[{}]/g,''));
+    return el?el.value.trim():'Sample text';
+  });
   const btn=document.getElementById('createTmplBtn2');
   btn.disabled=true;btn.textContent='Submitting…';
   try{
     const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,category,language,body,header:header||null,footer:footer||null})
+      body:JSON.stringify({name,category,language,body,header:header||null,footer:footer||null,body_samples})
     });
     const d=await r.json();
     if(r.ok){

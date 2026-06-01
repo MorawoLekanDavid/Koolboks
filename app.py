@@ -1735,6 +1735,7 @@ class CreateTemplateRequest(BaseModel):
     body: str
     header: Optional[str] = None
     footer: Optional[str] = None
+    body_samples: List[str] = []  # example values for {{1}}, {{2}}, … in body
 
 class SendTemplateRequest(BaseModel):
     template_name: str
@@ -1761,10 +1762,20 @@ async def list_templates(ctx: dict = Depends(get_admin_ctx)):
 async def create_template(body: CreateTemplateRequest, ctx: dict = Depends(require_admin)):
     if not WABA_ID or not WHATSAPP_API_TOKEN:
         raise HTTPException(status_code=400, detail="WABA_ID or API token not configured")
+    import re as _re
     components = []
     if body.header:
         components.append({"type": "HEADER", "format": "TEXT", "text": body.header})
-    components.append({"type": "BODY", "text": body.body})
+    body_comp: dict = {"type": "BODY", "text": body.body}
+    # Meta requires sample values for every {{n}} variable
+    var_count = len(set(_re.findall(r'\{\{\d+\}\}', body.body)))
+    if var_count:
+        samples = body.body_samples or []
+        # Pad with "Sample text" if fewer samples than variables
+        while len(samples) < var_count:
+            samples.append("Sample text")
+        body_comp["example"] = {"body_text": [samples[:var_count]]}
+    components.append(body_comp)
     if body.footer:
         components.append({"type": "FOOTER", "text": body.footer})
     payload = {
