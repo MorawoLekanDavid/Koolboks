@@ -1367,16 +1367,18 @@ async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_ad
         db.commit()
     finally:
         db.close()
-    if wamid and WHATSAPP_API_TOKEN:
+    if wamid and WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 r = await client.delete(
-                    f"{WHATSAPP_API_URL}/{wamid}",
+                    f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages/{wamid}",
                     json={"messaging_product": "whatsapp"},
                     headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
                 )
                 if not r.is_success:
                     log.warning(f"WhatsApp unsend failed: {r.status_code} {r.text}")
+                else:
+                    log.info(f"WhatsApp unsend success for {wamid}")
         except Exception as e:
             log.warning(f"WhatsApp unsend error: {e}")
     return {"status": "ok"}

@@ -137,6 +137,17 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .canned-item:hover{background:var(--orange-s)}
 .canned-item-title{font-size:13px;font-weight:600;color:var(--g800)}
 .canned-item-preview{font-size:12px;color:var(--g500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-picker{background:#fff;border-top:2px solid var(--orange);border-bottom:1px solid var(--g200);max-height:280px;overflow-y:auto;display:none}
+.prod-picker-hdr{padding:7px 14px;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--g100);background:var(--g50)}
+.prod-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--g100)}
+.prod-item:last-child{border-bottom:none}
+.prod-item:hover{background:var(--orange-s)}
+.prod-item-img{width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--g100)}
+.prod-item-img-ph{width:40px;height:40px;background:var(--g100);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.prod-item-info{flex:1;min-width:0}
+.prod-item-name{font-size:13px;font-weight:600;color:var(--g800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-item-price{font-size:12px;color:var(--orange);font-weight:600;margin-top:2px}
+.prod-item-desc{font-size:11px;color:var(--g500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .canned-row{display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--g100)}
 .canned-row:last-child{border-bottom:none}
 .canned-row-body{flex:1;min-width:0}
@@ -506,8 +517,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
             <div class="canned-picker-hdr">Quick Replies</div>
             <div id="cannedPickerList"></div>
           </div>
+          <div id="prodPicker" class="prod-picker">
+            <div class="prod-picker-hdr">Send a Product</div>
+            <div id="prodPickerList"></div>
+          </div>
           <div class="reply-box">
             <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies">📋</button>
+            <button class="reply-icon-btn" id="prodPickerBtn" onclick="toggleProdPicker()" title="Send Product">🛍️</button>
             <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
             <button class="send-btn" onclick="sendReply()">➤</button>
           </div>
@@ -1149,11 +1165,52 @@ function pickCanned(id){
 
 document.addEventListener('click',function(e){
   const picker=document.getElementById('cannedPicker');
-  if(!picker||picker.style.display!=='block')return;
-  if(!e.target.closest('#cannedPicker')&&e.target.id!=='cannedPickerBtn'){
+  if(picker&&picker.style.display==='block'&&!e.target.closest('#cannedPicker')&&e.target.id!=='cannedPickerBtn'){
     picker.style.display='none';
   }
+  const ppicker=document.getElementById('prodPicker');
+  if(ppicker&&ppicker.style.display==='block'&&!e.target.closest('#prodPicker')&&e.target.id!=='prodPickerBtn'){
+    ppicker.style.display='none';
+  }
 });
+
+let prodData=[];
+async function toggleProdPicker(){
+  const picker=document.getElementById('prodPicker');
+  if(picker.style.display==='block'){picker.style.display='none';return;}
+  document.getElementById('cannedPicker').style.display='none';
+  if(!prodData.length){
+    const r=await fetch(`/admin/products?key=${encodeURIComponent(adminKey)}`).catch(()=>null);
+    if(r&&r.ok)prodData=await r.json();
+  }
+  const listEl=document.getElementById('prodPickerList');
+  if(!prodData.length){
+    listEl.innerHTML='<div style="padding:14px;font-size:13px;color:var(--g400)">No products found. Add products in the Products tab.</div>';
+  }else{
+    listEl.innerHTML=prodData.map(p=>{
+      const img=p.image_url?`<img class="prod-item-img" src="${esc(p.image_url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:'';
+      const ph=`<div class="prod-item-img-ph" style="display:${p.image_url?'none':'flex'}">📦</div>`;
+      const price=p.price?`₦${Number(p.price).toLocaleString('en-NG')}`:'';
+      const desc=p.description?p.description.substring(0,60)+(p.description.length>60?'…':''):'';
+      return `<div class="prod-item" onclick="pickProduct(${p.id})">${img}${ph}<div class="prod-item-info"><div class="prod-item-name">${esc(p.name)}</div>${price?`<div class="prod-item-price">${price}</div>`:''}${desc?`<div class="prod-item-desc">${esc(desc)}</div>`:''}</div></div>`;
+    }).join('');
+  }
+  picker.style.display='block';
+}
+
+function pickProduct(id){
+  const p=prodData.find(x=>x.id===id);
+  if(!p)return;
+  const price=p.price?`₦${Number(p.price).toLocaleString('en-NG')}`:'';
+  let msg=`*${p.name}*`;
+  if(price)msg+=`\n💰 Price: ${price}`;
+  if(p.description)msg+=`\n\n${p.description}`;
+  if(p.product_url)msg+=`\n\n🔗 ${p.product_url}`;
+  document.getElementById('replyText').value=msg;
+  document.getElementById('replyText').focus();
+  document.getElementById('prodPicker').style.display='none';
+}
+
 async function toggleHandoff(){
   if(!selectedPhone)return;
   const r=await fetch(`/admin/handoff/${selectedPhone}?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_name:agentName})}).catch(()=>null);
