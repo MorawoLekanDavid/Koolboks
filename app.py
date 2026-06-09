@@ -1357,8 +1357,9 @@ async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_ad
     db = get_db()
     wamid = None
     try:
+        norm = normalize_phone(phone)
         msg = db.execute(
-            select(Message).where(and_(Message.id == message_id, Message.phone == phone))
+            select(Message).where(and_(Message.id == message_id, Message.phone == norm))
         ).scalar_one_or_none()
         if not msg:
             raise HTTPException(404, "Message not found")
@@ -1371,7 +1372,8 @@ async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_ad
     if wamid and WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.delete(
+                r = await client.request(
+                    "DELETE",
                     f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages/{wamid}",
                     json={"messaging_product": "whatsapp"},
                     headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
@@ -1457,7 +1459,27 @@ class AgentReply(BaseModel):
 async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(get_admin_ctx)):
     session_id = f"wa_{phone}"
     display_name = ctx.get("name") or body.agent_name or "Agent"
-    wamid = await send_whatsapp_message(phone, body.message, image_url=body.image_url)
+
+    # Send product image as its own WhatsApp message, saved separately so dashboard shows it
+    if body.image_url:
+        try:
+            img_payload = {
+                "messaging_product": "whatsapp", "to": normalize_phone(phone).lstrip('+'),
+                "type": "image", "image": {"link": body.image_url}
+            }
+            async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as _c:
+                ir = await _c.post(
+                    f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages",
+                    json=img_payload,
+                    headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+                )
+            img_wamid = ir.json()["messages"][0]["id"] if ir.is_success else None
+            save_message_db(session_id, phone, display_name, "outbound",
+                            f"[image]{body.image_url}[/image]", wamid=img_wamid)
+        except Exception as e:
+            log.warning(f"Agent image send error: {e}")
+
+    wamid = await send_whatsapp_message(phone, body.message)
     save_message_db(session_id, phone, display_name, "outbound", body.message, wamid=wamid)
 
     # Keep Redis history in sync so the bot has full context when it resumes

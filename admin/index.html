@@ -943,7 +943,7 @@ function showApp(){
     ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
   }
   requestNotificationPermission();isFirstLoad=true;
-  loadConversations();pollInterval=setInterval(loadConversations,2000);
+  loadConversations();pollInterval=setInterval(loadConversations,5000);
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);
@@ -1043,7 +1043,7 @@ async function selectConv(phone,name,mode,agent){
   loadLeadDetails(phone);
   fetch(`/admin/conversations/${phone}/mark-read?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>{});
   const conv=allConversations.find(c=>c.phone===phone);if(conv){conv.unread=0;renderConversations();}
-  msgPollInterval=setInterval(loadMessages,4000);
+  msgPollInterval=setInterval(loadMessages,7000);
   loadConversations();
 }
 async function loadMessages(){
@@ -1061,7 +1061,11 @@ async function loadMessages(){
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 KoolBot');
       const acts=m.direction==='outbound'?`<div class="msg-actions"><button onclick="delMsg(${m.id})" title="Delete">🗑️</button></div>`:'';
-      return `<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${esc(m.content)}</div><div class="msg-footer"><span class="msg-time">${formatTime(m.timestamp)}</span>${acts}</div></div>`;
+      const imgMatch=m.content.match(/^\[image\](.*)\[\/image\]$/);
+      const bodyHtml=imgMatch
+        ?`<img src="${esc(imgMatch[1])}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
+        :esc(m.content);
+      return `<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${formatTime(m.timestamp)}</span>${acts}</div></div>`;
     }).join('');
     if(atBottom)box.scrollTop=box.scrollHeight;
   }catch(e){console.error(e);}
