@@ -52,6 +52,7 @@ class Message(Base):
     name = Column(String(255), nullable=True)
     direction = Column(String(10))  # inbound / outbound
     content = Column(String(4000))
+    wamid = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
@@ -64,6 +65,17 @@ class Agent(Base):
     email = Column(String(255), unique=True, index=True)
     password_hash = Column(String(255), nullable=True)
     role = Column(String(20), default="agent")  # "agent" | "super_admin"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CannedResponse(Base):
+    """Pre-written messages agents can send with one click"""
+    __tablename__ = "canned_responses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(100))
+    content = Column(String(2000))
+    created_by = Column(String(255))
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

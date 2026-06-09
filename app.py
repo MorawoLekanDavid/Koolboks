@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request, Dep
 from fastapi.responses import FileResponse, Response
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, select, func, and_, case
+from sqlalchemy import create_engine, select, func, and_, case, text as sa_text
 from sqlalchemy.orm import sessionmaker, Session
 import re
 import asyncio
@@ -20,7 +20,7 @@ import json
 import logging
 import httpx
 
-from models import Product, Lead, Message, Agent, LeadNote, init_db
+from models import Product, Lead, Message, Agent, LeadNote, CannedResponse, init_db
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
@@ -119,6 +119,26 @@ def init_database():
     global db_engine, SessionLocal
     db_engine = init_db(DATABASE_URL)
     SessionLocal = sessionmaker(bind=db_engine)
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS wamid VARCHAR(100)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"wamid migration: {_e}")
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS canned_responses (
+                    id SERIAL PRIMARY KEY,
+                    title VARCHAR(100),
+                    content VARCHAR(2000),
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"canned_responses migration: {_e}")
     log.info("Database initialized successfully")
 
 
@@ -1320,7 +1340,7 @@ async def get_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
             select(Message).where(Message.phone == phone)
             .order_by(Message.created_at.asc())
         ).scalars().all()
-        return [{"direction": m.direction, "content": m.content, "timestamp": m.created_at.isoformat(), "name": m.name} for m in rows]
+        return [{"id": m.id, "direction": m.direction, "content": m.content, "timestamp": m.created_at.isoformat(), "name": m.name} for m in rows]
     finally:
         db.close()
 
@@ -1332,6 +1352,97 @@ async def mark_conversation_read(phone: str, ctx: dict = Depends(get_admin_ctx))
     return {"status": "ok"}
 
 
+@app.delete("/admin/conversations/{phone}/messages/{message_id}")
+async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_admin_ctx)):
+    db = get_db()
+    wamid = None
+    try:
+        msg = db.execute(
+            select(Message).where(and_(Message.id == message_id, Message.phone == phone))
+        ).scalar_one_or_none()
+        if not msg:
+            raise HTTPException(404, "Message not found")
+        wamid = msg.wamid
+        db.delete(msg)
+        db.commit()
+    finally:
+        db.close()
+    if wamid and WHATSAPP_API_TOKEN:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.delete(
+                    f"{WHATSAPP_API_URL}/{wamid}",
+                    json={"messaging_product": "whatsapp"},
+                    headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+                )
+                if not r.is_success:
+                    log.warning(f"WhatsApp unsend failed: {r.status_code} {r.text}")
+        except Exception as e:
+            log.warning(f"WhatsApp unsend error: {e}")
+    return {"status": "ok"}
+
+
+class CannedRequest(BaseModel):
+    title: str
+    content: str
+
+
+@app.get("/admin/canned-responses")
+async def list_canned(ctx: dict = Depends(get_admin_ctx)):
+    db = get_db()
+    try:
+        rows = db.query(CannedResponse).order_by(CannedResponse.created_at.asc()).all()
+        return [{"id": r.id, "title": r.title, "content": r.content, "created_by": r.created_by} for r in rows]
+    finally:
+        db.close()
+
+
+@app.post("/admin/canned-responses")
+async def create_canned(body: CannedRequest, ctx: dict = Depends(get_admin_ctx)):
+    if not body.title.strip() or not body.content.strip():
+        raise HTTPException(400, "Title and content required")
+    db = get_db()
+    try:
+        row = CannedResponse(title=body.title.strip(), content=body.content.strip(), created_by=ctx.get("name", "Agent"))
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return {"id": row.id, "title": row.title, "content": row.content, "created_by": row.created_by}
+    finally:
+        db.close()
+
+
+@app.patch("/admin/canned-responses/{canned_id}")
+async def update_canned(canned_id: int, body: CannedRequest, ctx: dict = Depends(get_admin_ctx)):
+    if not body.title.strip() or not body.content.strip():
+        raise HTTPException(400, "Title and content required")
+    db = get_db()
+    try:
+        row = db.query(CannedResponse).filter(CannedResponse.id == canned_id).first()
+        if not row:
+            raise HTTPException(404, "Not found")
+        row.title = body.title.strip()
+        row.content = body.content.strip()
+        db.commit()
+        return {"id": row.id, "title": row.title, "content": row.content, "created_by": row.created_by}
+    finally:
+        db.close()
+
+
+@app.delete("/admin/canned-responses/{canned_id}")
+async def delete_canned(canned_id: int, ctx: dict = Depends(get_admin_ctx)):
+    db = get_db()
+    try:
+        row = db.query(CannedResponse).filter(CannedResponse.id == canned_id).first()
+        if not row:
+            raise HTTPException(404, "Not found")
+        db.delete(row)
+        db.commit()
+        return {"status": "ok"}
+    finally:
+        db.close()
+
+
 class AgentReply(BaseModel):
     message: str
     agent_name: str = "Agent"
@@ -1341,8 +1452,8 @@ class AgentReply(BaseModel):
 async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(get_admin_ctx)):
     session_id = f"wa_{phone}"
     display_name = ctx.get("name") or body.agent_name or "Agent"
-    await send_whatsapp_message(phone, body.message)
-    save_message_db(session_id, phone, display_name, "outbound", body.message)
+    wamid = await send_whatsapp_message(phone, body.message)
+    save_message_db(session_id, phone, display_name, "outbound", body.message, wamid=wamid)
 
     # Keep Redis history in sync so the bot has full context when it resumes
     if redis_client:
@@ -1884,28 +1995,34 @@ async def mark_whatsapp_read(message_id: str):
         log.warning(f"Failed to mark message as read: {e}")
 
 
-async def send_whatsapp_message(to: str, text: str, image_url: str = None):
+async def send_whatsapp_message(to: str, body: str, image_url: str = None) -> Optional[str]:
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         log.warning("WhatsApp credentials not configured")
-        return
+        return None
     url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+    wamid = None
     try:
         async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
             if image_url:
                 img_payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": {"link": image_url}}
                 await client.post(url, json=img_payload, headers=headers)
-            text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+            text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}}
             resp = await client.post(url, json=text_payload, headers=headers)
         log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
+        try:
+            wamid = resp.json()["messages"][0]["id"]
+        except Exception:
+            pass
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
+    return wamid
 
 
-def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str):
+def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None):
     try:
         db = get_db()
-        db.add(Message(session_id=session_id, phone=normalize_phone(phone), name=name, direction=direction, content=content))
+        db.add(Message(session_id=session_id, phone=normalize_phone(phone), name=name, direction=direction, content=content, wamid=wamid))
         db.commit()
         db.close()
     except Exception as e:

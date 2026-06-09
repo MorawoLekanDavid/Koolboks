@@ -123,7 +123,32 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .msg-sender.bot{color:var(--orange)}
 .msg-sender.agent-s{color:var(--g700)}
 .msg-sender.customer{color:var(--g500)}
-.msg-time{font-size:10px;color:var(--g400);margin-top:4px;text-align:right}
+.msg{position:relative}
+.msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
+.msg-time{font-size:10px;color:var(--g400)}
+.msg-actions{display:none;gap:3px}
+.msg.outbound:hover .msg-actions{display:flex}
+.msg-actions button{background:none;border:none;cursor:pointer;font-size:11px;padding:1px 4px;opacity:.5;border-radius:3px;line-height:1.4}
+.msg-actions button:hover{opacity:1;background:rgba(0,0,0,.1)}
+.canned-picker{background:#fff;border-top:2px solid var(--orange);border-bottom:1px solid var(--g200);max-height:240px;overflow-y:auto;display:none}
+.canned-picker-hdr{padding:7px 14px;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--g100);background:var(--g50)}
+.canned-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--g100)}
+.canned-item:last-child{border-bottom:none}
+.canned-item:hover{background:var(--orange-s)}
+.canned-item-title{font-size:13px;font-weight:600;color:var(--g800)}
+.canned-item-preview{font-size:12px;color:var(--g500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.canned-row{display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--g100)}
+.canned-row:last-child{border-bottom:none}
+.canned-row-body{flex:1;min-width:0}
+.canned-row-title{font-size:13px;font-weight:700;color:var(--g800);margin-bottom:4px}
+.canned-row-content{font-size:13px;color:var(--g500);white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.canned-row-edit{background:none;border:1px solid var(--g200);border-radius:6px;color:var(--g600);cursor:pointer;padding:4px 10px;font-size:12px}
+.canned-row-edit:hover{background:var(--g50);border-color:var(--g400)}
+.canned-row-del{background:none;border:1px solid var(--g200);border-radius:6px;color:var(--g500);cursor:pointer;padding:4px 10px;font-size:12px}
+.canned-row-del:hover{background:#fee2e2;border-color:#fca5a5;color:#dc2626}
+.tmpl-subtabs{display:flex;border-bottom:1px solid var(--g200);margin:-24px -24px 24px}
+.tmpl-stab{padding:13px 20px;border:none;background:none;font-size:13px;font-weight:600;color:var(--g400);cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tmpl-stab.active{color:var(--orange);border-bottom-color:var(--orange)}
 .quick-actions{display:flex;gap:8px;padding:8px 12px;background:#fff;border-top:1px solid var(--g200);flex-shrink:0;flex-wrap:wrap}
 .qa-btn{padding:6px 12px;background:var(--g50);border:1px solid var(--g200);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--g700);transition:all .15s}
 .qa-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
@@ -477,10 +502,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
           <button class="qa-btn" onclick="quickReply('Our agent will call you shortly to confirm your order.')">🛒 Confirm order</button>
         </div>
         <div id="replyArea">
+          <div id="cannedPicker" class="canned-picker">
+            <div class="canned-picker-hdr">Quick Replies</div>
+            <div id="cannedPickerList"></div>
+          </div>
           <div class="reply-box">
-            <button class="reply-icon-btn">📎</button>
+            <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies">📋</button>
             <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
-            <button class="reply-icon-btn">😊</button>
             <button class="send-btn" onclick="sendReply()">➤</button>
           </div>
         </div>
@@ -582,35 +610,52 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   <!-- Templates tab -->
   <div id="templatesTab" class="tab-full hidden">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-        <div>
-          <h3 style="margin-bottom:4px">Message Templates</h3>
-          <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
-        </div>
-        <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
+      <!-- Sub-tab switcher -->
+      <div class="tmpl-subtabs">
+        <button class="tmpl-stab active" id="tmplSubWA"     onclick="switchTmplSub('wa')">WhatsApp Templates</button>
+        <button class="tmpl-stab"        id="tmplSubCanned" onclick="switchTmplSub('canned')">Canned Responses</button>
       </div>
 
-      <!-- Auto re-engagement config -->
-      <div class="reeng-config-card" style="margin-bottom:20px">
-        <h4>Auto Re-engagement</h4>
-        <p style="font-size:12px;color:var(--g500);margin-bottom:12px">Bot automatically sends this template to drop-offs 24–72h after their last message. Only fires if the customer hasn't given their number yet.</p>
-        <div class="reeng-row">
-          <select id="reengTmplSelect" style="flex:1;min-width:160px">
-            <option value="">— disabled —</option>
-          </select>
-          <select id="reengLangSelect">
-            <option value="en">en</option>
-            <option value="en_US">en_US</option>
-          </select>
-          <button class="btn-primary" onclick="saveReengConfig()" style="white-space:nowrap">Save</button>
-          <span class="reeng-status inactive" id="reengStatus">Not configured</span>
+      <!-- WhatsApp Templates panel -->
+      <div id="tmplPanelWA">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin-bottom:4px">WhatsApp Templates</h3>
+            <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
+          </div>
+          <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
         </div>
+        <!-- Auto re-engagement config -->
+        <div class="reeng-config-card" style="margin-bottom:20px">
+          <h4>Auto Re-engagement</h4>
+          <p style="font-size:12px;color:var(--g500);margin-bottom:12px">Bot automatically sends this template to drop-offs 24–72h after their last message. Only fires if the customer hasn't given their number yet.</p>
+          <div class="reeng-row">
+            <select id="reengTmplSelect" style="flex:1;min-width:160px"><option value="">— disabled —</option></select>
+            <select id="reengLangSelect">
+              <option value="en">en</option>
+              <option value="en_US">en_US</option>
+            </select>
+            <button class="btn-primary" onclick="saveReengConfig()" style="white-space:nowrap">Save</button>
+            <span class="reeng-status inactive" id="reengStatus">Not configured</span>
+          </div>
+        </div>
+        <!-- Template list -->
+        <div id="tmplLoading" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading templates…</div>
+        <div class="tmpl-grid hidden" id="tmplGrid"></div>
+        <div id="tmplEmpty" class="hidden" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No templates yet. Create one above.</div>
       </div>
 
-      <!-- Template list -->
-      <div id="tmplLoading" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading templates…</div>
-      <div class="tmpl-grid hidden" id="tmplGrid"></div>
-      <div id="tmplEmpty" class="hidden" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No templates yet. Create one above.</div>
+      <!-- Canned Responses panel -->
+      <div id="tmplPanelCanned" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin-bottom:4px">Canned Responses</h3>
+            <p style="font-size:12px;color:var(--g400)">Pre-written messages agents can send with one click during active conversations. No WhatsApp approval needed.</p>
+          </div>
+          <button class="btn-primary" onclick="openCannedModal()">+ New Response</button>
+        </div>
+        <div id="cannedList"><div style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading…</div></div>
+      </div>
     </div>
   </div>
 
@@ -763,6 +808,25 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 </div>
 
 <!-- Product modal -->
+<div class="modal-overlay hidden" id="cannedModal">
+  <div class="modal">
+    <h3>New Canned Response</h3>
+    <div class="modal-field">
+      <label>Title <span style="font-size:10px;color:var(--g400);text-transform:none;font-weight:400">(shown in picker)</span></label>
+      <input type="text" id="cannedTitle" placeholder="e.g. Payment plan info" maxlength="80"/>
+    </div>
+    <div class="modal-field">
+      <label>Message</label>
+      <textarea id="cannedContent" rows="5" placeholder="Type the full message text…" style="min-height:100px"></textarea>
+    </div>
+    <div id="cannedErr" style="color:#dc2626;font-size:12px;margin-bottom:8px;display:none"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCannedModal()">Cancel</button>
+      <button class="btn-primary" id="cannedSaveBtn" onclick="submitCanned()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="productModal">
   <div class="modal">
     <h3 id="modalTitle">Add Product</h3>
@@ -852,7 +916,7 @@ function switchTab(t){
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
     const ht=document.getElementById(HTABS[k]);if(ht)ht.classList.toggle('active',k===t);
   });
-  if(t==='templates')loadTemplates();
+  if(t==='templates'){loadTemplates();loadCanned();}
   if(t==='leads')loadLeads();
   if(t==='analytics')loadAnalytics();
   if(t==='team')loadAgentList();
@@ -950,7 +1014,8 @@ async function loadMessages(){
       const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 KoolBot');
-      return `<div class="msg ${m.direction}"><div class="msg-sender ${sc}">${sl}</div>${esc(m.content)}<div class="msg-time">${formatTime(m.timestamp)}</div></div>`;
+      const acts=m.direction==='outbound'?`<div class="msg-actions"><button onclick="delMsg(${m.id})" title="Delete">🗑️</button></div>`:'';
+      return `<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${esc(m.content)}</div><div class="msg-footer"><span class="msg-time">${formatTime(m.timestamp)}</span>${acts}</div></div>`;
     }).join('');
     if(atBottom)box.scrollTop=box.scrollHeight;
   }catch(e){console.error(e);}
@@ -962,6 +1027,133 @@ async function sendReply(){
   await fetch(`/admin/conversations/${selectedPhone}/reply?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,agent_name:agentName})}).catch(e=>console.error(e));
   await loadMessages();
 }
+async function delMsg(id){
+  if(!confirm('Delete this message? It will also be unsent from WhatsApp if possible.'))return;
+  const r=await fetch(`/admin/conversations/${selectedPhone}/messages/${id}?key=${encodeURIComponent(adminKey)}`,{
+    method:'DELETE'
+  }).catch(()=>null);
+  if(r&&r.ok)loadMessages();
+}
+
+// ── Canned Responses ───────────────────────────────────────────────────
+let cannedData=[];
+
+function switchTmplSub(tab){
+  document.getElementById('tmplPanelWA').classList.toggle('hidden',tab!=='wa');
+  document.getElementById('tmplPanelCanned').classList.toggle('hidden',tab!=='canned');
+  document.getElementById('tmplSubWA').classList.toggle('active',tab==='wa');
+  document.getElementById('tmplSubCanned').classList.toggle('active',tab==='canned');
+}
+
+async function loadCanned(){
+  const r=await fetch(`/admin/canned-responses?key=${encodeURIComponent(adminKey)}`).catch(()=>null);
+  if(!r||!r.ok)return;
+  cannedData=await r.json();
+  renderCannedList();
+}
+
+function renderCannedList(){
+  const el=document.getElementById('cannedList');
+  if(!el)return;
+  if(!cannedData.length){
+    el.innerHTML='<div style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No canned responses yet. Create one above.</div>';
+    return;
+  }
+  el.innerHTML=cannedData.map(c=>`<div class="canned-row"><div class="canned-row-body"><div class="canned-row-title">${esc(c.title)}</div><div class="canned-row-content">${esc(c.content)}</div></div><div style="display:flex;gap:6px;flex-shrink:0;margin-top:2px"><button class="canned-row-edit" onclick="openCannedModal(${c.id})">Edit</button><button class="canned-row-del" onclick="deleteCanned(${c.id})">Delete</button></div></div>`).join('');
+}
+
+async function deleteCanned(id){
+  if(!confirm('Delete this canned response?'))return;
+  const r=await fetch(`/admin/canned-responses/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'}).catch(()=>null);
+  if(r&&r.ok){cannedData=cannedData.filter(c=>c.id!==id);renderCannedList();}
+}
+
+let editingCannedId=null;
+
+function openCannedModal(id=null){
+  editingCannedId=id;
+  const existing=id?cannedData.find(c=>c.id===id):null;
+  document.querySelector('#cannedModal h3').textContent=id?'Edit Canned Response':'New Canned Response';
+  document.getElementById('cannedTitle').value=existing?existing.title:'';
+  document.getElementById('cannedContent').value=existing?existing.content:'';
+  document.getElementById('cannedErr').style.display='none';
+  const btn=document.getElementById('cannedSaveBtn');
+  btn.disabled=false;btn.textContent='Save';
+  document.getElementById('cannedModal').classList.remove('hidden');
+  document.getElementById('cannedTitle').focus();
+}
+
+function closeCannedModal(){
+  document.getElementById('cannedModal').classList.add('hidden');
+  document.getElementById('cannedTitle').value='';
+  document.getElementById('cannedContent').value='';
+  document.getElementById('cannedErr').style.display='none';
+  const btn=document.getElementById('cannedSaveBtn');
+  btn.disabled=false;btn.textContent='Save';
+  editingCannedId=null;
+}
+
+async function submitCanned(){
+  const title=document.getElementById('cannedTitle').value.trim();
+  const content=document.getElementById('cannedContent').value.trim();
+  const errEl=document.getElementById('cannedErr');
+  if(!title||!content){errEl.textContent='Title and message are both required.';errEl.style.display='block';return;}
+  const btn=document.getElementById('cannedSaveBtn');
+  btn.disabled=true;btn.textContent='Saving…';
+  const url=editingCannedId
+    ?`/admin/canned-responses/${editingCannedId}?key=${encodeURIComponent(adminKey)}`
+    :`/admin/canned-responses?key=${encodeURIComponent(adminKey)}`;
+  const method=editingCannedId?'PATCH':'POST';
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({title,content})}).catch(()=>null);
+  if(r&&r.ok){
+    const item=await r.json();
+    if(editingCannedId){
+      const idx=cannedData.findIndex(c=>c.id===editingCannedId);
+      if(idx!==-1)cannedData[idx]=item;
+    }else{
+      cannedData.push(item);
+    }
+    renderCannedList();
+    closeCannedModal();
+  }else{
+    errEl.textContent='Failed to save. Try again.';
+    errEl.style.display='block';
+    btn.disabled=false;btn.textContent='Save';
+  }
+}
+
+async function toggleCannedPicker(){
+  const picker=document.getElementById('cannedPicker');
+  const showing=picker.style.display==='block';
+  if(showing){picker.style.display='none';return;}
+  if(!cannedData.length){
+    const r=await fetch(`/admin/canned-responses?key=${encodeURIComponent(adminKey)}`).catch(()=>null);
+    if(r&&r.ok)cannedData=await r.json();
+  }
+  const listEl=document.getElementById('cannedPickerList');
+  if(!cannedData.length){
+    listEl.innerHTML='<div style="padding:14px;font-size:13px;color:var(--g400)">No canned responses yet. Add them in Templates → Canned Responses.</div>';
+  }else{
+    listEl.innerHTML=cannedData.map(c=>`<div class="canned-item" onclick="pickCanned(${c.id})"><div class="canned-item-title">${esc(c.title)}</div><div class="canned-item-preview">${esc(c.content)}</div></div>`).join('');
+  }
+  picker.style.display='block';
+}
+
+function pickCanned(id){
+  const item=cannedData.find(c=>c.id===id);
+  if(!item)return;
+  document.getElementById('replyText').value=item.content;
+  document.getElementById('replyText').focus();
+  document.getElementById('cannedPicker').style.display='none';
+}
+
+document.addEventListener('click',function(e){
+  const picker=document.getElementById('cannedPicker');
+  if(!picker||picker.style.display!=='block')return;
+  if(!e.target.closest('#cannedPicker')&&e.target.id!=='cannedPickerBtn'){
+    picker.style.display='none';
+  }
+});
 async function toggleHandoff(){
   if(!selectedPhone)return;
   const r=await fetch(`/admin/handoff/${selectedPhone}?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_name:agentName})}).catch(()=>null);
