@@ -171,6 +171,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .send-btn{width:40px;height:40px;background:var(--orange);color:#fff;border:none;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .send-btn:hover{background:var(--orange-d)}
 .reply-disabled{padding:12px;background:var(--g50);border-top:1px solid var(--g200);text-align:center;font-size:13px;color:var(--g400);flex-shrink:0}
+.img-attach-badge{display:none;align-items:center;gap:6px;padding:5px 14px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px;color:#92400e;font-weight:600}
+.img-attach-badge button{background:none;border:none;cursor:pointer;font-size:13px;color:#92400e;padding:0 2px;line-height:1}
 
 /* Detail panel */
 .detail-panel{width:300px;background:#fff;border-left:1px solid var(--g200);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
@@ -528,6 +530,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
           <div id="prodPicker" class="prod-picker">
             <div class="prod-picker-hdr">Send a Product</div>
             <div id="prodPickerList"></div>
+          </div>
+          <div class="img-attach-badge" id="imgAttachBadge">
+            🖼️ Product image will be sent
+            <button onclick="clearProductImage()" title="Remove image">✕</button>
           </div>
           <div class="reply-box">
             <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies">📋</button>
@@ -1060,11 +1066,19 @@ async function loadMessages(){
     if(atBottom)box.scrollTop=box.scrollHeight;
   }catch(e){console.error(e);}
 }
+let pendingProductImageUrl=null;
+function clearProductImage(){
+  pendingProductImageUrl=null;
+  document.getElementById('imgAttachBadge').style.display='none';
+}
 async function sendReply(){
   const text=document.getElementById('replyText').value.trim();
   if(!text||!selectedPhone)return;
   document.getElementById('replyText').value='';
-  await fetch(`/admin/conversations/${selectedPhone}/reply?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,agent_name:agentName})}).catch(e=>console.error(e));
+  const payload={message:text,agent_name:agentName};
+  if(pendingProductImageUrl)payload.image_url=pendingProductImageUrl;
+  clearProductImage();
+  await fetch(`/admin/conversations/${selectedPhone}/reply?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(e=>console.error(e));
   await loadMessages();
 }
 let pendingDeleteId=null;
@@ -1085,8 +1099,17 @@ async function confirmDelete(){
   }).catch(()=>null);
   btn.disabled=false;btn.textContent='Delete';
   closeDeleteConfirm();
-  if(r&&r.ok){showToast('Message deleted','success');loadMessages();}
-  else showToast('Failed to delete message','error');
+  if(r&&r.ok){
+    const d=await r.json().catch(()=>({}));
+    if(d.whatsapp_unsent){
+      showToast('Message deleted and removed from WhatsApp','success');
+    }else{
+      showToast('Deleted from dashboard (WhatsApp message stays — only new messages can be unsent)','success');
+    }
+    loadMessages();
+  }else{
+    showToast('Failed to delete message','error');
+  }
 }
 
 let toastTimer=null;
@@ -1257,6 +1280,12 @@ function pickProduct(id){
   document.getElementById('replyText').value=msg;
   document.getElementById('replyText').focus();
   document.getElementById('prodPicker').style.display='none';
+  if(p.image_url){
+    pendingProductImageUrl=p.image_url;
+    document.getElementById('imgAttachBadge').style.display='flex';
+  }else{
+    clearProductImage();
+  }
 }
 
 async function toggleHandoff(){

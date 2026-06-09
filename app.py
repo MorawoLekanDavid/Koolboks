@@ -1367,6 +1367,7 @@ async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_ad
         db.commit()
     finally:
         db.close()
+    whatsapp_unsent = False
     if wamid and WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1375,13 +1376,14 @@ async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_ad
                     json={"messaging_product": "whatsapp"},
                     headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
                 )
-                if not r.is_success:
-                    log.warning(f"WhatsApp unsend failed: {r.status_code} {r.text}")
-                else:
+                if r.is_success:
+                    whatsapp_unsent = True
                     log.info(f"WhatsApp unsend success for {wamid}")
+                else:
+                    log.warning(f"WhatsApp unsend failed: {r.status_code} {r.text}")
         except Exception as e:
             log.warning(f"WhatsApp unsend error: {e}")
-    return {"status": "ok"}
+    return {"status": "ok", "whatsapp_unsent": whatsapp_unsent}
 
 
 class CannedRequest(BaseModel):
@@ -1448,13 +1450,14 @@ async def delete_canned(canned_id: int, ctx: dict = Depends(get_admin_ctx)):
 class AgentReply(BaseModel):
     message: str
     agent_name: str = "Agent"
+    image_url: Optional[str] = None
 
 
 @app.post("/admin/conversations/{phone}/reply")
 async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(get_admin_ctx)):
     session_id = f"wa_{phone}"
     display_name = ctx.get("name") or body.agent_name or "Agent"
-    wamid = await send_whatsapp_message(phone, body.message)
+    wamid = await send_whatsapp_message(phone, body.message, image_url=body.image_url)
     save_message_db(session_id, phone, display_name, "outbound", body.message, wamid=wamid)
 
     # Keep Redis history in sync so the bot has full context when it resumes
