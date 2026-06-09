@@ -278,6 +278,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .modal h3{font-size:16px;font-weight:700;color:var(--g900);margin-bottom:18px}
+.btn-delete{flex:1;padding:9px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-delete:hover{background:#b91c1c}
+.btn-delete:disabled{opacity:.6;cursor:not-allowed}
+/* Toast */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:100px;font-size:13px;font-weight:600;z-index:200;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.success{background:#16a34a}
+.toast.error{background:#dc2626}
 .modal-field{margin-bottom:12px}
 .modal-field label{display:block;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;margin-bottom:4px}
 .modal-field input,.modal-field textarea{width:100%;border:1px solid var(--g200);border-radius:8px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;color:var(--g800)}
@@ -859,6 +867,22 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   </div>
 </div>
 
+<!-- Delete confirm modal -->
+<div class="modal-overlay hidden" id="deleteConfirmModal">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="font-size:36px;margin-bottom:12px">🗑️</div>
+    <h3 style="margin-bottom:8px">Delete Message?</h3>
+    <p style="font-size:13px;color:var(--g500);margin-bottom:20px;line-height:1.5">This will remove the message from the dashboard and attempt to unsend it on WhatsApp.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeDeleteConfirm()">Cancel</button>
+      <button class="btn-delete" id="deleteConfirmBtn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toastEl"></div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────
 let adminKey='', agentName='', agentRole='agent';
@@ -1043,12 +1067,35 @@ async function sendReply(){
   await fetch(`/admin/conversations/${selectedPhone}/reply?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,agent_name:agentName})}).catch(e=>console.error(e));
   await loadMessages();
 }
-async function delMsg(id){
-  if(!confirm('Delete this message? It will also be unsent from WhatsApp if possible.'))return;
-  const r=await fetch(`/admin/conversations/${selectedPhone}/messages/${id}?key=${encodeURIComponent(adminKey)}`,{
+let pendingDeleteId=null;
+function delMsg(id){
+  pendingDeleteId=id;
+  document.getElementById('deleteConfirmModal').classList.remove('hidden');
+}
+function closeDeleteConfirm(){
+  pendingDeleteId=null;
+  document.getElementById('deleteConfirmModal').classList.add('hidden');
+}
+async function confirmDelete(){
+  if(!pendingDeleteId)return;
+  const btn=document.getElementById('deleteConfirmBtn');
+  btn.disabled=true;btn.textContent='Deleting…';
+  const r=await fetch(`/admin/conversations/${selectedPhone}/messages/${pendingDeleteId}?key=${encodeURIComponent(adminKey)}`,{
     method:'DELETE'
   }).catch(()=>null);
-  if(r&&r.ok)loadMessages();
+  btn.disabled=false;btn.textContent='Delete';
+  closeDeleteConfirm();
+  if(r&&r.ok){showToast('Message deleted','success');loadMessages();}
+  else showToast('Failed to delete message','error');
+}
+
+let toastTimer=null;
+function showToast(msg,type='success'){
+  const el=document.getElementById('toastEl');
+  el.textContent=msg;
+  el.className=`toast ${type} show`;
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{el.classList.remove('show');},2800);
 }
 
 // ── Canned Responses ───────────────────────────────────────────────────
@@ -1172,6 +1219,7 @@ document.addEventListener('click',function(e){
   if(ppicker&&ppicker.style.display==='block'&&!e.target.closest('#prodPicker')&&e.target.id!=='prodPickerBtn'){
     ppicker.style.display='none';
   }
+  if(e.target.id==='deleteConfirmModal')closeDeleteConfirm();
 });
 
 let prodData=[];
