@@ -1352,26 +1352,6 @@ async def mark_conversation_read(phone: str, ctx: dict = Depends(get_admin_ctx))
     return {"status": "ok"}
 
 
-@app.delete("/admin/conversations/{phone}/messages/{message_id}")
-async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_admin_ctx)):
-    """Removes a message from our dashboard records only. The WhatsApp Cloud API
-    has no "delete for everyone" capability for messages sent by a business —
-    that feature is exclusive to the consumer app's client protocol."""
-    db = get_db()
-    try:
-        norm = normalize_phone(phone)
-        msg = db.execute(
-            select(Message).where(and_(Message.id == message_id, Message.phone == norm))
-        ).scalar_one_or_none()
-        if not msg:
-            raise HTTPException(404, "Message not found")
-        db.delete(msg)
-        db.commit()
-    finally:
-        db.close()
-    return {"status": "ok"}
-
-
 class CannedRequest(BaseModel):
     title: str
     content: str

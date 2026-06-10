@@ -126,10 +126,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .msg{position:relative}
 .msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
 .msg-time{font-size:10px;color:var(--g400)}
-.msg-actions{display:none;gap:3px}
-.msg.outbound:hover .msg-actions{display:flex}
-.msg-actions button{background:none;border:none;cursor:pointer;font-size:11px;padding:1px 4px;opacity:.5;border-radius:3px;line-height:1.4}
-.msg-actions button:hover{opacity:1;background:rgba(0,0,0,.1)}
 .canned-picker{background:#fff;border-top:2px solid var(--orange);border-bottom:1px solid var(--g200);max-height:240px;overflow-y:auto;display:none}
 .canned-picker-hdr{padding:7px 14px;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--g100);background:var(--g50)}
 .canned-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--g100)}
@@ -280,14 +276,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .modal h3{font-size:16px;font-weight:700;color:var(--g900);margin-bottom:18px}
-.btn-delete{flex:1;padding:9px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
-.btn-delete:hover{background:#b91c1c}
-.btn-delete:disabled{opacity:.6;cursor:not-allowed}
-/* Toast */
-.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:100px;font-size:13px;font-weight:600;z-index:200;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;white-space:nowrap}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.success{background:#16a34a}
-.toast.error{background:#dc2626}
 .modal-field{margin-bottom:12px}
 .modal-field label{display:block;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;margin-bottom:4px}
 .modal-field input,.modal-field textarea{width:100%;border:1px solid var(--g200);border-radius:8px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;color:var(--g800)}
@@ -873,22 +861,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   </div>
 </div>
 
-<!-- Delete confirm modal -->
-<div class="modal-overlay hidden" id="deleteConfirmModal">
-  <div class="modal" style="max-width:360px;text-align:center">
-    <div style="font-size:36px;margin-bottom:12px">🗑️</div>
-    <h3 style="margin-bottom:8px">Delete Message?</h3>
-    <p style="font-size:13px;color:var(--g500);margin-bottom:20px;line-height:1.5">This removes the message from your dashboard records only. WhatsApp does not allow businesses to delete messages from a customer's phone.</p>
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeDeleteConfirm()">Cancel</button>
-      <button class="btn-delete" id="deleteConfirmBtn" onclick="confirmDelete()">Delete</button>
-    </div>
-  </div>
-</div>
-
-<!-- Toast -->
-<div class="toast" id="toastEl"></div>
-
 <script>
 // ── State ──────────────────────────────────────────────────────────────
 let adminKey='', agentName='', agentRole='agent';
@@ -1060,12 +1032,11 @@ async function loadMessages(){
       const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 KoolBot');
-      const acts=m.direction==='outbound'?`<div class="msg-actions"><button onclick="delMsg(${m.id})" title="Delete">🗑️</button></div>`:'';
       const imgMatch=m.content.match(/^\[image\](.*)\[\/image\]$/);
       const bodyHtml=imgMatch
         ?`<img src="${esc(imgMatch[1])}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
         :esc(m.content);
-      return `<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${formatTime(m.timestamp)}</span>${acts}</div></div>`;
+      return `<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${formatTime(m.timestamp)}</span></div></div>`;
     }).join('');
     if(atBottom)box.scrollTop=box.scrollHeight;
   }catch(e){console.error(e);}
@@ -1085,41 +1056,6 @@ async function sendReply(){
   await fetch(`/admin/conversations/${selectedPhone}/reply?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(e=>console.error(e));
   await loadMessages();
 }
-let pendingDeleteId=null;
-function delMsg(id){
-  pendingDeleteId=id;
-  document.getElementById('deleteConfirmModal').classList.remove('hidden');
-}
-function closeDeleteConfirm(){
-  pendingDeleteId=null;
-  document.getElementById('deleteConfirmModal').classList.add('hidden');
-}
-async function confirmDelete(){
-  if(!pendingDeleteId)return;
-  const btn=document.getElementById('deleteConfirmBtn');
-  btn.disabled=true;btn.textContent='Deleting…';
-  const r=await fetch(`/admin/conversations/${selectedPhone}/messages/${pendingDeleteId}?key=${encodeURIComponent(adminKey)}`,{
-    method:'DELETE'
-  }).catch(()=>null);
-  btn.disabled=false;btn.textContent='Delete';
-  closeDeleteConfirm();
-  if(r&&r.ok){
-    showToast('Removed from dashboard','success');
-    loadMessages();
-  }else{
-    showToast('Failed to delete message','error');
-  }
-}
-
-let toastTimer=null;
-function showToast(msg,type='success'){
-  const el=document.getElementById('toastEl');
-  el.textContent=msg;
-  el.className=`toast ${type} show`;
-  if(toastTimer)clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{el.classList.remove('show');},2800);
-}
-
 // ── Canned Responses ───────────────────────────────────────────────────
 let cannedData=[];
 
@@ -1241,7 +1177,6 @@ document.addEventListener('click',function(e){
   if(ppicker&&ppicker.style.display==='block'&&!e.target.closest('#prodPicker')&&e.target.id!=='prodPickerBtn'){
     ppicker.style.display='none';
   }
-  if(e.target.id==='deleteConfirmModal')closeDeleteConfirm();
 });
 
 let prodData=[];
