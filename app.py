@@ -1099,7 +1099,10 @@ async def get_me(ctx: dict = Depends(get_admin_ctx)):
 
 @app.get("/admin")
 async def admin_dashboard():
-    return FileResponse(os.path.join(BASE_DIR, "admin", "index.html"))
+    return FileResponse(
+        os.path.join(BASE_DIR, "admin", "index.html"),
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 # ── Agent Auth ────────────────────────────────────────────────────────────────
