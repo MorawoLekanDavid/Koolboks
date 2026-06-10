@@ -153,9 +153,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .canned-row-edit:hover{background:var(--g50);border-color:var(--g400)}
 .canned-row-del{background:none;border:1px solid var(--g200);border-radius:6px;color:var(--g500);cursor:pointer;padding:4px 10px;font-size:12px}
 .canned-row-del:hover{background:#fee2e2;border-color:#fca5a5;color:#dc2626}
-.tmpl-subtabs{display:flex;border-bottom:1px solid var(--g200);margin:-24px -24px 24px}
-.tmpl-stab{padding:13px 20px;border:none;background:none;font-size:13px;font-weight:600;color:var(--g400);cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
-.tmpl-stab.active{color:var(--orange);border-bottom-color:var(--orange)}
 .quick-actions{display:flex;gap:8px;padding:8px 12px;background:#fff;border-top:1px solid var(--g200);flex-shrink:0;flex-wrap:wrap}
 .qa-btn{padding:6px 12px;background:var(--g50);border:1px solid var(--g200);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--g700);transition:all .15s}
 .qa-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
@@ -445,6 +442,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
       <button class="htab active" id="htabConv"      onclick="switchTab('conv')">Conversations</button>
       <button class="htab"        id="htabLeads"     onclick="switchTab('leads')">Leads</button>
       <button class="htab"        id="htabProducts"  onclick="switchTab('products')">Products</button>
+      <button class="htab"        id="htabCanned"    onclick="switchTab('canned')">Canned Responses</button>
       <button class="htab hidden" id="htabAnalytics"  onclick="switchTab('analytics')">Analytics</button>
       <button class="htab hidden" id="htabTeam"       onclick="switchTab('team')">Team</button>
       <button class="htab hidden" id="htabTemplates"  onclick="switchTab('templates')">Templates</button>
@@ -646,52 +644,45 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   <!-- Templates tab -->
   <div id="templatesTab" class="tab-full hidden">
     <div class="card">
-      <!-- Sub-tab switcher -->
-      <div class="tmpl-subtabs">
-        <button class="tmpl-stab active" id="tmplSubWA"     onclick="switchTmplSub('wa')">WhatsApp Templates</button>
-        <button class="tmpl-stab"        id="tmplSubCanned" onclick="switchTmplSub('canned')">Canned Responses</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin-bottom:4px">WhatsApp Templates</h3>
+          <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
+        </div>
+        <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
       </div>
+      <!-- Auto re-engagement config -->
+      <div class="reeng-config-card" style="margin-bottom:20px">
+        <h4>Auto Re-engagement</h4>
+        <p style="font-size:12px;color:var(--g500);margin-bottom:12px">Bot automatically sends this template to drop-offs 24–72h after their last message. Only fires if the customer hasn't given their number yet.</p>
+        <div class="reeng-row">
+          <select id="reengTmplSelect" style="flex:1;min-width:160px"><option value="">— disabled —</option></select>
+          <select id="reengLangSelect">
+            <option value="en">en</option>
+            <option value="en_US">en_US</option>
+          </select>
+          <button class="btn-primary" onclick="saveReengConfig()" style="white-space:nowrap">Save</button>
+          <span class="reeng-status inactive" id="reengStatus">Not configured</span>
+        </div>
+      </div>
+      <!-- Template list -->
+      <div id="tmplLoading" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading templates…</div>
+      <div class="tmpl-grid hidden" id="tmplGrid"></div>
+      <div id="tmplEmpty" class="hidden" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No templates yet. Create one above.</div>
+    </div>
+  </div>
 
-      <!-- WhatsApp Templates panel -->
-      <div id="tmplPanelWA">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-          <div>
-            <h3 style="margin-bottom:4px">WhatsApp Templates</h3>
-            <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
-          </div>
-          <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
+  <!-- Canned Responses tab -->
+  <div id="cannedTab" class="tab-full hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin-bottom:4px">Canned Responses</h3>
+          <p style="font-size:12px;color:var(--g400)">Pre-written messages agents can send with one click during active conversations. No WhatsApp approval needed.</p>
         </div>
-        <!-- Auto re-engagement config -->
-        <div class="reeng-config-card" style="margin-bottom:20px">
-          <h4>Auto Re-engagement</h4>
-          <p style="font-size:12px;color:var(--g500);margin-bottom:12px">Bot automatically sends this template to drop-offs 24–72h after their last message. Only fires if the customer hasn't given their number yet.</p>
-          <div class="reeng-row">
-            <select id="reengTmplSelect" style="flex:1;min-width:160px"><option value="">— disabled —</option></select>
-            <select id="reengLangSelect">
-              <option value="en">en</option>
-              <option value="en_US">en_US</option>
-            </select>
-            <button class="btn-primary" onclick="saveReengConfig()" style="white-space:nowrap">Save</button>
-            <span class="reeng-status inactive" id="reengStatus">Not configured</span>
-          </div>
-        </div>
-        <!-- Template list -->
-        <div id="tmplLoading" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading templates…</div>
-        <div class="tmpl-grid hidden" id="tmplGrid"></div>
-        <div id="tmplEmpty" class="hidden" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No templates yet. Create one above.</div>
+        <button class="btn-primary" onclick="openCannedModal()">+ New Response</button>
       </div>
-
-      <!-- Canned Responses panel -->
-      <div id="tmplPanelCanned" class="hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-          <div>
-            <h3 style="margin-bottom:4px">Canned Responses</h3>
-            <p style="font-size:12px;color:var(--g400)">Pre-written messages agents can send with one click during active conversations. No WhatsApp approval needed.</p>
-          </div>
-          <button class="btn-primary" onclick="openCannedModal()">+ New Response</button>
-        </div>
-        <div id="cannedList"><div style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading…</div></div>
-      </div>
+      <div id="cannedList"><div style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading…</div></div>
     </div>
   </div>
 
@@ -945,15 +936,16 @@ function logout(){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates'};
+const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates'};
 function switchTab(t){
   Object.keys(TABS).forEach(k=>{
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
     const ht=document.getElementById(HTABS[k]);if(ht)ht.classList.toggle('active',k===t);
   });
   if(t!=='leads'){restoreChatPanel();document.getElementById('leadsTab').classList.remove('split');}
-  if(t==='templates'){loadTemplates();loadCanned();}
+  if(t==='templates')loadTemplates();
+  if(t==='canned')loadCanned();
   if(t==='leads')loadLeads();
   if(t==='analytics')loadAnalytics();
   if(t==='team')loadAgentList();
@@ -1077,13 +1069,6 @@ async function sendReply(){
 }
 // ── Canned Responses ───────────────────────────────────────────────────
 let cannedData=[];
-
-function switchTmplSub(tab){
-  document.getElementById('tmplPanelWA').classList.toggle('hidden',tab!=='wa');
-  document.getElementById('tmplPanelCanned').classList.toggle('hidden',tab!=='canned');
-  document.getElementById('tmplSubWA').classList.toggle('active',tab==='wa');
-  document.getElementById('tmplSubCanned').classList.toggle('active',tab==='canned');
-}
 
 async function loadCanned(){
   const r=await fetch(`/admin/canned-responses?key=${encodeURIComponent(adminKey)}`).catch(()=>null);
