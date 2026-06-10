@@ -592,8 +592,12 @@ def clean_name(raw: str) -> str:
 # ── Lead saving ────────────────────────────────────────────────────────────────
 
 
-async def save_lead(user_name: str, phone: str, history: list):
+async def save_lead(user_name: str, phone: str, history: list, session_id: str = None):
     """Extract rich lead data from conversation and save to database"""
+    # The phone the customer typed in chat (saved as Lead.phone) can differ from
+    # the WhatsApp number the conversation is happening on — keep the latter too
+    # so the admin dashboard can open the right chat thread.
+    wa_phone = session_id[3:] if session_id and session_id.startswith("wa_") else None
     lines = []
     for msg in history:
         role = "Customer" if msg.get("role") == "user" else "KoolBot"
@@ -656,6 +660,7 @@ async def save_lead(user_name: str, phone: str, history: list):
             if data.get("pain_point"):  existing.pain_point       = data["pain_point"]
             if data.get("power_type"):  existing.power_type       = data["power_type"]
             if data.get("address"):     existing.address          = data["address"]
+            if wa_phone:                 existing.whatsapp_phone   = wa_phone
             existing.active_duration = duration
             existing.updated_at = datetime.utcnow()
             log.info(f"Lead updated: {clean} | {norm_phone} | duration={duration}")
@@ -663,6 +668,7 @@ async def save_lead(user_name: str, phone: str, history: list):
             lead = Lead(
                 name=clean,
                 phone=norm_phone,
+                whatsapp_phone=wa_phone,
                 business=data.get("business", ""),
                 product_interest=data.get("product_interest", ""),
                 amount=data.get("amount", ""),
@@ -900,7 +906,7 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         re.search(r'\b0\d{7,11}\b|\+234\d{7,11}\b|\b[789]\d{9}\b', request.message))
 
     if phone and not already_captured:
-        background_tasks.add_task(save_lead, request.user_name, phone, history)
+        background_tasks.add_task(save_lead, request.user_name, phone, history, request.session_id)
         lead_captured = True
         if redis_client:
             await redis_client.set(f"koolbuy:phone:{request.session_id}", phone, ex=LEAD_TTL)
@@ -1067,9 +1073,10 @@ async def get_admin_ctx(key: str = Query(...)) -> dict:
         try:
             sa = db.query(Agent).filter(Agent.role == "super_admin").first()
             name = sa.name if sa else "Admin"
+            email = sa.email if sa else ""
         finally:
             db.close()
-        return {"role": "super_admin", "name": name}
+        return {"role": "super_admin", "name": name, "email": email}
     if redis_client:
         try:
             raw = await redis_client.get(f"koolbuy:agent_session:{key}")
@@ -1094,7 +1101,7 @@ async def require_admin(ctx: dict = Depends(get_admin_ctx)) -> dict:
 
 @app.get("/admin/me")
 async def get_me(ctx: dict = Depends(get_admin_ctx)):
-    return {"role": ctx.get("role", "agent"), "name": ctx.get("name", "")}
+    return {"role": ctx.get("role", "agent"), "name": ctx.get("name", ""), "email": ctx.get("email", "")}
 
 
 @app.get("/admin")
@@ -1145,7 +1152,7 @@ async def agent_login(body: AgentLoginRequest):
                     db.commit()
                     log.info(f"Super admin password reset via admin key: {email}")
             # Super admin token is always the ADMIN_KEY for backward compat
-            return {"token": ADMIN_KEY, "name": agent.name, "role": "super_admin"}
+            return {"token": ADMIN_KEY, "name": agent.name, "role": "super_admin", "email": agent.email}
 
         # Normal login path (agent or admin)
         agent = db.query(Agent).filter(func.lower(Agent.email) == email).first()
@@ -1164,7 +1171,7 @@ async def agent_login(body: AgentLoginRequest):
         })
         if redis_client:
             await redis_client.set(f"koolbuy:agent_session:{token}", session_data, ex=86400)
-        return {"token": token, "name": agent.name, "role": agent.role}
+        return {"token": token, "name": agent.name, "role": agent.role, "email": agent.email}
     finally:
         db.close()
 
@@ -1251,21 +1258,21 @@ async def delete_agent(agent_id: int, ctx: dict = Depends(require_admin)):
 
 
 class ChangePasswordRequest(BaseModel):
+    email: str
     old_password: str
     new_password: str
 
 
 @app.post("/admin/change-password")
-async def change_password(body: ChangePasswordRequest, ctx: dict = Depends(get_admin_ctx)):
+async def change_password(body: ChangePasswordRequest):
+    """Self-service password change from the login screen — proof of identity
+    is the current password, so no active session is required."""
     if len(body.new_password) < 6:
         raise HTTPException(400, "New password must be at least 6 characters.")
     db = get_db()
     try:
-        agent_id = ctx.get("agent_id")
-        if agent_id:
-            agent = db.query(Agent).filter(Agent.id == agent_id).first()
-        else:
-            agent = db.query(Agent).filter(Agent.role == "super_admin").first()
+        email = body.email.strip().lower()
+        agent = db.query(Agent).filter(func.lower(Agent.email) == email).first()
         if not agent or not agent.password_hash:
             raise HTTPException(404, "Account not found.")
         if not verify_password(body.old_password, agent.password_hash):
@@ -1736,6 +1743,7 @@ async def list_leads(
             "id": l.id,
             "name": l.name,
             "phone": l.phone,
+            "whatsapp_phone": l.whatsapp_phone,
             "product_interest": l.product_interest,
             "business": l.business,
             "amount": l.amount,

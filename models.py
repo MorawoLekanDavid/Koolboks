@@ -27,6 +27,7 @@ class Lead(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=True)
     phone = Column(String(20), unique=True, index=True)
+    whatsapp_phone = Column(String(20), nullable=True, index=True)
     business = Column(String(255), nullable=True)
     product_interest = Column(String(255), nullable=True)
     amount = Column(String(100), nullable=True)
