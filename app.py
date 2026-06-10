@@ -1134,8 +1134,13 @@ async def agent_login(body: AgentLoginRequest):
             else:
                 if agent.role != "super_admin":
                     raise HTTPException(403, "This email is registered as a regular agent, not super admin.")
+                if not body.password:
+                    raise HTTPException(400, "Password is required.")
                 if not verify_password(body.password, agent.password_hash):
-                    raise HTTPException(403, "Incorrect password.")
+                    # Knowing the admin key authorizes resetting a forgotten super admin password
+                    agent.password_hash = hash_password(body.password)
+                    db.commit()
+                    log.info(f"Super admin password reset via admin key: {email}")
             # Super admin token is always the ADMIN_KEY for backward compat
             return {"token": ADMIN_KEY, "name": agent.name, "role": "super_admin"}
 
@@ -1238,6 +1243,57 @@ async def delete_agent(agent_id: int, ctx: dict = Depends(require_admin)):
         db.delete(agent)
         db.commit()
         return {"status": "deleted"}
+    finally:
+        db.close()
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/admin/change-password")
+async def change_password(body: ChangePasswordRequest, ctx: dict = Depends(get_admin_ctx)):
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters.")
+    db = get_db()
+    try:
+        agent_id = ctx.get("agent_id")
+        if agent_id:
+            agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        else:
+            agent = db.query(Agent).filter(Agent.role == "super_admin").first()
+        if not agent or not agent.password_hash:
+            raise HTTPException(404, "Account not found.")
+        if not verify_password(body.old_password, agent.password_hash):
+            raise HTTPException(403, "Current password is incorrect.")
+        agent.password_hash = hash_password(body.new_password)
+        db.commit()
+        return {"status": "ok"}
+    finally:
+        db.close()
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
+@app.post("/admin/agents/{agent_id}/reset-password")
+async def reset_agent_password(agent_id: int, body: ResetPasswordRequest, ctx: dict = Depends(require_admin)):
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters.")
+    db = get_db()
+    try:
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise HTTPException(404, "Agent not found.")
+        if agent.role == "super_admin":
+            raise HTTPException(403, "Use the login screen's admin key to reset the super admin password.")
+        if agent.role == "admin" and ctx.get("role") != "super_admin":
+            raise HTTPException(403, "Only super admin can reset an admin's password.")
+        agent.password_hash = hash_password(body.new_password)
+        db.commit()
+        return {"status": "ok"}
     finally:
         db.close()
 

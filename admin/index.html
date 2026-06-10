@@ -425,7 +425,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
     <p>Sign in to manage conversations</p>
     <input type="email"    id="loginEmail"    placeholder="Email address" autocomplete="email"/>
     <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password"/>
-    <div class="login-divider">First time as super admin? Enter email + password + key below</div>
+    <div class="login-divider">First time, or forgot your super admin password? Enter email + new password + key below</div>
     <input type="password" id="loginKey" placeholder="Admin key (super admin only)"/>
     <div class="login-error" id="loginError"></div>
     <button class="login-btn" onclick="login()">Sign In</button>
@@ -452,7 +452,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
         <div class="notif-icon">🔔</div>
         <span class="notif-badge hidden" id="notifCount">0</span>
       </div>
-      <div class="user-chip">
+      <div class="user-chip" onclick="openChangePasswordModal()" title="Change password">
         <div class="user-av" id="userAv">A</div>
         <div><div class="user-name" id="agentNameDisplay"></div><div class="user-role-lbl" id="agentRoleDisplay">Agent</div></div>
       </div>
@@ -854,6 +854,30 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="changePwModal">
+  <div class="modal">
+    <h3 id="pwModalTitle">Change Password</h3>
+    <div class="modal-field" id="pwOldField">
+      <label>Current Password</label>
+      <input type="password" id="pwOld" autocomplete="current-password"/>
+    </div>
+    <div class="modal-field">
+      <label>New Password</label>
+      <input type="password" id="pwNew" autocomplete="new-password" placeholder="At least 6 characters"/>
+    </div>
+    <div class="modal-field">
+      <label>Confirm New Password</label>
+      <input type="password" id="pwConfirm" autocomplete="new-password"/>
+    </div>
+    <div id="pwErr" style="color:#dc2626;font-size:12px;margin-bottom:8px;display:none"></div>
+    <div id="pwOk" style="color:var(--green);font-size:12px;margin-bottom:8px;display:none"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeChangePasswordModal()">Cancel</button>
+      <button class="btn-primary" id="pwSaveBtn" onclick="submitChangePassword()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="productModal">
   <div class="modal">
     <h3 id="modalTitle">Add Product</h3>
@@ -1116,6 +1140,60 @@ function closeCannedModal(){
   const btn=document.getElementById('cannedSaveBtn');
   btn.disabled=false;btn.textContent='Save';
   editingCannedId=null;
+}
+
+// ── Change / Reset Password ──────────────────────────────────────────────
+let resetTargetAgentId=null;
+function openChangePasswordModal(){
+  resetTargetAgentId=null;
+  document.getElementById('pwModalTitle').textContent='Change Password';
+  document.getElementById('pwOldField').classList.remove('hidden');
+  ['pwOld','pwNew','pwConfirm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pwErr').style.display='none';
+  document.getElementById('pwOk').style.display='none';
+  const btn=document.getElementById('pwSaveBtn');btn.disabled=false;btn.textContent='Save';
+  document.getElementById('changePwModal').classList.remove('hidden');
+}
+function openResetPasswordModal(id,name){
+  resetTargetAgentId=id;
+  document.getElementById('pwModalTitle').textContent=`Reset Password — ${name}`;
+  document.getElementById('pwOldField').classList.add('hidden');
+  ['pwOld','pwNew','pwConfirm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pwErr').style.display='none';
+  document.getElementById('pwOk').style.display='none';
+  const btn=document.getElementById('pwSaveBtn');btn.disabled=false;btn.textContent='Save';
+  document.getElementById('changePwModal').classList.remove('hidden');
+}
+function closeChangePasswordModal(){
+  document.getElementById('changePwModal').classList.add('hidden');
+}
+async function submitChangePassword(){
+  const oldPw=document.getElementById('pwOld').value;
+  const newPw=document.getElementById('pwNew').value;
+  const confirmPw=document.getElementById('pwConfirm').value;
+  const errEl=document.getElementById('pwErr'), okEl=document.getElementById('pwOk');
+  errEl.style.display='none';okEl.style.display='none';
+  const isReset=resetTargetAgentId!==null;
+  if(!isReset&&!oldPw){errEl.textContent='Please enter your current password.';errEl.style.display='block';return;}
+  if(!newPw||!confirmPw){errEl.textContent='Please fill in all fields.';errEl.style.display='block';return;}
+  if(newPw.length<6){errEl.textContent='New password must be at least 6 characters.';errEl.style.display='block';return;}
+  if(newPw!==confirmPw){errEl.textContent='New passwords do not match.';errEl.style.display='block';return;}
+  const btn=document.getElementById('pwSaveBtn');btn.disabled=true;btn.textContent='Saving…';
+  try{
+    const url=isReset?`/admin/agents/${resetTargetAgentId}/reset-password?key=${encodeURIComponent(adminKey)}`
+                     :`/admin/change-password?key=${encodeURIComponent(adminKey)}`;
+    const payload=isReset?{new_password:newPw}:{old_password:oldPw,new_password:newPw};
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(r.ok){
+      okEl.textContent='Password updated!';okEl.style.display='block';
+      ['pwOld','pwNew','pwConfirm'].forEach(id=>document.getElementById(id).value='');
+      setTimeout(closeChangePasswordModal,1200);
+    }else{
+      const e=await r.json().catch(()=>({}));
+      errEl.textContent=e.detail||'Failed to update password.';errEl.style.display='block';
+    }
+  }catch(e){errEl.textContent='Network error. Please try again.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Save';}
 }
 
 async function submitCanned(){
@@ -1486,15 +1564,17 @@ async function loadAgentList(){
     document.getElementById('agentTableBody').innerHTML=agents.length
       ?agents.map(a=>{
           const roleBadge=`<span class="role-badge ${a.role}">${a.role==='super_admin'?'Super Admin':a.role==='admin'?'Admin':'Agent'}</span>`;
-          const canRemove=(a.role!=='super_admin')&&(isSuperAdmin||(a.role==='agent'));
-          const removeBtn=canRemove?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
+          const canManage=(a.role!=='super_admin')&&(isSuperAdmin||(a.role==='agent'));
+          const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
+          const rn=(a.name||'').replace(/'/g,"\\'");
+          const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
           let promoteBtn='';
           if(isSuperAdmin&&a.role!=='super_admin'){
             promoteBtn=a.role==='agent'
               ?`<button class="btn-primary" style="padding:4px 10px;font-size:11px;margin-right:4px" onclick="setRole(${a.id},'admin')">→ Admin</button>`
               :`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:var(--g100);color:var(--g700);border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'agent')">→ Agent</button>`;
           }
-          return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${removeBtn}</td></tr>`;
+          return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
         }).join('')
       :'<tr><td colspan="4" style="color:var(--g400);font-size:13px;padding:12px 0">No team members yet</td></tr>';
   }catch(e){console.error(e);}
