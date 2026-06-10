@@ -1354,8 +1354,10 @@ async def mark_conversation_read(phone: str, ctx: dict = Depends(get_admin_ctx))
 
 @app.delete("/admin/conversations/{phone}/messages/{message_id}")
 async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_admin_ctx)):
+    """Removes a message from our dashboard records only. The WhatsApp Cloud API
+    has no "delete for everyone" capability for messages sent by a business —
+    that feature is exclusive to the consumer app's client protocol."""
     db = get_db()
-    wamid = None
     try:
         norm = normalize_phone(phone)
         msg = db.execute(
@@ -1363,29 +1365,11 @@ async def delete_message(phone: str, message_id: int, ctx: dict = Depends(get_ad
         ).scalar_one_or_none()
         if not msg:
             raise HTTPException(404, "Message not found")
-        wamid = msg.wamid
         db.delete(msg)
         db.commit()
     finally:
         db.close()
-    whatsapp_unsent = False
-    if wamid and WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.request(
-                    "DELETE",
-                    f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages/{wamid}",
-                    json={"messaging_product": "whatsapp"},
-                    headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
-                )
-                if r.is_success:
-                    whatsapp_unsent = True
-                    log.info(f"WhatsApp unsend success for {wamid}")
-                else:
-                    log.warning(f"WhatsApp unsend failed: {r.status_code} {r.text}")
-        except Exception as e:
-            log.warning(f"WhatsApp unsend error: {e}")
-    return {"status": "ok", "whatsapp_unsent": whatsapp_unsent}
+    return {"status": "ok"}
 
 
 class CannedRequest(BaseModel):

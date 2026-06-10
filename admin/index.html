@@ -878,7 +878,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   <div class="modal" style="max-width:360px;text-align:center">
     <div style="font-size:36px;margin-bottom:12px">🗑️</div>
     <h3 style="margin-bottom:8px">Delete Message?</h3>
-    <p style="font-size:13px;color:var(--g500);margin-bottom:20px;line-height:1.5">This will remove the message from the dashboard and attempt to unsend it on WhatsApp.</p>
+    <p style="font-size:13px;color:var(--g500);margin-bottom:20px;line-height:1.5">This removes the message from your dashboard records only. WhatsApp does not allow businesses to delete messages from a customer's phone.</p>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeDeleteConfirm()">Cancel</button>
       <button class="btn-delete" id="deleteConfirmBtn" onclick="confirmDelete()">Delete</button>
@@ -1104,12 +1104,7 @@ async function confirmDelete(){
   btn.disabled=false;btn.textContent='Delete';
   closeDeleteConfirm();
   if(r&&r.ok){
-    const d=await r.json().catch(()=>({}));
-    if(d.whatsapp_unsent){
-      showToast('Message deleted and removed from WhatsApp','success');
-    }else{
-      showToast('Deleted from dashboard (WhatsApp message stays — only new messages can be unsent)','success');
-    }
+    showToast('Removed from dashboard','success');
     loadMessages();
   }else{
     showToast('Failed to delete message','error');
