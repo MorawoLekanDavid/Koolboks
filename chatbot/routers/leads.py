@@ -148,7 +148,12 @@ async def list_dropoffs(
             q.group_by(Message.phone).order_by(func.max(Message.created_at).desc())
         ).all()
 
-        lead_phones_norm = {normalize_phone(l.phone) for l in db.query(Lead.phone).all()}
+        lead_phones_norm = set()
+        for l in db.query(Lead.phone, Lead.whatsapp_phone).all():
+            if l.phone:
+                lead_phones_norm.add(normalize_phone(l.phone))
+            if l.whatsapp_phone:
+                lead_phones_norm.add(normalize_phone(l.whatsapp_phone))
 
         return [
             {
