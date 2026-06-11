@@ -10,7 +10,7 @@ from chatbot.config import ADMIN_KEY, log
 from chatbot.core import redis_client
 from chatbot.core.security import hash_password, verify_password
 from chatbot.database import get_db
-from chatbot.dependencies import get_admin_ctx, require_admin, require_super_admin
+from chatbot.dependencies import AGENT_SESSION_TTL, get_admin_ctx, require_admin, require_super_admin
 from chatbot.models import Agent
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
@@ -77,7 +77,7 @@ async def agent_login(body: AgentLoginRequest):
             "agent_id": agent.id,
         })
         if redis_client.client:
-            await redis_client.client.set(f"koolbuy:agent_session:{token}", session_data, ex=86400)
+            await redis_client.client.set(f"koolbuy:agent_session:{token}", session_data, ex=AGENT_SESSION_TTL)
         return {"token": token, "name": agent.name, "role": agent.role, "email": agent.email}
     finally:
         db.close()

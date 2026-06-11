@@ -946,7 +946,16 @@ window.onload=async()=>{
         const me=await r.json();
         adminKey=d.key;agentName=me.name||d.name;agentRole=me.role||'agent';agentEmail=me.email||d.email||'';
         save();showApp();
-      }else{localStorage.removeItem('koolbot_agent');}
+      }else if(r&&r.status===403){
+        // Session genuinely invalid/expired — back to login
+        localStorage.removeItem('koolbot_agent');
+      }else{
+        // Network error or transient server issue (e.g. Redis restarting) —
+        // keep the cached session and proceed; polling will recover once
+        // the backend is reachable again.
+        adminKey=d.key;agentName=d.name;agentRole=d.role||'agent';agentEmail=d.email||'';
+        showApp();
+      }
     }catch{localStorage.removeItem('koolbot_agent');}
   }
 };
