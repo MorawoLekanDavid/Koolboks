@@ -8,7 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Product, Lead, Base
+from chatbot.models import Product, Lead, Base
 
 load_dotenv()
 

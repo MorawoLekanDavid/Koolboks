@@ -4,4 +4,4 @@ PS C:\Windows\system32>
 
 #### to run uvicorn server
 
-uvicorn app:app --reload
+uvicorn chatbot.main:app --reload
