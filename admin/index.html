@@ -659,6 +659,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 
   <!-- Templates tab -->
   <div id="templatesTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav hidden" id="tmplSubNavTemplates">
+      <button class="bulk-tab active" data-subtab="templates" onclick="switchTab('templates')">WhatsApp Templates</button>
+      <button class="bulk-tab" data-subtab="canned" onclick="switchTab('canned')">Canned Responses</button>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
         <div>
@@ -690,6 +694,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 
   <!-- Canned Responses tab -->
   <div id="cannedTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav hidden" id="tmplSubNavCanned">
+      <button class="bulk-tab" data-subtab="templates" onclick="switchTab('templates')">WhatsApp Templates</button>
+      <button class="bulk-tab active" data-subtab="canned" onclick="switchTab('canned')">Canned Responses</button>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
         <div>
@@ -973,7 +981,8 @@ function showApp(){
   document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   if(agentRole==='super_admin'||agentRole==='admin'){
-    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
+    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
+    document.getElementById('htabCanned')?.classList.add('hidden');
   }
   requestNotificationPermission();isFirstLoad=true;
   loadConversations();pollInterval=setInterval(loadConversations,5000);
@@ -1051,6 +1060,7 @@ function switchTab(t){
   if(t==='analytics')loadAnalytics();
   if(t==='team')loadAgentList();
   if(t==='products')loadProducts();
+  document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
 // ── Conversations ──────────────────────────────────────────────────────
@@ -1296,7 +1306,7 @@ async function toggleCannedPicker(){
   }
   const listEl=document.getElementById('cannedPickerList');
   if(!cannedData.length){
-    listEl.innerHTML='<div style="padding:14px;font-size:13px;color:var(--g400)">No canned responses yet. Add them in Templates → Canned Responses.</div>';
+    listEl.innerHTML='<div style="padding:14px;font-size:13px;color:var(--g400)">No canned responses yet. Add them in the Canned Responses tab.</div>';
   }else{
     listEl.innerHTML=cannedData.map(c=>`<div class="canned-item" onclick="pickCanned(${c.id})"><div class="canned-item-title">${esc(c.title)}</div><div class="canned-item-preview">${esc(c.content)}</div></div>`).join('');
   }
