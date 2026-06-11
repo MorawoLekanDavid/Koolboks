@@ -58,8 +58,14 @@ async def lead_funnel(ctx: dict = Depends(require_admin)):
         ).all()}
 
         # Lead phones normalized to local format for cross-format comparison
-        lead_phones_norm = {normalize_phone(r.phone) for r in db.query(Lead.phone).all()}
-        total_leads = len(lead_phones_norm)
+        # (includes both the contact number given and the WhatsApp number messaged from)
+        lead_phones_norm = set()
+        for r in db.query(Lead.phone, Lead.whatsapp_phone).all():
+            if r.phone:
+                lead_phones_norm.add(normalize_phone(r.phone))
+            if r.whatsapp_phone:
+                lead_phones_norm.add(normalize_phone(r.whatsapp_phone))
+        total_leads = db.query(Lead).filter(Lead.phone != None, Lead.phone != "").count()
 
         # Drop-offs: WhatsApp senders who never gave their number (normalize WA phone before comparing)
         drop_off = sum(1 for p in msg_phones if normalize_phone(p) not in lead_phones_norm)
