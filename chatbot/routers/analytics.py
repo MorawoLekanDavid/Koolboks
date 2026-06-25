@@ -1,32 +1,76 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, func, select
 
 from chatbot.database import get_db
 from chatbot.dependencies import require_admin
-from chatbot.models import Lead, Message
+from chatbot.models import HandoffEvent, Lead, Message
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/analytics", tags=["analytics"])
 
 
 @router.get("/conversations-handled")
-async def conversations_handled(ctx: dict = Depends(require_admin)):
+async def conversations_handled(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ctx: dict = Depends(require_admin),
+):
     db = get_db()
     try:
+        filters = [
+            Message.direction == "outbound",
+            Message.name != "KoolBot",
+            Message.name.isnot(None),
+            Message.name != "",
+        ]
+        if date_from:
+            filters.append(Message.created_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            filters.append(Message.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+
         rows = db.execute(
             select(
                 Message.name,
                 func.date(Message.created_at).label("date"),
                 func.count(func.distinct(Message.phone)).label("count"),
-            ).where(and_(
-                Message.direction == "outbound",
-                Message.name != "KoolBot",
-                Message.name.isnot(None),
-                Message.name != "",
-            )).group_by(Message.name, func.date(Message.created_at))
+            ).where(and_(*filters))
+            .group_by(Message.name, func.date(Message.created_at))
             .order_by(func.date(Message.created_at).desc())
         ).all()
         return [{"agent": r.name, "date": str(r.date), "conversations": r.count} for r in rows]
+    finally:
+        db.close()
+
+
+@router.get("/agent-handoffs")
+async def agent_handoffs(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ctx: dict = Depends(require_admin),
+):
+    db = get_db()
+    try:
+        q = db.query(HandoffEvent)
+        if date_from:
+            q = q.filter(HandoffEvent.created_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            q = q.filter(HandoffEvent.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+
+        totals: dict = {}
+        for ev in q.all():
+            entry = totals.setdefault(ev.agent_name, {"takeovers": 0, "handbacks": 0})
+            if ev.event_type == "takeover":
+                entry["takeovers"] += 1
+            else:
+                entry["handbacks"] += 1
+
+        return [
+            {"agent": name, "takeovers": stats["takeovers"], "handbacks": stats["handbacks"]}
+            for name, stats in sorted(totals.items(), key=lambda x: x[1]["takeovers"], reverse=True)
+        ]
     finally:
         db.close()
 

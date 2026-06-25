@@ -649,7 +649,19 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   <div id="analyticsTab" class="tab-full hidden">
     <div class="cards-grid">
       <div class="card"><h3>Lead Funnel</h3><div class="stat-cards-row" id="funnelCards"></div><div id="funnelBars"></div></div>
-      <div class="card"><h3>Agent Performance <span style="font-size:11px;font-weight:500;color:var(--g400)">(last 7 days)</span></h3><div id="agentStatsContent"></div></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <h3 style="margin:0">Agent Performance</h3>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <input type="date" id="agentPerfFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+            <span style="font-size:12px;color:var(--g400)">to</span>
+            <input type="date" id="agentPerfTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+            <button onclick="loadAgentStats()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
+            <button onclick="downloadAgentPerf()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
+          </div>
+        </div>
+        <div id="agentStatsContent"></div>
+      </div>
     </div>
     <div class="card" style="margin-top:20px">
       <h3>Product Recommendations <span style="font-size:11px;font-weight:500;color:var(--g400)">— what the bot recommends most</span></h3>
@@ -1587,7 +1599,10 @@ function viewLeadChat(phone,name){
 }
 
 // ── Analytics ──────────────────────────────────────────────────────────
+let _agentPerfData=[];  // last loaded rows — used by CSV download
+
 async function loadAnalytics(){await Promise.all([loadFunnel(),loadAgentStats(),loadProductRecs()]);}
+
 async function loadFunnel(){
   try{
     const r=await fetch(`/admin/analytics/lead-funnel?key=${encodeURIComponent(adminKey)}`);
@@ -1597,16 +1612,79 @@ async function loadFunnel(){
     document.getElementById('funnelBars').innerHTML=funnel.map(s=>{const pct=Math.round((s.count/max)*100);return`<div class="funnel-stage"><div class="funnel-lbl"><span>${s.stage}</span><span>${pct}%</span></div><div class="funnel-track"><div class="funnel-fill" style="width:${pct}%">${s.count}</div></div></div>`;}).join('');
   }catch(e){console.error(e);}
 }
+
 async function loadAgentStats(){
+  const el=document.getElementById('agentStatsContent');
+  el.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  const from=document.getElementById('agentPerfFrom').value;
+  const to=document.getElementById('agentPerfTo').value;
+  const qs=new URLSearchParams({key:adminKey});
+  if(from)qs.set('date_from',from);
+  if(to)qs.set('date_to',to);
   try{
-    const r=await fetch(`/admin/analytics/conversations-handled?key=${encodeURIComponent(adminKey)}`);
-    if(!r.ok){document.getElementById('agentStatsContent').innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
-    const data=await r.json();
-    if(!data.length){document.getElementById('agentStatsContent').innerHTML='<p style="color:var(--g400);font-size:13px">No agent activity yet</p>';return;}
-    const by={};data.forEach(r=>{by[r.agent]=(by[r.agent]||0)+r.conversations;});
-    const rows=Object.entries(by).sort((a,b)=>b[1]-a[1]);
-    document.getElementById('agentStatsContent').innerHTML=`<table class="agt-table"><thead><tr><th>Agent</th><th>Conversations</th></tr></thead><tbody>${rows.map(([n,c])=>`<tr><td>${esc(n)}</td><td>${c}</td></tr>`).join('')}</tbody></table>`;
-  }catch(e){console.error(e);}
+    const [convRes, handoffRes]=await Promise.all([
+      fetch(`/admin/analytics/conversations-handled?${qs}`),
+      fetch(`/admin/analytics/agent-handoffs?${qs}`),
+    ]);
+    if(!convRes.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
+    const convData=await convRes.json();
+    const handoffData=handoffRes.ok?await handoffRes.json():[];
+
+    // Aggregate conversations by agent
+    const convBy={};
+    convData.forEach(r=>{convBy[r.agent]=(convBy[r.agent]||0)+r.conversations;});
+
+    // Merge handoff counts keyed by agent name
+    const handoffBy={};
+    handoffData.forEach(h=>{handoffBy[h.agent]={takeovers:h.takeovers,handbacks:h.handbacks};});
+
+    // Union of all agent names across both datasets
+    const agents=[...new Set([...Object.keys(convBy),...Object.keys(handoffBy)])];
+    agents.sort((a,b)=>(convBy[b]||0)-(convBy[a]||0));
+
+    if(!agents.length){
+      _agentPerfData=[];
+      el.innerHTML='<p style="color:var(--g400);font-size:13px">No agent activity in this period</p>';
+      return;
+    }
+
+    _agentPerfData=agents.map(name=>({
+      agent:name,
+      conversations:convBy[name]||0,
+      takeovers:(handoffBy[name]||{}).takeovers||0,
+      handbacks:(handoffBy[name]||{}).handbacks||0,
+    }));
+
+    el.innerHTML=`<table class="agt-table">
+      <thead><tr>
+        <th>Agent</th>
+        <th style="text-align:center">Conversations</th>
+        <th style="text-align:center">Takeovers</th>
+        <th style="text-align:center">Handbacks</th>
+      </tr></thead>
+      <tbody>${_agentPerfData.map(r=>`<tr>
+        <td>${esc(r.agent)}</td>
+        <td style="text-align:center">${r.conversations}</td>
+        <td style="text-align:center">${r.takeovers}</td>
+        <td style="text-align:center">${r.handbacks}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }catch(e){console.error(e);el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+
+function downloadAgentPerf(){
+  if(!_agentPerfData.length){alert('No data to download. Apply a date range first.');return;}
+  const from=document.getElementById('agentPerfFrom').value||'all';
+  const to=document.getElementById('agentPerfTo').value||'time';
+  const header='Agent,Conversations,Takeovers,Handbacks';
+  const rows=_agentPerfData.map(r=>[r.agent,r.conversations,r.takeovers,r.handbacks].join(','));
+  const csv=[header,...rows].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`agent-performance-${from}-to-${to}.csv`;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
 }
 
 async function loadProductRecs(){
@@ -2158,7 +2236,16 @@ async function submitSendTemplate(){
 // ── Helpers ────────────────────────────────────────────────────────────
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function timeAgo(iso){if(!iso)return'';const d=(Date.now()-new Date(iso+'Z').getTime())/1000;if(d<60)return'just now';if(d<3600)return`${Math.floor(d/60)}m ago`;if(d<86400)return`${Math.floor(d/3600)}h ago`;return`${Math.floor(d/86400)}d ago`;}
-function formatTime(iso){if(!iso)return'';return new Date(iso+'Z').toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function formatTime(iso){
+  if(!iso)return'';
+  const d=new Date(iso+'Z');
+  const today=new Date();
+  const sameDay=d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate();
+  const time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if(sameDay)return time;
+  const date=d.toLocaleDateString([],{day:'numeric',month:'short',year:d.getFullYear()!==today.getFullYear()?'numeric':undefined});
+  return`${date}, ${time}`;
+}
 </script>
 </body>
 </html>

@@ -91,6 +91,17 @@ class LeadNote(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class HandoffEvent(Base):
+    """Persistent log of every agent takeover and handback"""
+    __tablename__ = "handoff_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String(20), index=True)
+    agent_name = Column(String(255))
+    event_type = Column(String(20))   # "takeover" | "handback"
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)

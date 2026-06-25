@@ -16,7 +16,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import CannedResponse, Message
+from chatbot.models import CannedResponse, HandoffEvent, Message
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -260,4 +260,18 @@ async def toggle_handoff(phone: str, body: HandoffRequest = HandoffRequest(), ct
         mode = "agent"
         agent = agent_display
     log.info(f"Handoff toggled for {phone}: now {mode} ({agent})")
+
+    db = get_db()
+    try:
+        db.add(HandoffEvent(
+            phone=normalize_phone(phone),
+            agent_name=agent_display,
+            event_type="takeover" if mode == "agent" else "handback",
+        ))
+        db.commit()
+    except Exception as _e:
+        log.warning(f"Failed to log handoff event: {_e}")
+    finally:
+        db.close()
+
     return {"phone": phone, "mode": mode, "agent": agent}

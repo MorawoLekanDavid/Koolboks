@@ -53,6 +53,23 @@ def init_database():
     except Exception as _e:
         log.warning(f"leads columns migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS handoff_events (
+                    id SERIAL PRIMARY KEY,
+                    phone VARCHAR(20),
+                    agent_name VARCHAR(255),
+                    event_type VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_handoff_events_phone ON handoff_events (phone)"))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_handoff_events_created_at ON handoff_events (created_at)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"handoff_events migration: {_e}")
+
     log.info("Database initialized successfully")
 
 
