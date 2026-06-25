@@ -129,6 +129,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .msg{position:relative}
 .msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
 .msg-time{font-size:10px;color:var(--g400)}
+.msg-date-sep{display:flex;align-items:center;gap:8px;margin:8px 0;align-self:stretch}
+.msg-date-sep::before,.msg-date-sep::after{content:'';flex:1;border-top:1px solid var(--g200)}
+.msg-date-sep span{white-space:nowrap;font-size:11px;font-weight:600;color:var(--g500);padding:3px 10px;background:#fff;border:1px solid var(--g200);border-radius:99px}
 .canned-picker{background:#fff;border-top:2px solid var(--orange);border-bottom:1px solid var(--g200);max-height:240px;overflow-y:auto;display:none}
 .canned-picker-hdr{padding:7px 14px;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--g100);background:var(--g50)}
 .canned-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--g100)}
@@ -1171,7 +1174,23 @@ async function loadMessages(){
     if(selectedPhone!==phone)return; // switched again during JSON parse — discard
     const box=document.getElementById('messages');
     const atBottom=box.scrollHeight-box.scrollTop<=box.clientHeight+60;
-    box.innerHTML=msgs.map(m=>{
+    const now=new Date();
+    const todayKey=`${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    const yest=new Date(now);yest.setDate(yest.getDate()-1);
+    const yestKey=`${yest.getFullYear()}-${yest.getMonth()}-${yest.getDate()}`;
+    let lastDayKey=null;
+    const parts=[];
+    msgs.forEach(m=>{
+      const d=new Date(m.timestamp+'Z');
+      const dayKey=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if(dayKey!==lastDayKey){
+        lastDayKey=dayKey;
+        let label;
+        if(dayKey===todayKey)label='Today';
+        else if(dayKey===yestKey)label='Yesterday';
+        else label=d.toLocaleDateString([],{day:'numeric',month:'numeric',year:'numeric'});
+        parts.push(`<div class="msg-date-sep"><span>${label}</span></div>`);
+      }
       const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 KoolBot');
@@ -1179,8 +1198,10 @@ async function loadMessages(){
       const bodyHtml=imgMatch
         ?`<img src="${esc(imgMatch[1])}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
         :esc(m.content);
-      return `<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${formatTime(m.timestamp)}</span></div></div>`;
-    }).join('');
+      const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span></div></div>`);
+    });
+    box.innerHTML=parts.join('');
     if(atBottom)box.scrollTop=box.scrollHeight;
   }catch(e){console.error(e);}
 }
@@ -2236,16 +2257,7 @@ async function submitSendTemplate(){
 // ── Helpers ────────────────────────────────────────────────────────────
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function timeAgo(iso){if(!iso)return'';const d=(Date.now()-new Date(iso+'Z').getTime())/1000;if(d<60)return'just now';if(d<3600)return`${Math.floor(d/60)}m ago`;if(d<86400)return`${Math.floor(d/3600)}h ago`;return`${Math.floor(d/86400)}d ago`;}
-function formatTime(iso){
-  if(!iso)return'';
-  const d=new Date(iso+'Z');
-  const today=new Date();
-  const sameDay=d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate();
-  const time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  if(sameDay)return time;
-  const date=d.toLocaleDateString([],{day:'numeric',month:'short',year:d.getFullYear()!==today.getFullYear()?'numeric':undefined});
-  return`${date}, ${time}`;
-}
+function formatTime(iso){if(!iso)return'';return new Date(iso+'Z').toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 </script>
 </body>
 </html>
