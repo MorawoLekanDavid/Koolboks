@@ -1927,7 +1927,7 @@ async function removeAgent(id){
 }
 
 // ── AI Settings ────────────────────────────────────────────────────────
-let _aiInstOriginal='', _testHistory=[];
+let _aiInstOriginal='', _testHistory=[], _hasInstDraft=false, _hasKBPending=false;
 
 function switchAISubTab(tab){
   document.getElementById('aiInstPanel').classList.toggle('hidden', tab!=='inst');
@@ -1955,7 +1955,8 @@ async function loadInstructions(){
     if(d.draft){badge.textContent='DRAFT';badge.className='ai-status-badge draft';}
     else{badge.textContent='LIVE';badge.className='ai-status-badge live';}
     renderInstHistory(d.history||[]);
-    refreshGoLiveBanner(d.has_draft, false);
+    _hasInstDraft=d.has_draft||false;
+    refreshGoLiveBanner();
   }catch(e){console.error(e);}
 }
 
@@ -1980,25 +1981,27 @@ async function saveDraftInstruction(){
     document.getElementById('aiInstSavedMsg').style.display='inline';
     const badge=document.getElementById('aiInstStatus');
     badge.textContent='DRAFT';badge.className='ai-status-badge draft';
-    refreshGoLiveBanner(true, true);
-    await loadKBDocs(); // refresh pending state
+    _hasInstDraft=true;
+    refreshGoLiveBanner();
   }catch(e){console.error(e);}
 }
 
 function renderInstHistory(history){
   const el=document.getElementById('aiInstHistory');
-  if(!history.length){el.innerHTML='<p class="kb-empty">No previous versions</p>';return;}
-  el.innerHTML=history.map(h=>`
-    <div class="ai-hist-row">
+  if(!history.length){el.innerHTML='<p class="kb-empty">No previous versions yet. Previous live instructions will appear here after you Go Live for the first time.</p>';return;}
+  el.innerHTML=history.map(h=>{
+    const dt=h.created_at?new Date(h.created_at+'Z').toLocaleDateString():'—';
+    return `<div class="ai-hist-row">
       <div class="ah-meta">
-        v${h.version} &nbsp;·&nbsp; ${new Date(h.created_at+'Z').toLocaleDateString()} &nbsp;·&nbsp; ${esc(h.created_by||'system')}
+        v${h.version} &nbsp;·&nbsp; ${dt} &nbsp;·&nbsp; ${esc(h.created_by||'system')}
         <div class="ah-preview">${esc(h.content.slice(0,120))}…</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button class="canned-row-edit" onclick="restoreInstruction(${h.id})" title="Restore as draft">↩ Restore</button>
         <button class="btn-danger" onclick="deleteInstVersion(${h.id})" title="Delete permanently">🗑</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function restoreInstruction(id){
@@ -2026,7 +2029,8 @@ async function loadKBDocs(){
     renderKBSection('kbTrashList', [...d.pending_trash,...d.trashed], 'trash');
     document.getElementById('kbDraftSection').style.display=d.draft.length?'block':'none';
     document.getElementById('kbTrashSection').style.display=(d.trashed.length+d.pending_trash.length)?'block':'none';
-    refreshGoLiveBanner(d.has_pending, false);
+    _hasKBPending=d.has_pending||false;
+    refreshGoLiveBanner();
   }catch(e){console.error(e);}
 }
 
@@ -2037,14 +2041,16 @@ function renderKBSection(elId, docs, mode){
   el.innerHTML=docs.map(d=>{
     const icon=EXT_ICON[d.file_type]||'📄';
     const size=d.file_size?`${(d.file_size/1024).toFixed(1)} KB · `:'';
-    const date=new Date(d.created_at+'Z').toLocaleDateString();
+    const date=d.created_at?new Date(d.created_at+'Z').toLocaleDateString():'—';
+    const safeName=d.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const viewBtn=`<button class="canned-row-edit" onclick="viewKBDoc(${d.id},'${safeName}')" style="font-size:11px;padding:3px 8px">👁 View</button>`;
     let actions='';
     if(mode==='live')
-      actions=`<button class="btn-danger" onclick="trashKBDoc(${d.id})" title="Move to trash" style="font-size:11px;padding:3px 8px">🗑 Remove</button>`;
+      actions=`${viewBtn}<button class="btn-danger" onclick="trashKBDoc(${d.id})" title="Move to trash" style="font-size:11px;padding:3px 8px">🗑 Remove</button>`;
     else if(mode==='draft')
-      actions=`<button class="btn-danger" onclick="trashKBDoc(${d.id})" title="Delete draft" style="font-size:11px;padding:3px 8px">✕ Delete</button>`;
+      actions=`${viewBtn}<button class="btn-danger" onclick="trashKBDoc(${d.id})" title="Delete draft" style="font-size:11px;padding:3px 8px">✕ Delete</button>`;
     else
-      actions=`
+      actions=`${viewBtn}
         <button class="canned-row-edit" onclick="restoreKBDoc(${d.id})" style="font-size:11px;padding:3px 8px">↩ Restore</button>
         <button class="btn-danger" onclick="deleteKBDocPermanent(${d.id})" style="font-size:11px;padding:3px 8px">🗑 Delete</button>`;
     return `<div class="kb-doc-row">
@@ -2054,9 +2060,30 @@ function renderKBSection(elId, docs, mode){
         <div class="kb-doc-meta">${size}${date} · by ${esc(d.created_by||'system')}</div>
         <div class="kb-doc-preview">${esc(d.preview||'')}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0">${actions}</div>
+      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">${actions}</div>
     </div>`;
   }).join('');
+}
+
+async function viewKBDoc(id, name){
+  try{
+    const r=await fetch(`/admin/ai-settings/kb/${id}?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok){alert('Could not load document');return;}
+    const d=await r.json();
+    const existing=document.getElementById('kbViewModal');if(existing)existing.remove();
+    const modal=document.createElement('div');
+    modal.id='kbViewModal';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    modal.innerHTML=`<div style="background:var(--bg,#fff);border:1px solid var(--g200,#eee);border-radius:12px;width:min(760px,100%);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--g200,#eee);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <span style="font-weight:700;font-size:14px">${esc(d.name)}</span>
+        <button onclick="document.getElementById('kbViewModal').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--g400,#888);line-height:1;padding:0 4px">×</button>
+      </div>
+      <pre style="padding:18px;overflow-y:auto;font-size:12px;line-height:1.8;white-space:pre-wrap;word-break:break-word;margin:0;flex:1;font-family:inherit;color:var(--text,#333)">${esc(d.content)}</pre>
+    </div>`;
+    modal.onclick=e=>{if(e.target===modal)modal.remove();};
+    document.body.appendChild(modal);
+  }catch(e){console.error(e);alert('Error loading document');}
 }
 
 async function uploadKBDoc(input){
@@ -2068,7 +2095,6 @@ async function uploadKBDoc(input){
     const data=await r.json();
     if(!r.ok){alert(data.detail||'Upload failed');return;}
     await loadKBDocs();
-    refreshGoLiveBanner(true,true);
   }catch(e){console.error(e);alert('Upload error');}
 }
 
@@ -2092,9 +2118,9 @@ async function deleteKBDocPermanent(id){
 }
 
 // ── Go Live ──
-function refreshGoLiveBanner(hasPending, animate){
+function refreshGoLiveBanner(){
   const banner=document.getElementById('aiGoLiveBanner');
-  if(hasPending){banner.classList.remove('hidden');if(animate)banner.style.animation='none';}
+  if(_hasInstDraft||_hasKBPending)banner.classList.remove('hidden');
   else banner.classList.add('hidden');
 }
 
@@ -2104,6 +2130,7 @@ async function goLive(){
     const r=await fetch(`/admin/ai-settings/go-live?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
     const d=await r.json();
     if(!r.ok){alert(d.detail||'Failed');return;}
+    _hasInstDraft=false;_hasKBPending=false;refreshGoLiveBanner();
     alert('✅ ' + d.changes.join('\n'));
     await loadAISettings();
   }catch(e){console.error(e);alert('Error');}

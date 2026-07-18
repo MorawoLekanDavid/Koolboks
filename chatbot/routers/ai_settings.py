@@ -209,6 +209,24 @@ async def upload_kb_document(
         db.close()
 
 
+@router.get("/kb/{doc_id}")
+async def get_kb_document(doc_id: int, ctx: dict = Depends(require_admin)):
+    db = get_db()
+    try:
+        doc = db.query(KBDocument).filter(KBDocument.id == doc_id).first()
+        if not doc:
+            raise HTTPException(404, "Document not found")
+        return {
+            "id": doc.id,
+            "name": doc.name,
+            "content": doc.content,
+            "file_type": doc.file_type,
+            "status": doc.status,
+        }
+    finally:
+        db.close()
+
+
 @router.patch("/kb/{doc_id}/trash")
 async def mark_kb_trash(doc_id: int, ctx: dict = Depends(require_admin)):
     """Mark a live doc for removal (applied on Go Live) or delete a draft immediately."""

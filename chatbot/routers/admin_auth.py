@@ -3,6 +3,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import func
 
@@ -93,13 +94,15 @@ class AgentCreate(BaseModel):
 
 @router.get("/agents")
 async def list_agents(ctx: dict = Depends(require_admin)):
-    db = get_db()
-    try:
-        agents = db.query(Agent).order_by(Agent.created_at.asc()).all()
-        return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
-                 "created_at": a.created_at.isoformat()} for a in agents]
-    finally:
-        db.close()
+    def _fetch():
+        db = get_db()
+        try:
+            agents = db.query(Agent).order_by(Agent.created_at.asc()).all()
+            return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
+                     "created_at": a.created_at.isoformat() if a.created_at else None} for a in agents]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
 
 
 @router.post("/agents")
