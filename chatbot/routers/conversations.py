@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 
 from chatbot.config import (
     WHATSAPP_API_TOKEN,
@@ -28,29 +28,52 @@ router = APIRouter(prefix="/admin", tags=["conversations"])
 async def list_conversations(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    q: Optional[str] = Query(None),
     ctx: dict = Depends(get_admin_ctx),
 ):
     def _db_fetch():
         db = get_db()
         try:
-            total = db.execute(
-                select(func.count(func.distinct(Message.phone)))
-            ).scalar() or 0
+            name_agg = func.max(
+                case((Message.direction == "inbound", Message.name), else_=None)
+            )
+            base_select = select(
+                Message.phone,
+                name_agg.label("name"),
+                func.max(Message.created_at).label("last_message"),
+                func.count(Message.id).label("total"),
+            ).group_by(Message.phone)
 
-            rows = db.execute(
-                select(
-                    Message.phone,
-                    func.max(
-                        case((Message.direction == "inbound", Message.name), else_=None)
-                    ).label("name"),
-                    func.max(Message.created_at).label("last_message"),
-                    func.count(Message.id).label("total"),
-                )
-                .group_by(Message.phone)
-                .order_by(func.max(Message.created_at).desc())
-                .limit(limit)
-                .offset(offset)
-            ).all()
+            if q and q.strip():
+                qp = f"%{q.strip()}%"
+                # Phone is a group key — can use WHERE. Name is aggregate — needs HAVING.
+                phone_rows = db.execute(
+                    base_select.where(Message.phone.ilike(qp))
+                    .order_by(func.max(Message.created_at).desc())
+                    .limit(50)
+                ).all()
+                name_rows = db.execute(
+                    base_select.having(name_agg.ilike(qp))
+                    .order_by(func.max(Message.created_at).desc())
+                    .limit(50)
+                ).all()
+                seen: set = set()
+                rows = []
+                for r in list(phone_rows) + list(name_rows):
+                    if r.phone not in seen:
+                        seen.add(r.phone)
+                        rows.append(r)
+                total = len(rows)
+            else:
+                total = db.execute(
+                    select(func.count(func.distinct(Message.phone)))
+                ).scalar() or 0
+                rows = db.execute(
+                    base_select
+                    .order_by(func.max(Message.created_at).desc())
+                    .limit(limit)
+                    .offset(offset)
+                ).all()
 
             phones = [r.phone for r in rows]
             agent_rows = []
@@ -171,7 +194,8 @@ async def list_conversations(
         "agent_count": agent_count,
         "limit": limit,
         "offset": offset,
-        "has_more": (offset + limit) < total,
+        "has_more": False if (q and q.strip()) else (offset + limit) < total,
+        "is_search": bool(q and q.strip()),
     }
 
 

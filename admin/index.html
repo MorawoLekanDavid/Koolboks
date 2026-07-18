@@ -527,8 +527,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
         <span class="conv-panel-title">Conversations</span>
         <span class="conv-total-pill" id="convCount">0</span>
       </div>
-      <div class="conv-search-wrap">
-        <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="renderConversations()"/>
+      <div class="conv-search-wrap" style="display:flex;gap:6px;align-items:center">
+        <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="onConvSearch()" style="flex:1"/>
+        <button onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
       </div>
       <div class="mode-row">
         <button class="mode-btn active" id="mAll"   onclick="setFilter('all',this)">All <span class="cnt" id="cntAll">0</span></button>
@@ -1030,6 +1031,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="outreachModal" onclick="if(event.target===this)closeOutreachModal()">
+  <div class="modal" style="max-width:520px;width:92%">
+    <h3 style="margin-bottom:14px">New Conversation</h3>
+    <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">WhatsApp Number</label>
+    <input id="outreachPhone" type="tel" placeholder="+2348012345678" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);margin-bottom:14px" oninput="onOutreachPhoneInput()"/>
+    <div id="outreachLoading" style="display:none;text-align:center;padding:16px;color:var(--g400);font-size:13px">Loading templates…</div>
+    <div id="outreachTemplateWrap" style="display:none">
+      <div style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Choose a template</div>
+      <div id="outreachTemplateList" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div id="outreachErr" style="display:none;color:#e53e3e;font-size:13px;margin-top:6px"></div>
+    <div style="margin-top:16px;text-align:right"><button onclick="closeOutreachModal()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 16px;font-size:13px;cursor:pointer">Cancel</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="profileModal">
   <div class="modal">
     <h3>My Profile</h3>
@@ -1066,6 +1082,8 @@ let allConversations=[], currentFilter='all';
 let interestedLeads=[], dropoffLeads=[], activeLeadGroup='interested';
 let pollInterval=null, msgPollInterval=null, isFirstLoad=true;
 let convTotal=0, convOffset=0, convLimit=100, convHasMore=false;
+let _convSearchTimer=null, _searchResults=null;
+let _outreachTemplatesCache=null;
 
 // ── Boot ───────────────────────────────────────────────────────────────
 window.onload=async()=>{
@@ -1263,17 +1281,30 @@ function setFilter(f,el){
   renderConversations();
 }
 function renderConversations(){
-  const q=(document.getElementById('searchInput')?.value||'').toLowerCase();
+  const rawQ=(document.getElementById('searchInput')?.value||'').trim();
   const af=document.getElementById('agentFilter')?.value||'';
-  const filtered=allConversations.filter(c=>{
-    const ms=!q||(c.name||'').toLowerCase().includes(q)||c.phone.includes(q);
-    const mf=currentFilter==='all'||c.mode===currentFilter;
-    const ag=!af||(c.agents_involved||[]).includes(af);
-    return ms&&mf&&ag;
-  });
+  const isSearch=_searchResults!==null;
+  let filtered;
+  if(isSearch){
+    // Results already filtered server-side; only apply mode/agent pill filters
+    filtered=_searchResults.filter(c=>{
+      const mf=currentFilter==='all'||c.mode===currentFilter;
+      const ag=!af||(c.agents_involved||[]).includes(af);
+      return mf&&ag;
+    });
+  } else {
+    const q=rawQ.toLowerCase();
+    filtered=allConversations.filter(c=>{
+      const ms=!q||(c.name||'').toLowerCase().includes(q)||c.phone.includes(q);
+      const mf=currentFilter==='all'||c.mode===currentFilter;
+      const ag=!af||(c.agents_involved||[]).includes(af);
+      return ms&&mf&&ag;
+    });
+  }
   const list=document.getElementById('convList');
   if(!filtered.length){
-    list.innerHTML='<div class="no-conv">No conversations found</div>'+(convHasMore&&!q?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
+    const msg=isSearch?`No results for "<b>${esc(rawQ)}</b>"`:'No conversations found';
+    list.innerHTML=`<div class="no-conv">${msg}</div>`+(convHasMore&&!isSearch?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
     return;
   }
   list.innerHTML=filtered.map(c=>{
@@ -1290,7 +1321,125 @@ function renderConversations(){
         </div>
       </div>
     </div>`;
-  }).join('')+(convHasMore&&!q?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
+  }).join('')+(convHasMore&&!isSearch?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
+}
+function onConvSearch(){
+  const q=(document.getElementById('searchInput')?.value||'').trim();
+  clearTimeout(_convSearchTimer);
+  if(!q){_searchResults=null;renderConversations();return;}
+  if(q.length<2)return;
+  _convSearchTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch(`/admin/conversations?key=${encodeURIComponent(adminKey)}&q=${encodeURIComponent(q)}&limit=50`);
+      if(!r.ok)return;
+      const resp=await r.json();
+      _searchResults=Array.isArray(resp)?resp:(resp.conversations||[]);
+      renderConversations();
+    }catch(e){console.error(e);}
+  },350);
+}
+// ── Outreach modal ─────────────────────────────────────────────────────
+async function openOutreachModal(){
+  _outreachTemplatesCache=null;
+  document.getElementById('outreachPhone').value='';
+  document.getElementById('outreachLoading').style.display='none';
+  document.getElementById('outreachTemplateWrap').style.display='none';
+  document.getElementById('outreachErr').style.display='none';
+  document.getElementById('outreachModal').classList.remove('hidden');
+  // Pre-load templates
+  await _loadOutreachTemplates();
+}
+function closeOutreachModal(){
+  document.getElementById('outreachModal').classList.add('hidden');
+}
+function onOutreachPhoneInput(){
+  // Phone already loaded; just keep the template list visible if cache ready
+  const ph=(document.getElementById('outreachPhone')?.value||'').trim();
+  const errEl=document.getElementById('outreachErr');
+  errEl.style.display='none';
+  if(_outreachTemplatesCache){
+    document.getElementById('outreachTemplateWrap').style.display=ph.length>=7?'block':'none';
+  }
+}
+async function _loadOutreachTemplates(){
+  const loadEl=document.getElementById('outreachLoading');
+  loadEl.style.display='block';
+  try{
+    const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)throw new Error('Could not load templates');
+    const data=await r.json();
+    const all=(data.data||[]).filter(t=>t.status==='APPROVED');
+    _outreachTemplatesCache=all;
+    _renderOutreachTemplates(all);
+  }catch(e){
+    const errEl=document.getElementById('outreachErr');
+    errEl.textContent='Could not load templates: '+e.message;
+    errEl.style.display='block';
+  }finally{
+    loadEl.style.display='none';
+  }
+}
+function _renderOutreachTemplates(templates){
+  const listEl=document.getElementById('outreachTemplateList');
+  if(!templates.length){
+    listEl.innerHTML='<div style="color:var(--g400);font-size:13px;padding:12px 0">No approved templates found.</div>';
+    document.getElementById('outreachTemplateWrap').style.display='block';
+    return;
+  }
+  listEl.innerHTML=templates.map((t,i)=>{
+    const bodyComp=(t.components||[]).find(c=>c.type==='BODY');
+    const bodyText=bodyComp?bodyComp.text:'';
+    const varMatches=[...bodyText.matchAll(/\{\{(\d+)\}\}/g)];
+    const varCount=varMatches.length?Math.max(...varMatches.map(m=>parseInt(m[1]))):0;
+    const varInputs=varCount?Array.from({length:varCount},(_,j)=>`
+      <input data-var="${j+1}" placeholder="Variable {{${j+1}}}" style="width:100%;box-sizing:border-box;margin-top:5px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">`
+    ).join(''):'';
+    return `<div id="otpl_${i}" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">${esc(t.name)}</div>
+          <div style="font-size:11px;color:var(--g400);white-space:pre-wrap;word-break:break-word">${esc(bodyText.slice(0,120)+(bodyText.length>120?'…':''))}</div>
+          ${varCount?`<div style="font-size:11px;color:var(--orange);margin-top:4px">${varCount} variable${varCount>1?'s':''} required</div>`:''}
+          ${varInputs}
+        </div>
+        <button onclick="sendOutreachTemplate(${i},'${esc(t.name)}','${t.language||'en'}')" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Send</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('outreachTemplateWrap').style.display='block';
+}
+async function sendOutreachTemplate(tplIdx, templateName, language){
+  const ph=(document.getElementById('outreachPhone')?.value||'').trim();
+  const errEl=document.getElementById('outreachErr');
+  errEl.style.display='none';
+  if(!ph||ph.length<7){errEl.textContent='Please enter a valid phone number (include country code, e.g. +234…)';errEl.style.display='block';return;}
+  // Collect variables from that card's inputs
+  const card=document.getElementById(`otpl_${tplIdx}`);
+  const varInputs=card?[...card.querySelectorAll('[data-var]')]:[];
+  const variables=varInputs.map(inp=>inp.value.trim());
+  if(variables.some(v=>!v)){errEl.textContent='Please fill in all template variables.';errEl.style.display='block';return;}
+  const btn=card?.querySelector('button');
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(ph)}/send-template?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({template_name:templateName,language,variables})
+    });
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Send failed');}
+    closeOutreachModal();
+    // Reload conversations so the new chat appears
+    _searchResults=null;
+    document.getElementById('searchInput').value='';
+    isFirstLoad=true;convOffset=0;
+    await loadConversations();
+    // Open the conversation immediately
+    const normPh=ph.startsWith('+')?ph:'+'+ph;
+    const match=allConversations.find(c=>c.phone===normPh||c.phone===ph);
+    if(match)selectConv(match.phone,match.name||'Customer',match.mode,match.agent||'');
+  }catch(e){
+    errEl.textContent=e.message;errEl.style.display='block';
+    if(btn){btn.disabled=false;btn.textContent='Send';}
+  }
 }
 async function selectConv(phone,name,mode,agent){
   // Stop any previous poll immediately — must happen before the await
