@@ -96,6 +96,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .badge-agent{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--orange-s);color:var(--orange-d)}
 .unread-pill{background:var(--green);color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
 .no-conv{padding:32px 14px;text-align:center;color:var(--g400);font-size:13px}
+.load-more-row{padding:10px 14px;text-align:center}.load-more-row button{background:none;border:1px solid var(--g300);border-radius:8px;padding:6px 18px;font-size:12px;cursor:pointer;color:var(--g500)}.load-more-row button:hover{background:var(--g100)}
 
 /* Chat panel */
 .chat-panel{flex:1;display:flex;flex-direction:column;background:var(--g50);overflow:hidden;min-width:0}
@@ -1064,6 +1065,7 @@ let selectedPhone=null, selectedMode='bot';
 let allConversations=[], currentFilter='all';
 let interestedLeads=[], dropoffLeads=[], activeLeadGroup='interested';
 let pollInterval=null, msgPollInterval=null, isFirstLoad=true;
+let convTotal=0, convOffset=0, convLimit=100, convHasMore=false;
 
 // ── Boot ───────────────────────────────────────────────────────────────
 window.onload=async()=>{
@@ -1125,7 +1127,7 @@ function showApp(){
     document.getElementById('htabCanned')?.classList.add('hidden');
   }
   requestNotificationPermission();isFirstLoad=true;
-  loadConversations();pollInterval=setInterval(loadConversations,5000);
+  convOffset=0;loadConversations();pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);
@@ -1205,25 +1207,50 @@ function switchTab(t){
 }
 
 // ── Conversations ──────────────────────────────────────────────────────
-async function loadConversations(){
+async function loadConversations(append=false){
   try{
-    const r=await fetch(`/admin/conversations?key=${encodeURIComponent(adminKey)}`);
+    const off=append?convOffset:0;
+    const r=await fetch(`/admin/conversations?key=${encodeURIComponent(adminKey)}&limit=${convLimit}&offset=${off}`);
     if(r.status===403){logout();return;}
-    const data=await r.json();
-    if(!isFirstLoad){
+    const resp=await r.json();
+    // Support both old list format and new paginated object format
+    const data=Array.isArray(resp)?resp:(resp.conversations||[]);
+    const total=Array.isArray(resp)?data.length:(resp.total||data.length);
+    const botCnt=Array.isArray(resp)?data.filter(c=>c.mode==='bot').length:(resp.bot_count??data.filter(c=>c.mode==='bot').length);
+    const agentCnt=Array.isArray(resp)?data.filter(c=>c.mode==='agent').length:(resp.agent_count??data.filter(c=>c.mode==='agent').length);
+    convHasMore=Array.isArray(resp)?false:(resp.has_more||false);
+    convTotal=total;
+
+    if(append){
+      // Merge: update existing entries, append new ones
       data.forEach(c=>{
-        const p=allConversations.find(x=>x.phone===c.phone);
-        if(p&&c.total_messages>p.total_messages&&c.phone!==selectedPhone)fireNotification(c.name||'Customer',`New message from ${c.name||c.phone}`);
+        const idx=allConversations.findIndex(x=>x.phone===c.phone);
+        if(idx>=0)allConversations[idx]=c; else allConversations.push(c);
       });
+      convOffset=off+data.length;
+    } else {
+      if(!isFirstLoad){
+        data.forEach(c=>{
+          const p=allConversations.find(x=>x.phone===c.phone);
+          if(p&&c.total_messages>p.total_messages&&c.phone!==selectedPhone)fireNotification(c.name||'Customer',`New message from ${c.name||c.phone}`);
+        });
+      }
+      // Refresh loaded set without truncating load-more items
+      data.forEach(c=>{
+        const idx=allConversations.findIndex(x=>x.phone===c.phone);
+        if(idx>=0)allConversations[idx]=c; else allConversations.unshift(c);
+      });
+      if(allConversations.length===0||isFirstLoad){allConversations=data;convOffset=data.length;}
+      isFirstLoad=false;
     }
-    isFirstLoad=false;allConversations=data;
-    document.getElementById('convCount').textContent=data.length;
-    document.getElementById('cntAll').textContent=data.length;
-    document.getElementById('cntBot').textContent=data.filter(c=>c.mode==='bot').length;
-    document.getElementById('cntAgent').textContent=data.filter(c=>c.mode==='agent').length;
-    const unread=data.reduce((s,c)=>s+(c.unread||0),0);
+
+    document.getElementById('convCount').textContent=total;
+    document.getElementById('cntAll').textContent=total;
+    document.getElementById('cntBot').textContent=botCnt;
+    document.getElementById('cntAgent').textContent=agentCnt;
+    const unread=allConversations.slice(0,100).reduce((s,c)=>s+(c.unread||0),0);
     const nb=document.getElementById('notifCount');nb.textContent=unread;nb.classList.toggle('hidden',unread===0);
-    const agents=[...new Set(data.flatMap(c=>c.agents_involved||[]))].sort();
+    const agents=[...new Set(allConversations.flatMap(c=>c.agents_involved||[]))].sort();
     const sel=document.getElementById('agentFilter');const cur=sel?.value||'';
     if(sel)sel.innerHTML='<option value="">All agents</option>'+agents.map(a=>`<option value="${esc(a)}" ${cur===a?'selected':''}>${esc(a)}</option>`).join('');
     renderConversations();
@@ -1245,7 +1272,10 @@ function renderConversations(){
     return ms&&mf&&ag;
   });
   const list=document.getElementById('convList');
-  if(!filtered.length){list.innerHTML='<div class="no-conv">No conversations found</div>';return;}
+  if(!filtered.length){
+    list.innerHTML='<div class="no-conv">No conversations found</div>'+(convHasMore&&!q?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
+    return;
+  }
   list.innerHTML=filtered.map(c=>{
     const unread=c.unread||0;
     const rn=(c.name||'Customer').replace(/'/g,"\\'");
@@ -1260,7 +1290,7 @@ function renderConversations(){
         </div>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+(convHasMore&&!q?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
 }
 async function selectConv(phone,name,mode,agent){
   // Stop any previous poll immediately — must happen before the await
@@ -1279,7 +1309,6 @@ async function selectConv(phone,name,mode,agent){
   fetch(`/admin/conversations/${phone}/mark-read?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>{});
   const conv=allConversations.find(c=>c.phone===phone);if(conv){conv.unread=0;renderConversations();}
   msgPollInterval=setInterval(loadMessages,7000);
-  loadConversations();
 }
 async function loadMessages(){
   if(!selectedPhone)return;
