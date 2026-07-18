@@ -11,8 +11,13 @@ ssh -i "$KEY" -o StrictHostKeyChecking=no "$HOST" "
   cd $APP_DIR
   echo '→ Pulling latest code...'
   git pull
-  echo '→ Restarting containers...'
-  docker compose restart api
+  echo '→ Building new image...'
+  sudo docker compose build --no-cache api
+  echo '→ Stopping old container...'
+  PID=\$(sudo docker inspect --format '{{.State.Pid}}' koolbuy-api 2>/dev/null || true)
+  if [ -n \"\$PID\" ] && [ \"\$PID\" != '0' ]; then sudo kill -9 \$PID 2>/dev/null || true; sleep 1; fi
+  echo '→ Starting new container...'
+  sudo docker compose up -d api
   echo '✓ Done.'
 "
 echo "✓ Deployed successfully."
