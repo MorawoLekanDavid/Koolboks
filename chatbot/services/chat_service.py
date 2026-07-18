@@ -6,13 +6,12 @@ from fastapi import BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from chatbot.config import (
-    KNOWLEDGE_BASE,
     LEAD_TTL,
     RATE_LIMIT,
-    SYSTEM_PROMPT_TEMPLATE,
     WHATSAPP_CONTACT,
     log,
 )
+from chatbot.services.ai_settings_service import get_live_content
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Product
@@ -165,11 +164,9 @@ def auto_detect_products(products: List[Product], raw_text: str, product_hint: s
     return []
 
 
-def build_system_prompt(user_name: str, inv: str) -> dict:
-    content = SYSTEM_PROMPT_TEMPLATE
-    content = content.replace("{user_name}", user_name)
-    content = content.replace("{knowledge_base}", KNOWLEDGE_BASE)
-    content = content.replace("{inventory}", inv)
+async def build_system_prompt(user_name: str, inv: str) -> dict:
+    instruction, kb = await get_live_content()
+    content = instruction.replace("{user_name}", user_name).replace("{knowledge_base}", kb).replace("{inventory}", inv)
     return {"role": "system", "content": content}
 
 
@@ -194,7 +191,7 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
 
     df = load_products()
     inv = inventory_text(df)
-    system = build_system_prompt(request.user_name, inv)
+    system = await build_system_prompt(request.user_name, inv)
 
     # Welcome
     if request.message.strip() == "__welcome__":

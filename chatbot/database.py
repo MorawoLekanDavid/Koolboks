@@ -1,7 +1,7 @@
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import sessionmaker
 
-from chatbot.config import DATABASE_URL, log
+from chatbot.config import DATABASE_URL, KNOWLEDGE_BASE, SYSTEM_PROMPT_TEMPLATE, log
 from chatbot.models import init_db
 
 db_engine = None
@@ -69,6 +69,61 @@ def init_database():
             _c.commit()
     except Exception as _e:
         log.warning(f"handoff_events migration: {_e}")
+
+    # AI instructions + knowledge base tables, seeded from existing files on first run
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS ai_instructions (
+                    id SERIAL PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    status VARCHAR(20) DEFAULT 'live',
+                    version INTEGER DEFAULT 1,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ai_instructions_status ON ai_instructions (status)"))
+            _c.commit()
+            # Seed from system_prompt.txt if table is empty
+            row = _c.execute(sa_text("SELECT COUNT(*) FROM ai_instructions")).scalar()
+            if row == 0 and SYSTEM_PROMPT_TEMPLATE:
+                _c.execute(
+                    sa_text("INSERT INTO ai_instructions (content, status, version, created_by) VALUES (:c, 'live', 1, 'system')"),
+                    {"c": SYSTEM_PROMPT_TEMPLATE},
+                )
+                _c.commit()
+                log.info("Seeded ai_instructions from system_prompt.txt")
+    except Exception as _e:
+        log.warning(f"ai_instructions migration: {_e}")
+
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS kb_documents (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255),
+                    content TEXT NOT NULL,
+                    file_type VARCHAR(20),
+                    file_size INTEGER,
+                    status VARCHAR(20) DEFAULT 'live',
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_kb_documents_status ON kb_documents (status)"))
+            _c.commit()
+            # Seed from knowledge_base.txt if table is empty
+            row = _c.execute(sa_text("SELECT COUNT(*) FROM kb_documents")).scalar()
+            if row == 0 and KNOWLEDGE_BASE:
+                _c.execute(
+                    sa_text("INSERT INTO kb_documents (name, content, file_type, status, created_by) VALUES (:n, :c, 'txt', 'live', 'system')"),
+                    {"n": "knowledge_base.txt", "c": KNOWLEDGE_BASE},
+                )
+                _c.commit()
+                log.info("Seeded kb_documents from knowledge_base.txt")
+    except Exception as _e:
+        log.warning(f"kb_documents migration: {_e}")
 
     log.info("Database initialized successfully")
 

@@ -8,6 +8,7 @@ from chatbot import database
 from chatbot.core import redis_client
 from chatbot.routers import (
     admin_auth,
+    ai_settings,
     analytics,
     chat,
     conversations,
@@ -56,3 +57,4 @@ app.include_router(products.router)
 app.include_router(templates.router)
 app.include_router(analytics.router)
 app.include_router(followup.router)
+app.include_router(ai_settings.router)

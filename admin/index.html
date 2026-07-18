@@ -336,6 +336,35 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .funnel-lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--g700);margin-bottom:4px;font-weight:600}
 .funnel-track{height:26px;background:var(--g100);border-radius:6px;overflow:hidden}
 .funnel-fill{height:100%;background:var(--orange);border-radius:6px;display:flex;align-items:center;padding-left:8px;color:#fff;font-size:11px;font-weight:700;transition:width .6s;min-width:30px}
+.ai-settings-layout{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
+@media(max-width:900px){.ai-settings-layout{grid-template-columns:1fr}}
+.ai-settings-left{display:flex;flex-direction:column;gap:16px}
+.ai-go-live-banner{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid var(--orange);border-radius:10px;gap:12px}
+.ai-go-live-banner span{font-size:13px;font-weight:600;color:var(--orange-d)}
+.ai-editor{width:100%;min-height:320px;resize:vertical;font-size:13px;font-family:inherit;line-height:1.6;padding:12px;border:1.5px solid var(--g200);border-radius:8px;color:var(--g800);background:var(--g50);box-sizing:border-box}
+.ai-editor:focus{outline:none;border-color:var(--orange);background:#fff}
+.ai-status-badge{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:3px 10px;border-radius:99px}
+.ai-status-badge.live{background:#dcfce7;color:#166534}
+.ai-status-badge.draft{background:#fef9c3;color:#854d0e}
+.kb-section-lbl{font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.kb-doc-list{display:flex;flex-direction:column;gap:6px}
+.kb-doc-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--g200);border-radius:8px;background:#fff}
+.kb-doc-row .kb-doc-icon{font-size:18px;flex-shrink:0}
+.kb-doc-row .kb-doc-info{flex:1;min-width:0}
+.kb-doc-row .kb-doc-name{font-size:13px;font-weight:600;color:var(--g800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kb-doc-row .kb-doc-meta{font-size:11px;color:var(--g400);margin-top:2px}
+.kb-doc-row .kb-doc-preview{font-size:11px;color:var(--g500);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kb-empty{font-size:12px;color:var(--g400);padding:8px 4px;font-style:italic}
+.test-chat-messages{flex:1;min-height:260px;max-height:400px;overflow-y:auto;border:1px solid var(--g200);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--g50)}
+.test-chat-input{flex:1;font-size:13px;font-family:inherit;padding:8px 10px;border:1.5px solid var(--g200);border-radius:8px;resize:none;line-height:1.4}
+.test-chat-input:focus{outline:none;border-color:var(--orange)}
+.tc-msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+.tc-msg.user{background:var(--orange-s);align-self:flex-end;border-radius:10px 0 10px 10px}
+.tc-msg.bot{background:#fff;align-self:flex-start;border-radius:0 10px 10px 10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.tc-msg.typing{color:var(--g400);font-style:italic}
+.ai-hist-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--g200);border-radius:8px;background:#fff}
+.ai-hist-row .ah-meta{flex:1;font-size:12px;color:var(--g500)}
+.ai-hist-row .ah-preview{font-size:11px;color:var(--g700);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
 .agt-table{width:100%;border-collapse:collapse;font-size:13px}
 .agt-table th{text-align:left;padding:6px 8px;font-size:11px;color:var(--g400);font-weight:700;text-transform:uppercase;border-bottom:2px solid var(--g200)}
 .agt-table td{padding:9px 8px;border-bottom:1px solid var(--g100);color:var(--g700)}
@@ -465,6 +494,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
       <button class="htab hidden" id="htabAnalytics"  onclick="switchTab('analytics')">Analytics</button>
       <button class="htab hidden" id="htabTeam"       onclick="switchTab('team')">Team</button>
       <button class="htab hidden" id="htabTemplates"  onclick="switchTab('templates')">Templates</button>
+      <button class="htab hidden" id="htabAISettings" onclick="switchTab('aiSettings')">🤖 AI Settings</button>
     </nav>
     <div class="header-user">
       <div class="notif-wrap">
@@ -740,6 +770,92 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
     </div>
   </div>
 
+  <!-- AI Settings tab -->
+  <div id="aiSettingsTab" class="tab-full hidden">
+    <div class="ai-settings-layout">
+
+      <!-- Left column: Instructions + KB sub-tabs -->
+      <div class="ai-settings-left">
+        <div class="bulk-tabs" style="margin-bottom:16px">
+          <button class="bulk-tab active" id="aiTabInstBtn" onclick="switchAISubTab('inst')">AI Instructions</button>
+          <button class="bulk-tab" id="aiTabKBBtn" onclick="switchAISubTab('kb')">Knowledge Base</button>
+        </div>
+
+        <!-- Go Live banner -->
+        <div id="aiGoLiveBanner" class="ai-go-live-banner hidden">
+          <span id="aiPendingLabel">You have pending changes</span>
+          <button class="btn-primary" onclick="goLive()" style="padding:6px 18px;font-size:13px">🚀 Go Live</button>
+        </div>
+
+        <!-- AI Instructions panel -->
+        <div id="aiInstPanel" class="card" style="padding:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+            <div>
+              <h3 style="margin:0">AI Instructions</h3>
+              <p style="font-size:12px;color:var(--g400);margin:4px 0 0">The system prompt — tells the bot who it is, how to behave, and what to say.</p>
+            </div>
+            <span id="aiInstStatus" class="ai-status-badge live">LIVE</span>
+          </div>
+          <textarea id="aiInstEditor" class="ai-editor" placeholder="Loading…" oninput="onInstEdit()"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="saveDraftInstruction()" id="aiInstSaveBtn" style="opacity:.4;pointer-events:none">Save as Draft</button>
+            <span id="aiInstSavedMsg" style="font-size:12px;color:var(--green);align-self:center;display:none">✓ Saved as draft</span>
+          </div>
+
+          <!-- Version history -->
+          <details style="margin-top:18px">
+            <summary style="font-size:12px;font-weight:700;color:var(--g500);cursor:pointer;user-select:none">Version History</summary>
+            <div id="aiInstHistory" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto"></div>
+          </details>
+        </div>
+
+        <!-- Knowledge Base panel -->
+        <div id="aiKBPanel" class="card hidden" style="padding:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+            <div>
+              <h3 style="margin:0">Knowledge Base</h3>
+              <p style="font-size:12px;color:var(--g400);margin:4px 0 0">Upload documents. The bot uses all <em>Live</em> documents combined.</p>
+            </div>
+            <label class="btn-primary" style="cursor:pointer;padding:7px 16px;font-size:13px">
+              + Upload File
+              <input type="file" id="kbFileInput" accept=".txt,.md,.pdf,.docx,.xlsx" style="display:none" onchange="uploadKBDoc(this)">
+            </label>
+          </div>
+          <p style="font-size:11px;color:var(--g400);margin:-8px 0 14px">Supported: .txt .md .pdf .docx .xlsx — max 10 MB each</p>
+
+          <div id="kbLiveSection">
+            <div class="kb-section-lbl">✅ Live</div>
+            <div id="kbLiveList" class="kb-doc-list"></div>
+          </div>
+          <div id="kbDraftSection" style="margin-top:14px">
+            <div class="kb-section-lbl">📝 Draft (will go live on publish)</div>
+            <div id="kbDraftList" class="kb-doc-list"></div>
+          </div>
+          <div id="kbTrashSection" style="margin-top:14px">
+            <div class="kb-section-lbl">🗑️ Trash</div>
+            <div id="kbTrashList" class="kb-doc-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: Test chat -->
+      <div class="card ai-test-chat">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <h3 style="margin:0">Test Chat</h3>
+          <span style="font-size:11px;color:var(--g400)">Uses draft settings</span>
+        </div>
+        <p style="font-size:12px;color:var(--g500);margin:0 0 12px">Chat with the bot using your <em>unsaved draft</em> before going live.</p>
+        <div id="testChatMessages" class="test-chat-messages"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <textarea id="testChatInput" class="test-chat-input" placeholder="Type a test message…" rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendTestMessage();}"></textarea>
+          <button onclick="sendTestMessage()" class="btn-primary" style="align-self:flex-end;padding:8px 14px">Send</button>
+        </div>
+        <button onclick="clearTestChat()" style="margin-top:8px;font-size:11px;background:none;border:none;color:var(--g400);cursor:pointer;text-align:left">Clear chat</button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Products tab -->
   <div id="productsTab" class="tab-full hidden">
     <div class="products-toolbar">
@@ -1005,7 +1121,7 @@ function showApp(){
   document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   if(agentRole==='super_admin'||agentRole==='admin'){
-    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
+    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
     document.getElementById('htabCanned')?.classList.add('hidden');
   }
   requestNotificationPermission();isFirstLoad=true;
@@ -1070,8 +1186,8 @@ function closeProfileModal(){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates'};
+const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates',aiSettings:'htabAISettings'};
 function switchTab(t){
   Object.keys(TABS).forEach(k=>{
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
@@ -1084,6 +1200,7 @@ function switchTab(t){
   if(t==='analytics')loadAnalytics();
   if(t==='team')loadAgentList();
   if(t==='products')loadProducts();
+  if(t==='aiSettings')loadAISettings();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
@@ -1778,6 +1895,223 @@ async function removeAgent(id){
   if(!confirm('Remove this agent?'))return;
   await fetch(`/admin/agents/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'}).catch(()=>{});
   await loadAgentList();
+}
+
+// ── AI Settings ────────────────────────────────────────────────────────
+let _aiInstOriginal='', _testHistory=[];
+
+function switchAISubTab(tab){
+  document.getElementById('aiInstPanel').classList.toggle('hidden', tab!=='inst');
+  document.getElementById('aiKBPanel').classList.toggle('hidden', tab!=='kb');
+  document.getElementById('aiTabInstBtn').classList.toggle('active', tab==='inst');
+  document.getElementById('aiTabKBBtn').classList.toggle('active', tab==='kb');
+}
+
+async function loadAISettings(){
+  await Promise.all([loadInstructions(), loadKBDocs()]);
+}
+
+// ── Instructions ──
+async function loadInstructions(){
+  try{
+    const r=await fetch(`/admin/ai-settings/instructions?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    const current=d.draft||d.live;
+    if(current){
+      document.getElementById('aiInstEditor').value=current.content;
+      _aiInstOriginal=current.content;
+    }
+    const badge=document.getElementById('aiInstStatus');
+    if(d.draft){badge.textContent='DRAFT';badge.className='ai-status-badge draft';}
+    else{badge.textContent='LIVE';badge.className='ai-status-badge live';}
+    renderInstHistory(d.history||[]);
+    refreshGoLiveBanner(d.has_draft, false);
+  }catch(e){console.error(e);}
+}
+
+function onInstEdit(){
+  const changed=document.getElementById('aiInstEditor').value!==_aiInstOriginal;
+  const btn=document.getElementById('aiInstSaveBtn');
+  btn.style.opacity=changed?'1':'0.4';
+  btn.style.pointerEvents=changed?'auto':'none';
+  document.getElementById('aiInstSavedMsg').style.display='none';
+}
+
+async function saveDraftInstruction(){
+  const content=document.getElementById('aiInstEditor').value.trim();
+  if(!content)return;
+  try{
+    const r=await fetch(`/admin/ai-settings/instructions/draft?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})
+    });
+    if(!r.ok){alert((await r.json().catch(()=>({}))).detail||'Save failed');return;}
+    _aiInstOriginal=content;
+    onInstEdit();
+    document.getElementById('aiInstSavedMsg').style.display='inline';
+    const badge=document.getElementById('aiInstStatus');
+    badge.textContent='DRAFT';badge.className='ai-status-badge draft';
+    refreshGoLiveBanner(true, true);
+    await loadKBDocs(); // refresh pending state
+  }catch(e){console.error(e);}
+}
+
+function renderInstHistory(history){
+  const el=document.getElementById('aiInstHistory');
+  if(!history.length){el.innerHTML='<p class="kb-empty">No previous versions</p>';return;}
+  el.innerHTML=history.map(h=>`
+    <div class="ai-hist-row">
+      <div class="ah-meta">
+        v${h.version} &nbsp;·&nbsp; ${new Date(h.created_at+'Z').toLocaleDateString()} &nbsp;·&nbsp; ${esc(h.created_by||'system')}
+        <div class="ah-preview">${esc(h.content.slice(0,120))}…</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="canned-row-edit" onclick="restoreInstruction(${h.id})" title="Restore as draft">↩ Restore</button>
+        <button class="btn-danger" onclick="deleteInstVersion(${h.id})" title="Delete permanently">🗑</button>
+      </div>
+    </div>`).join('');
+}
+
+async function restoreInstruction(id){
+  if(!confirm('Restore this version as a draft?'))return;
+  const r=await fetch(`/admin/ai-settings/instructions/${id}/restore?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+  if(r.ok){await loadInstructions();alert('Restored as draft — review and click Go Live when ready.');}
+  else alert('Failed to restore');
+}
+
+async function deleteInstVersion(id){
+  if(!confirm('Permanently delete this version?'))return;
+  const r=await fetch(`/admin/ai-settings/instructions/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+  if(r.ok)await loadInstructions();
+  else alert('Failed to delete');
+}
+
+// ── Knowledge Base ──
+async function loadKBDocs(){
+  try{
+    const r=await fetch(`/admin/ai-settings/kb?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    renderKBSection('kbLiveList', d.live, 'live');
+    renderKBSection('kbDraftList', d.draft, 'draft');
+    renderKBSection('kbTrashList', [...d.pending_trash,...d.trashed], 'trash');
+    document.getElementById('kbDraftSection').style.display=d.draft.length?'block':'none';
+    document.getElementById('kbTrashSection').style.display=(d.trashed.length+d.pending_trash.length)?'block':'none';
+    refreshGoLiveBanner(d.has_pending, false);
+  }catch(e){console.error(e);}
+}
+
+function renderKBSection(elId, docs, mode){
+  const el=document.getElementById(elId);
+  if(!docs.length){el.innerHTML=`<p class="kb-empty">None</p>`;return;}
+  const EXT_ICON={'pdf':'📄','docx':'📝','xlsx':'📊','txt':'📃','md':'📃'};
+  el.innerHTML=docs.map(d=>{
+    const icon=EXT_ICON[d.file_type]||'📄';
+    const size=d.file_size?`${(d.file_size/1024).toFixed(1)} KB · `:'';
+    const date=new Date(d.created_at+'Z').toLocaleDateString();
+    let actions='';
+    if(mode==='live')
+      actions=`<button class="btn-danger" onclick="trashKBDoc(${d.id})" title="Move to trash" style="font-size:11px;padding:3px 8px">🗑 Remove</button>`;
+    else if(mode==='draft')
+      actions=`<button class="btn-danger" onclick="trashKBDoc(${d.id})" title="Delete draft" style="font-size:11px;padding:3px 8px">✕ Delete</button>`;
+    else
+      actions=`
+        <button class="canned-row-edit" onclick="restoreKBDoc(${d.id})" style="font-size:11px;padding:3px 8px">↩ Restore</button>
+        <button class="btn-danger" onclick="deleteKBDocPermanent(${d.id})" style="font-size:11px;padding:3px 8px">🗑 Delete</button>`;
+    return `<div class="kb-doc-row">
+      <span class="kb-doc-icon">${icon}</span>
+      <div class="kb-doc-info">
+        <div class="kb-doc-name">${esc(d.name)}</div>
+        <div class="kb-doc-meta">${size}${date} · by ${esc(d.created_by||'system')}</div>
+        <div class="kb-doc-preview">${esc(d.preview||'')}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+async function uploadKBDoc(input){
+  const file=input.files[0];if(!file)return;
+  input.value='';
+  const fd=new FormData();fd.append('file',file);
+  try{
+    const r=await fetch(`/admin/ai-settings/kb/upload?key=${encodeURIComponent(adminKey)}`,{method:'POST',body:fd});
+    const data=await r.json();
+    if(!r.ok){alert(data.detail||'Upload failed');return;}
+    await loadKBDocs();
+    refreshGoLiveBanner(true,true);
+  }catch(e){console.error(e);alert('Upload error');}
+}
+
+async function trashKBDoc(id){
+  const r=await fetch(`/admin/ai-settings/kb/${id}/trash?key=${encodeURIComponent(adminKey)}`,{method:'PATCH'});
+  if(r.ok)await loadKBDocs();
+  else alert('Failed');
+}
+
+async function restoreKBDoc(id){
+  const r=await fetch(`/admin/ai-settings/kb/${id}/restore?key=${encodeURIComponent(adminKey)}`,{method:'PATCH'});
+  if(r.ok)await loadKBDocs();
+  else alert('Failed to restore');
+}
+
+async function deleteKBDocPermanent(id){
+  if(!confirm('Permanently delete this document?'))return;
+  const r=await fetch(`/admin/ai-settings/kb/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+  if(r.ok)await loadKBDocs();
+  else alert('Failed to delete');
+}
+
+// ── Go Live ──
+function refreshGoLiveBanner(hasPending, animate){
+  const banner=document.getElementById('aiGoLiveBanner');
+  if(hasPending){banner.classList.remove('hidden');if(animate)banner.style.animation='none';}
+  else banner.classList.add('hidden');
+}
+
+async function goLive(){
+  if(!confirm('Publish all draft changes to the live bot?'))return;
+  try{
+    const r=await fetch(`/admin/ai-settings/go-live?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok){alert(d.detail||'Failed');return;}
+    alert('✅ ' + d.changes.join('\n'));
+    await loadAISettings();
+  }catch(e){console.error(e);alert('Error');}
+}
+
+// ── Test Chat ──
+async function sendTestMessage(){
+  const input=document.getElementById('testChatInput');
+  const msg=input.value.trim();if(!msg)return;
+  input.value='';
+  appendTestMsg(msg,'user');
+  const typing=appendTestMsg('Thinking…','bot typing');
+  try{
+    const r=await fetch(`/admin/ai-settings/test-chat?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:msg,history:_testHistory})
+    });
+    const d=await r.json();
+    typing.remove();
+    if(!r.ok){appendTestMsg(d.detail||'Error','bot');return;}
+    appendTestMsg(d.reply,'bot');
+    _testHistory.push({role:'user',content:msg},{role:'assistant',content:d.reply});
+    if(_testHistory.length>20)_testHistory=_testHistory.slice(-20);
+  }catch(e){typing.remove();appendTestMsg('Connection error','bot');}
+}
+
+function appendTestMsg(text,cls){
+  const box=document.getElementById('testChatMessages');
+  const div=document.createElement('div');
+  div.className=`tc-msg ${cls}`;div.textContent=text;
+  box.appendChild(div);box.scrollTop=box.scrollHeight;
+  return div;
+}
+
+function clearTestChat(){
+  document.getElementById('testChatMessages').innerHTML='';
+  _testHistory=[];
 }
 
 // ── Products ───────────────────────────────────────────────────────────

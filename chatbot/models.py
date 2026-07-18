@@ -102,6 +102,32 @@ class HandoffEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class AIInstruction(Base):
+    """Versioned system prompt / AI instruction set"""
+    __tablename__ = "ai_instructions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(String, nullable=False)
+    status = Column(String(20), default="draft", index=True)  # live | draft | archived
+    version = Column(Integer, default=1)
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class KBDocument(Base):
+    """Knowledge base document — each file upload is a separate document"""
+    __tablename__ = "kb_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255))               # original filename
+    content = Column(String, nullable=False) # extracted plain text
+    file_type = Column(String(20))           # txt | md | pdf | docx | xlsx
+    file_size = Column(Integer, nullable=True)
+    status = Column(String(20), default="draft", index=True)  # live | draft | pending_trash | trashed
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)
