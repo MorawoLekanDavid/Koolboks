@@ -16,6 +16,7 @@ from chatbot.routers import (
     leads,
     misc,
     products,
+    tags,
     templates,
     webhook,
 )
@@ -57,4 +58,5 @@ app.include_router(products.router)
 app.include_router(templates.router)
 app.include_router(analytics.router)
 app.include_router(followup.router)
+app.include_router(tags.router)
 app.include_router(ai_settings.router)

@@ -125,6 +125,49 @@ def init_database():
     except Exception as _e:
         log.warning(f"kb_documents migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS tags (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(50) NOT NULL UNIQUE,
+                    color VARCHAR(20) NOT NULL DEFAULT '#6366f1',
+                    created_by VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS conversation_tags (
+                    id SERIAL PRIMARY KEY,
+                    phone VARCHAR(30) NOT NULL,
+                    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                    tagged_by VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_conv_tag UNIQUE (phone, tag_id)
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_conversation_tags_phone ON conversation_tags (phone)"))
+            _c.commit()
+            # Seed default tags if empty
+            count = _c.execute(sa_text("SELECT COUNT(*) FROM tags")).scalar()
+            if count == 0:
+                defaults = [
+                    ("Hot Lead", "#ef4444"),
+                    ("Warm Lead", "#f97316"),
+                    ("Follow-up Needed", "#eab308"),
+                    ("Paid", "#22c55e"),
+                    ("Not Interested", "#6b7280"),
+                ]
+                for name, color in defaults:
+                    _c.execute(
+                        sa_text("INSERT INTO tags (name, color, created_by) VALUES (:n, :c, 'system')"),
+                        {"n": name, "c": color},
+                    )
+                _c.commit()
+                log.info("Seeded default tags")
+    except Exception as _e:
+        log.warning(f"tags migration: {_e}")
+
     log.info("Database initialized successfully")
 
 

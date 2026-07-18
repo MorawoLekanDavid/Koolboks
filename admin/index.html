@@ -541,6 +541,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
           <option value="">All agents</option>
         </select>
       </div>
+      <div id="tagFilterRow" style="display:none;padding:0 12px 8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        <span style="font-size:11px;color:var(--g400);font-weight:600;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">Tags:</span>
+        <div id="tagFilterChips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+      </div>
       <div class="conv-list" id="convList"></div>
     </aside>
 
@@ -567,6 +571,15 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
           </div>
           <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()">👤 Take Over</button>
           <button class="handoff-btn take-over" id="sendTmplBtn" onclick="openSendTemplateModal()" style="background:var(--g700);margin-left:6px">📨 Template</button>
+        </div>
+        <!-- Tag bar -->
+        <div id="chatTagBar" style="padding:6px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-height:36px;background:var(--surface)">
+          <div id="chatTagPills" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>
+          <div style="display:flex;gap:5px;flex-shrink:0;position:relative">
+            <button onclick="toggleTagDropdown()" style="font-size:11px;padding:3px 9px;border:1px dashed var(--g300);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap">＋ Tag</button>
+            <button onclick="runAutoTag()" id="autoTagBtn" style="font-size:11px;padding:3px 9px;border:1px solid var(--g200);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap">✨ Auto-tag</button>
+            <div id="tagDropdown" style="display:none;position:absolute;top:28px;right:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:50;min-width:160px;max-height:220px;overflow-y:auto;padding:4px 0"></div>
+          </div>
         </div>
         <div class="messages" id="messages"></div>
         <div class="quick-actions" id="quickActions">
@@ -781,6 +794,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
         <div class="bulk-tabs" style="margin-bottom:16px">
           <button class="bulk-tab active" id="aiTabInstBtn" onclick="switchAISubTab('inst')">AI Instructions</button>
           <button class="bulk-tab" id="aiTabKBBtn" onclick="switchAISubTab('kb')">Knowledge Base</button>
+          <button class="bulk-tab" id="aiTabTagsBtn" onclick="switchAISubTab('tags')">🏷 Tags</button>
         </div>
 
         <!-- Go Live banner -->
@@ -838,6 +852,30 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
             <div id="kbTrashList" class="kb-doc-list"></div>
           </div>
         </div>
+
+        <!-- Tags panel -->
+        <div id="aiTagsPanel" class="card hidden" style="padding:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+            <div>
+              <h3 style="margin:0">Conversation Tags</h3>
+              <p style="font-size:12px;color:var(--g400);margin:4px 0 0">Create labels agents can apply to chats. AI can auto-tag too.</p>
+            </div>
+          </div>
+
+          <!-- Create tag form -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:12px;background:var(--g50);border-radius:10px">
+            <input id="newTagName" placeholder="Tag name…" maxlength="50"
+              style="flex:1;min-width:120px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--surface);color:var(--text)"
+              onkeydown="if(event.key==='Enter')createTag()"/>
+            <div style="display:flex;gap:5px;flex-wrap:wrap" id="colorSwatches">
+              <!-- filled by JS -->
+            </div>
+            <button onclick="createTag()" class="btn-primary" style="padding:7px 16px;font-size:13px;flex-shrink:0">Add Tag</button>
+          </div>
+
+          <div id="tagList" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
       </div>
 
       <!-- Right column: Test chat -->
@@ -1145,7 +1183,7 @@ function showApp(){
     document.getElementById('htabCanned')?.classList.add('hidden');
   }
   requestNotificationPermission();isFirstLoad=true;
-  convOffset=0;loadConversations();pollInterval=setInterval(loadConversations,15000);
+  convOffset=0;loadConversations();loadAllTags();pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);
@@ -1286,11 +1324,11 @@ function renderConversations(){
   const isSearch=_searchResults!==null;
   let filtered;
   if(isSearch){
-    // Results already filtered server-side; only apply mode/agent pill filters
     filtered=_searchResults.filter(c=>{
       const mf=currentFilter==='all'||c.mode===currentFilter;
       const ag=!af||(c.agents_involved||[]).includes(af);
-      return mf&&ag;
+      const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
+      return mf&&ag&&tg;
     });
   } else {
     const q=rawQ.toLowerCase();
@@ -1298,7 +1336,8 @@ function renderConversations(){
       const ms=!q||(c.name||'').toLowerCase().includes(q)||c.phone.includes(q);
       const mf=currentFilter==='all'||c.mode===currentFilter;
       const ag=!af||(c.agents_involved||[]).includes(af);
-      return ms&&mf&&ag;
+      const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
+      return ms&&mf&&ag&&tg;
     });
   }
   const list=document.getElementById('convList');
@@ -1312,9 +1351,14 @@ function renderConversations(){
     const displayName=c.name||c.phone;
     const rn=displayName.replace(/'/g,"\\'");
     const avLetter=c.name?c.name[0].toUpperCase():'#';
+    const tagPills=(c.tags||[]).map(t=>`<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${t.color}22;border:1px solid ${t.color};color:${t.color};font-weight:600;white-space:nowrap">${esc(t.name)}</span>`).join('');
     return `<div class="conv-item ${selectedPhone===c.phone?'active':''}" onclick="selectConv('${c.phone}','${rn}','${c.mode}','${c.agent||''}')">
       <div class="c-av ${c.mode==='agent'?'ag':''}">${avLetter}</div>
-      <div class="c-info"><div class="c-name">${esc(displayName)}</div>${c.name?`<div class="c-phone">${c.phone}</div>`:''}</div>
+      <div class="c-info">
+        <div class="c-name">${esc(displayName)}</div>
+        ${c.name?`<div class="c-phone">${c.phone}</div>`:''}
+        ${tagPills?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">${tagPills}</div>`:''}
+      </div>
       <div class="c-right">
         <div class="c-time">${timeAgo(c.last_message)}</div>
         <div class="c-badges">
@@ -1443,6 +1487,168 @@ async function sendOutreachTemplate(tplIdx, templateName, language){
     if(btn){btn.disabled=false;btn.textContent='Send';}
   }
 }
+// ── Tags ───────────────────────────────────────────────────────────────
+const TAG_PALETTE=['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#6b7280'];
+let _allTags=[], _convTags=[], _selectedTagColor=TAG_PALETTE[0], _activeTagFilter=null;
+
+function _initColorSwatches(){
+  const el=document.getElementById('colorSwatches');
+  if(!el)return;
+  el.innerHTML=TAG_PALETTE.map(c=>`<span onclick="selectTagColor('${c}',this)" title="${c}"
+    style="width:20px;height:20px;border-radius:50%;background:${c};cursor:pointer;display:inline-block;box-sizing:border-box;border:2px solid ${c===_selectedTagColor?'#000':'transparent'};transition:border-color .15s"></span>`).join('');
+}
+function selectTagColor(color, el){
+  _selectedTagColor=color;
+  document.querySelectorAll('#colorSwatches span').forEach(s=>s.style.borderColor='transparent');
+  if(el)el.style.borderColor='#000';
+}
+async function loadAllTags(){
+  try{
+    const r=await fetch(`/admin/tags?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    _allTags=await r.json();
+    renderTagFilterChips();
+    renderTagManagementList();
+    renderTagDropdown();
+  }catch(e){console.error(e);}
+}
+function renderTagFilterChips(){
+  const el=document.getElementById('tagFilterChips');
+  const row=document.getElementById('tagFilterRow');
+  if(!el)return;
+  if(row)row.style.display=_allTags.length?'flex':'none';
+  el.innerHTML=_allTags.map(t=>`<button onclick="setTagFilter(${t.id},this)"
+    style="font-size:11px;padding:2px 9px;border-radius:12px;border:2px solid ${t.color};background:${_activeTagFilter===t.id?t.color:'transparent'};color:${_activeTagFilter===t.id?'#fff':t.color};cursor:pointer;font-weight:600;transition:all .15s"
+    >${esc(t.name)}</button>`).join('');
+}
+function setTagFilter(tagId, el){
+  _activeTagFilter=(_activeTagFilter===tagId)?null:tagId;
+  renderTagFilterChips();
+  renderConversations();
+}
+function renderTagManagementList(){
+  const el=document.getElementById('tagList');
+  if(!el)return;
+  if(!_allTags.length){el.innerHTML='<div style="color:var(--g400);font-size:13px;text-align:center;padding:20px">No tags yet — add one above.</div>';return;}
+  el.innerHTML=_allTags.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+    <span style="width:14px;height:14px;border-radius:50%;background:${t.color};flex-shrink:0;display:inline-block"></span>
+    <span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${esc(t.name)}</span>
+    <span style="font-size:11px;padding:2px 9px;border-radius:10px;background:${t.color}22;color:${t.color};font-weight:700">${esc(t.name)}</span>
+    <button onclick="deleteTag(${t.id})" style="background:none;border:none;color:var(--g400);cursor:pointer;font-size:16px;padding:0 4px;line-height:1" title="Delete">🗑</button>
+  </div>`).join('');
+}
+async function createTag(){
+  const nameEl=document.getElementById('newTagName');
+  const name=(nameEl?.value||'').trim();
+  if(!name){nameEl?.focus();return;}
+  try{
+    const r=await fetch(`/admin/tags?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,color:_selectedTagColor})
+    });
+    if(!r.ok){const e=await r.json().catch(()=>({}));alert(e.detail||'Could not create tag');return;}
+    nameEl.value='';
+    await loadAllTags();
+  }catch(e){alert('Error creating tag');}
+}
+async function deleteTag(tagId){
+  if(!confirm('Delete this tag? It will be removed from all conversations.'))return;
+  try{
+    await fetch(`/admin/tags/${tagId}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+    if(_activeTagFilter===tagId)_activeTagFilter=null;
+    await loadAllTags();
+    if(selectedPhone)loadConvTags(selectedPhone);
+  }catch(e){alert('Error deleting tag');}
+}
+
+// ── Per-conversation tag controls ───────────────────────────────────────
+async function loadConvTags(phone){
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/tags?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    _convTags=await r.json();
+    renderChatTagPills();
+    renderTagDropdown();
+  }catch(e){console.error(e);}
+}
+function renderChatTagPills(){
+  const el=document.getElementById('chatTagPills');
+  if(!el)return;
+  if(!_convTags.length){el.innerHTML='<span style="font-size:11px;color:var(--g400)">No tags</span>';return;}
+  el.innerHTML=_convTags.map(t=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;background:${t.color}22;border:1px solid ${t.color};font-size:11px;font-weight:600;color:${t.color}">
+    ${esc(t.name)}${t.tagged_by==='AI ✨'?'<span title="AI tagged" style="opacity:.7"> ✨</span>':''}
+    <button onclick="removeConvTag(${t.tag_id})" style="background:none;border:none;color:${t.color};cursor:pointer;font-size:12px;padding:0;margin-left:2px;line-height:1" title="Remove">×</button>
+  </span>`).join('');
+}
+function renderTagDropdown(){
+  const el=document.getElementById('tagDropdown');
+  if(!el)return;
+  const applied=new Set(_convTags.map(t=>t.tag_id));
+  const available=_allTags.filter(t=>!applied.has(t.id));
+  if(!available.length){
+    el.innerHTML='<div style="padding:10px 14px;font-size:12px;color:var(--g400)">All tags applied</div>';
+    return;
+  }
+  el.innerHTML=available.map(t=>`<button onclick="addConvTag(${t.id})"
+    style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 14px;border:none;background:none;cursor:pointer;text-align:left;font-size:13px;color:var(--text)">
+    <span style="width:10px;height:10px;border-radius:50%;background:${t.color};flex-shrink:0;display:inline-block"></span>${esc(t.name)}
+  </button>`).join('');
+}
+function toggleTagDropdown(){
+  const el=document.getElementById('tagDropdown');
+  if(!el)return;
+  const isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  if(!isOpen){renderTagDropdown();}
+}
+document.addEventListener('click',e=>{
+  const dd=document.getElementById('tagDropdown');
+  if(dd&&!dd.contains(e.target)&&!e.target.closest('[onclick="toggleTagDropdown()"]'))dd.style.display='none';
+});
+async function addConvTag(tagId){
+  if(!selectedPhone)return;
+  document.getElementById('tagDropdown').style.display='none';
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/tags/${tagId}?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    if(!r.ok)return;
+    const t=await r.json();
+    if(!_convTags.find(x=>x.tag_id===t.tag_id))_convTags.push(t);
+    renderChatTagPills();
+    renderTagDropdown();
+    // Update conversation list item in-memory
+    const conv=allConversations.find(c=>c.phone===selectedPhone);
+    if(conv){conv.tags=_convTags.slice();renderConversations();}
+  }catch(e){console.error(e);}
+}
+async function removeConvTag(tagId){
+  if(!selectedPhone)return;
+  try{
+    await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/tags/${tagId}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+    _convTags=_convTags.filter(t=>t.tag_id!==tagId);
+    renderChatTagPills();
+    renderTagDropdown();
+    const conv=allConversations.find(c=>c.phone===selectedPhone);
+    if(conv){conv.tags=_convTags.slice();renderConversations();}
+  }catch(e){console.error(e);}
+}
+async function runAutoTag(){
+  if(!selectedPhone)return;
+  const btn=document.getElementById('autoTagBtn');
+  btn.disabled=true;btn.textContent='✨ Tagging…';
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/auto-tag?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    if(!r.ok){const e=await r.json().catch(()=>({}));alert(e.detail||'Auto-tag failed');return;}
+    const data=await r.json();
+    await loadConvTags(selectedPhone);
+    const conv=allConversations.find(c=>c.phone===selectedPhone);
+    if(conv){conv.tags=_convTags.slice();renderConversations();}
+    if(data.applied.length)btn.textContent=`✨ Tagged: ${data.applied.join(', ')}`;
+    else btn.textContent='✨ No matches';
+    setTimeout(()=>{btn.textContent='✨ Auto-tag';},3000);
+  }catch(e){btn.textContent='✨ Auto-tag';}
+  finally{btn.disabled=false;}
+}
+
 async function selectConv(phone,name,mode,agent){
   // Stop any previous poll immediately — must happen before the await
   if(msgPollInterval){clearInterval(msgPollInterval);msgPollInterval=null;}
@@ -1451,6 +1657,7 @@ async function selectConv(phone,name,mode,agent){
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
   document.getElementById('chatName').textContent=name;
   updateChatUI(mode,agent);
+  _convTags=[];renderChatTagPills();loadConvTags(phone);
   document.getElementById('chatPanel').classList.add('mobile-open');
   // Clear messages immediately so stale content never shows
   document.getElementById('messages').innerHTML='<div style="padding:40px;text-align:center;color:var(--g400);font-size:13px">Loading…</div>';
@@ -2083,8 +2290,11 @@ let _aiInstOriginal='', _testHistory=[], _hasInstDraft=false, _hasKBPending=fals
 function switchAISubTab(tab){
   document.getElementById('aiInstPanel').classList.toggle('hidden', tab!=='inst');
   document.getElementById('aiKBPanel').classList.toggle('hidden', tab!=='kb');
+  document.getElementById('aiTagsPanel').classList.toggle('hidden', tab!=='tags');
   document.getElementById('aiTabInstBtn').classList.toggle('active', tab==='inst');
   document.getElementById('aiTabKBBtn').classList.toggle('active', tab==='kb');
+  document.getElementById('aiTabTagsBtn').classList.toggle('active', tab==='tags');
+  if(tab==='tags'){_initColorSwatches();loadAllTags();}
 }
 
 async function loadAISettings(){

@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, Float, DateTime, Integer, Boolean, create_engine
+from sqlalchemy import Column, String, Float, DateTime, Integer, Boolean, ForeignKey, UniqueConstraint, create_engine
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from datetime import datetime
 
 Base = declarative_base()
@@ -126,6 +127,34 @@ class KBDocument(Base):
     status = Column(String(20), default="draft", index=True)  # live | draft | pending_trash | trashed
     created_by = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class Tag(Base):
+    """Label that can be applied to conversations"""
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), nullable=False, unique=True)
+    color = Column(String(20), nullable=False, default="#6366f1")
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    conversation_tags = relationship("ConversationTag", back_populates="tag", cascade="all, delete-orphan")
+
+
+class ConversationTag(Base):
+    """Junction: a tag applied to a specific conversation (phone)"""
+    __tablename__ = "conversation_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String(30), nullable=False, index=True)
+    tag_id = Column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), nullable=False)
+    tagged_by = Column(String(100), nullable=True)  # agent name or "AI ✨"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tag = relationship("Tag", back_populates="conversation_tags")
+
+    __table_args__ = (UniqueConstraint("phone", "tag_id", name="uq_conv_tag"),)
 
 
 def init_db(database_url: str):

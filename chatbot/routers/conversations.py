@@ -17,7 +17,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import CannedResponse, HandoffEvent, Message
+from chatbot.models import CannedResponse, ConversationTag, HandoffEvent, Message, Tag
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -108,11 +108,31 @@ async def list_conversations(
                     ).all()
                 }
 
-            return total, rows, phones, agent_rows, inbound_totals
+            tags_rows = []
+            if phones:
+                tags_rows = db.execute(
+                    select(
+                        ConversationTag.phone,
+                        Tag.id.label("tag_id"),
+                        Tag.name.label("tag_name"),
+                        Tag.color.label("tag_color"),
+                        ConversationTag.tagged_by,
+                    )
+                    .join(Tag, ConversationTag.tag_id == Tag.id)
+                    .where(ConversationTag.phone.in_(phones))
+                ).all()
+
+            return total, rows, phones, agent_rows, inbound_totals, tags_rows
         finally:
             db.close()
 
-    total, rows, phones, agent_rows, inbound_totals = await run_in_threadpool(_db_fetch)
+    total, rows, phones, agent_rows, inbound_totals, tags_rows = await run_in_threadpool(_db_fetch)
+
+    tags_map: dict = {}
+    for tr in tags_rows:
+        tags_map.setdefault(tr.phone, []).append(
+            {"tag_id": tr.tag_id, "name": tr.tag_name, "color": tr.tag_color, "tagged_by": tr.tagged_by}
+        )
 
     agent_map: dict = {}
     for ar in agent_rows:
@@ -181,6 +201,7 @@ async def list_conversations(
                 "agent": handoff if handoff and handoff != "1" else None,
                 "unread": unread,
                 "agents_involved": agent_map.get(r.phone, []),
+                "tags": tags_map.get(r.phone, []),
             }
         )
 
