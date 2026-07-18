@@ -1309,10 +1309,12 @@ function renderConversations(){
   }
   list.innerHTML=filtered.map(c=>{
     const unread=c.unread||0;
-    const rn=(c.name||'Customer').replace(/'/g,"\\'");
+    const displayName=c.name||c.phone;
+    const rn=displayName.replace(/'/g,"\\'");
+    const avLetter=c.name?c.name[0].toUpperCase():'#';
     return `<div class="conv-item ${selectedPhone===c.phone?'active':''}" onclick="selectConv('${c.phone}','${rn}','${c.mode}','${c.agent||''}')">
-      <div class="c-av ${c.mode==='agent'?'ag':''}">${(c.name||'C')[0].toUpperCase()}</div>
-      <div class="c-info"><div class="c-name">${esc(c.name||'Customer')}</div><div class="c-phone">${c.phone}</div></div>
+      <div class="c-av ${c.mode==='agent'?'ag':''}">${avLetter}</div>
+      <div class="c-info"><div class="c-name">${esc(displayName)}</div>${c.name?`<div class="c-phone">${c.phone}</div>`:''}</div>
       <div class="c-right">
         <div class="c-time">${timeAgo(c.last_message)}</div>
         <div class="c-badges">
@@ -1435,7 +1437,7 @@ async function sendOutreachTemplate(tplIdx, templateName, language){
     // Open the conversation immediately
     const normPh=ph.startsWith('+')?ph:'+'+ph;
     const match=allConversations.find(c=>c.phone===normPh||c.phone===ph);
-    if(match)selectConv(match.phone,match.name||'Customer',match.mode,match.agent||'');
+    if(match)selectConv(match.phone,match.name||match.phone,match.mode,match.agent||'');
   }catch(e){
     errEl.textContent=e.message;errEl.style.display='block';
     if(btn){btn.disabled=false;btn.textContent='Send';}
