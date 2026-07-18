@@ -157,6 +157,20 @@ class ConversationTag(Base):
     __table_args__ = (UniqueConstraint("phone", "tag_id", name="uq_conv_tag"),)
 
 
+class LeadAssignmentRule(Base):
+    """Rule for automatically assigning leads to agents"""
+    __tablename__ = "lead_assignment_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    condition_field = Column(String(50), nullable=False)    # product_interest | business | status | any
+    condition_operator = Column(String(20), nullable=False) # contains | equals | is_empty | is_not_empty | any
+    condition_value = Column(String(255), nullable=True)
+    assign_to = Column(String(255), nullable=False)         # agent name
+    priority = Column(Integer, default=0, index=True)       # lower = evaluated first
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)

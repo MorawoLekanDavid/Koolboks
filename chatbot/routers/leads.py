@@ -47,6 +47,8 @@ async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx)):
                 "amount": lead.amount, "payment_plan": lead.payment_plan,
                 "address": lead.address, "active_duration": lead.active_duration,
                 "created_at": lead.created_at.isoformat() if lead.created_at else None,
+                "assigned_to": lead.assigned_to,
+                "status": lead.status or "new",
                 "score": score, "interest": interest,
                 "activity": {
                     "first_seen": activity.first_seen.isoformat() if activity and activity.first_seen else None,
@@ -79,6 +81,14 @@ async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx)):
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
+
+
+class AssignIn(BaseModel):
+    assign_to: Optional[str] = None   # None = unassign
+
+
+class StatusIn(BaseModel):
+    status: str
 
 
 class NoteIn(BaseModel):
@@ -131,6 +141,8 @@ async def list_leads(
                     "product_interest": l.product_interest,
                     "business": l.business, "amount": l.amount,
                     "created_at": l.created_at.isoformat() if l.created_at else None,
+                    "assigned_to": l.assigned_to,
+                    "status": l.status or "new",
                 }
                 for l in leads
             ]
@@ -179,3 +191,40 @@ async def list_dropoffs(
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
+
+
+@router.patch("/{phone}/assign")
+async def assign_lead(phone: str, body: AssignIn, ctx: dict = Depends(get_admin_ctx)):
+    def _update():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if not lead:
+                raise HTTPException(404, "Lead not found")
+            lead.assigned_to = body.assign_to or None
+            db.commit()
+            return {"ok": True, "assigned_to": lead.assigned_to}
+        finally:
+            db.close()
+    return await run_in_threadpool(_update)
+
+
+@router.patch("/{phone}/status")
+async def update_lead_status(phone: str, body: StatusIn, ctx: dict = Depends(get_admin_ctx)):
+    valid = {"new", "interested", "follow_up", "drop_off", "converted"}
+    if body.status not in valid:
+        raise HTTPException(400, f"Invalid status. Must be one of: {', '.join(sorted(valid))}")
+    def _update():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if not lead:
+                raise HTTPException(404, "Lead not found")
+            lead.status = body.status
+            db.commit()
+            return {"ok": True, "status": lead.status}
+        finally:
+            db.close()
+    return await run_in_threadpool(_update)

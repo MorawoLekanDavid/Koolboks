@@ -10,6 +10,7 @@ from chatbot.routers import (
     admin_auth,
     ai_settings,
     analytics,
+    assignment,
     chat,
     conversations,
     followup,
@@ -54,6 +55,7 @@ app.include_router(webhook.router)
 app.include_router(admin_auth.router)
 app.include_router(conversations.router)
 app.include_router(leads.router)
+app.include_router(assignment.router)
 app.include_router(products.router)
 app.include_router(templates.router)
 app.include_router(analytics.router)

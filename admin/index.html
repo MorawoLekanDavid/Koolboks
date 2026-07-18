@@ -386,6 +386,24 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .role-badge.super_admin{background:#fef3c7;color:#92400e}
 .role-badge.admin{background:var(--orange-s);color:var(--orange)}
 .role-badge.agent{background:var(--g100);color:var(--g500)}
+/* Assignment */
+.assign-sel{padding:4px 8px;border:1.5px solid var(--g200);border-radius:7px;font-size:12px;font-family:inherit;color:var(--g700);background:#fff;cursor:pointer;max-width:130px}
+.assign-sel:focus{outline:none;border-color:var(--orange)}
+.assign-sel.unassigned{color:var(--g400);border-style:dashed}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.status-badge.new{background:var(--g100);color:var(--g500)}
+.status-badge.interested{background:var(--green-s);color:#15803d}
+.status-badge.follow_up{background:#fef9c3;color:#854d0e}
+.status-badge.drop_off{background:var(--red-s);color:#b91c1c}
+.status-badge.converted{background:#ede9fe;color:#5b21b6}
+.rule-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--g200);border-radius:8px;background:#fff;flex-wrap:wrap}
+.rule-row-text{flex:1;font-size:13px;color:var(--g700);min-width:0}
+.rule-condition{color:var(--g500);font-size:12px}
+.rule-arrow{color:var(--orange);font-weight:700;margin:0 4px}
+.rule-assignee{font-weight:700;color:var(--g900)}
+.assign-panel-sel{width:100%;padding:7px 10px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g800);background:#fff;outline:none}
+.assign-panel-sel:focus{border-color:var(--orange)}
+
 /* Leads */
 .leads-summary-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
 .lead-stat-c{flex:1;min-width:120px;background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:var(--sh);cursor:pointer;border:2px solid transparent;transition:all .15s}
@@ -661,6 +679,25 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
             </div>
           </div>
           <div class="d-section">
+            <div class="d-section-title">Assignment</div>
+            <div class="d-row" style="align-items:center">
+              <span class="lbl">Assigned to</span>
+              <select class="assign-sel" id="dAssignSel" onchange="assignLeadFromDetail(this.value)" style="max-width:none;flex:1;text-align:right">
+                <option value="">Unassigned</option>
+              </select>
+            </div>
+            <div class="d-row" style="align-items:center">
+              <span class="lbl">Status</span>
+              <select class="assign-sel" id="dStatusSel" onchange="updateLeadStatus(currentDetailPhone,this.value)" style="max-width:none;flex:1;text-align:right">
+                <option value="new">New</option>
+                <option value="interested">Interested</option>
+                <option value="follow_up">Follow-up</option>
+                <option value="drop_off">Drop-off</option>
+                <option value="converted">Converted</option>
+              </select>
+            </div>
+          </div>
+          <div class="d-section">
             <div class="d-section-title">Lead Information</div>
             <div class="d-row"><span class="lbl">Business</span><span class="val" id="dBusiness">-</span></div>
             <div class="d-row"><span class="lbl">Product</span><span class="val" id="dProduct">-</span></div>
@@ -709,11 +746,66 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
             <span style="font-size:12px;color:var(--g400)">to</span>
             <input type="date" class="date-inp" id="leadsDateTo" onchange="applyLeadDateFilter()"/>
             <button class="btn-dl hidden" id="downloadBtn" onclick="downloadCurrentGroup()">⬇ CSV</button>
+            <button class="btn-dl" onclick="toggleRulesPanel()">⚡ Auto-assign Rules</button>
           </div>
         </div>
         <span style="font-size:12px;color:var(--g400);display:block;margin-bottom:12px" id="leadsListCount"></span>
         <div id="leadsListBody"></div>
       </div>
+
+      <!-- Assignment Rules Panel -->
+      <div class="card hidden" id="assignRulesPanel">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin:0">Auto-Assignment Rules</h3>
+            <p style="font-size:12px;color:var(--g400);margin:4px 0 0">Rules are checked top-to-bottom. First match wins. Only applies to unassigned leads.</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-primary" style="background:var(--green)" onclick="runAutoAssign()">▶ Run Now</button>
+            <button class="btn-dl" onclick="toggleRulesPanel()">✕ Close</button>
+          </div>
+        </div>
+
+        <!-- Add rule form -->
+        <div style="background:var(--g50);border-radius:10px;padding:14px;margin-bottom:16px;border:1px solid var(--g200)">
+          <div style="font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Add New Rule</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:1;min-width:130px">
+              <label style="font-size:11px;color:var(--g400);font-weight:600;display:block;margin-bottom:5px">When field</label>
+              <select id="ruleField" class="assign-panel-sel" onchange="onRuleFieldChange()">
+                <option value="any">Any lead</option>
+                <option value="product_interest">Product interest</option>
+                <option value="business">Business</option>
+                <option value="status">Status</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:130px" id="ruleOpWrap">
+              <label style="font-size:11px;color:var(--g400);font-weight:600;display:block;margin-bottom:5px">Operator</label>
+              <select id="ruleOp" class="assign-panel-sel" onchange="onRuleOpChange()">
+                <option value="contains">contains</option>
+                <option value="equals">equals</option>
+                <option value="is_empty">is empty</option>
+                <option value="is_not_empty">is not empty</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:130px" id="ruleValueWrap">
+              <label style="font-size:11px;color:var(--g400);font-weight:600;display:block;margin-bottom:5px">Value</label>
+              <input type="text" id="ruleValue" class="assign-panel-sel" placeholder="e.g. solar freezer"/>
+            </div>
+            <div style="flex:1;min-width:130px">
+              <label style="font-size:11px;color:var(--g400);font-weight:600;display:block;margin-bottom:5px">Assign to agent</label>
+              <select id="ruleAgent" class="assign-panel-sel"><option value="">— select agent —</option></select>
+            </div>
+            <button class="btn-primary" onclick="saveAssignmentRule()" style="flex-shrink:0">+ Add Rule</button>
+          </div>
+          <div id="ruleErr" style="color:#dc2626;font-size:12px;margin-top:8px;display:none"></div>
+        </div>
+
+        <!-- Rules list -->
+        <div id="assignRulesList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="autoAssignResult" style="display:none;margin-top:12px;padding:10px 14px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;font-size:13px;font-weight:600;color:#15803d"></div>
+      </div>
+
     </div>
     <div class="leads-chat-col" id="leadsChatCol"></div>
   </div>
@@ -1142,6 +1234,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 // ── State ──────────────────────────────────────────────────────────────
 let adminKey='', agentName='', agentRole='agent', agentEmail='';
 let selectedPhone=null, selectedMode='bot';
+let allAgents=[];
 let allConversations=[], currentFilter='all';
 let interestedLeads=[], dropoffLeads=[], activeLeadGroup='interested';
 let pollInterval=null, msgPollInterval=null, isFirstLoad=true;
@@ -2032,6 +2125,14 @@ async function loadLeadDetails(phone){
     document.getElementById('dScore').textContent=`${lead.score}/100`;
     const iv=document.getElementById('dInterest');iv.textContent=lead.interest;
     iv.className='score-val '+(lead.interest==='High'?'green':lead.interest==='Medium'?'orange':'red');
+    // Populate assignment select
+    const asel=document.getElementById('dAssignSel');
+    asel.innerHTML='<option value="">Unassigned</option>'+allAgents.map(a=>`<option value="${esc(a.name)}" ${lead.assigned_to===a.name?'selected':''}>${esc(a.name)}</option>`).join('');
+    asel.value=lead.assigned_to||'';
+    // Populate status select
+    const ssel=document.getElementById('dStatusSel');
+    ssel.value=lead.status||'new';
+
     document.getElementById('dBusiness').textContent=lead.business||'-';
     document.getElementById('dProduct').textContent=lead.product_interest||'-';
     document.getElementById('dAmount').textContent=lead.amount||'-';
@@ -2104,12 +2205,22 @@ async function loadLeads(){
   const to=document.getElementById('leadsDateTo')?.value||'';
   const p=new URLSearchParams({key:adminKey});if(from)p.append('date_from',from);if(to)p.append('date_to',to);
   try{
-    const[ir,dr]=await Promise.all([fetch(`/admin/leads?${p}`),fetch(`/admin/leads/dropoffs?${p}`)]);
-    interestedLeads=ir.ok?await ir.json():[];dropoffLeads=dr.ok?await dr.json():[];
+    const[ir,dr,ar]=await Promise.all([
+      fetch(`/admin/leads?${p}`),
+      fetch(`/admin/leads/dropoffs?${p}`),
+      allAgents.length?null:fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`),
+    ]);
+    interestedLeads=ir.ok?await ir.json():[];
+    dropoffLeads=dr.ok?await dr.json():[];
+    if(ar&&ar.ok){allAgents=await ar.json();_populateAgentDropdowns();}
     document.getElementById('countInterested').textContent=interestedLeads.length;
     document.getElementById('countDropoff').textContent=dropoffLeads.length;
     if(activeLeadGroup)showLeadGroup(activeLeadGroup);
   }catch(e){console.error(e);}
+}
+function _populateAgentDropdowns(){
+  const opts='<option value="">— select agent —</option>'+allAgents.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+  const sel=document.getElementById('ruleAgent');if(sel)sel.innerHTML=opts;
 }
 function applyLeadDateFilter(){loadLeads();}
 function showLeadGroup(g){
@@ -2126,11 +2237,15 @@ function showLeadGroup(g){
     const name=l.name||l.phone;
     const init=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const rn=(l.name||'Customer').replace(/'/g,"\\'");
+    const ph=(l.whatsapp_phone||l.phone).replace(/'/g,"\\'");
     const meta=isInt?[l.phone,l.product_interest,l.business,l.amount].filter(Boolean).join(' · '):`Last seen ${timeAgo(l.last_message)} · ${l.message_count} msg${l.message_count!==1?'s':''}`;
+    const agentOpts=isInt?'<option value="">Unassigned</option>'+allAgents.map(a=>`<option value="${esc(a.name)}" ${l.assigned_to===a.name?'selected':''}>${esc(a.name)}</option>`).join(''):'';
+    const assignCol=isInt?`<select class="assign-sel ${l.assigned_to?'':'unassigned'}" onchange="assignLead('${ph}',this.value,this)">${agentOpts}</select>`:'';
+    const statusCol=isInt?`<span class="status-badge ${l.status||'new'}">${(l.status||'new').replace('_',' ')}</span>`:'';
     return `<div class="lead-row">
       <div class="lead-av-sm">${init}</div>
       <div class="lead-info-b"><div class="lead-name-t">${esc(name)}</div><div class="lead-meta-t">${esc(meta)}</div></div>
-      <div><button class="btn-view-chat" onclick="viewLeadChat('${l.whatsapp_phone||l.phone}','${rn}')">💬 View Chat</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap">${statusCol}${assignCol}<button class="btn-view-chat" onclick="viewLeadChat('${ph}','${rn}')">💬 Chat</button></div>
     </div>`;
   }).join('');
 }
@@ -2147,6 +2262,120 @@ function viewLeadChat(phone,name){
   openLeadChatPanel();
   const conv=allConversations.find(c=>c.phone===phone);
   selectConv(phone,name,conv?conv.mode:'bot',conv?(conv.agent||''):'');
+}
+
+// ── Lead Assignment ─────────────────────────────────────────────────────
+async function assignLead(phone,agentName,selEl){
+  try{
+    const r=await fetch(`/admin/leads/${encodeURIComponent(phone)}/assign?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({assign_to:agentName||null})
+    });
+    if(!r.ok)throw new Error();
+    if(selEl){selEl.className='assign-sel '+(agentName?'':'unassigned');}
+  }catch(e){alert('Failed to assign lead. Please try again.');}
+}
+async function assignLeadFromDetail(agentName){
+  if(!currentDetailPhone)return;
+  await assignLead(currentDetailPhone,agentName,null);
+}
+async function updateLeadStatus(phone,status){
+  if(!phone)return;
+  try{
+    await fetch(`/admin/leads/${encodeURIComponent(phone)}/status?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status})
+    });
+    // refresh list badge
+    const badge=document.querySelector(`.status-badge[data-phone="${phone}"]`);
+    if(badge){badge.className=`status-badge ${status}`;badge.textContent=status.replace('_',' ');}
+  }catch(e){alert('Failed to update status.');}
+}
+
+// ── Assignment Rules ────────────────────────────────────────────────────
+let assignmentRules=[];
+
+function toggleRulesPanel(){
+  const p=document.getElementById('assignRulesPanel');
+  if(p.classList.contains('hidden')){p.classList.remove('hidden');loadAssignmentRules();}
+  else p.classList.add('hidden');
+}
+function onRuleFieldChange(){
+  const f=document.getElementById('ruleField').value;
+  const opWrap=document.getElementById('ruleOpWrap');
+  const valWrap=document.getElementById('ruleValueWrap');
+  if(f==='any'){opWrap.style.display='none';valWrap.style.display='none';}
+  else{opWrap.style.display='';onRuleOpChange();}
+}
+function onRuleOpChange(){
+  const op=document.getElementById('ruleOp').value;
+  document.getElementById('ruleValueWrap').style.display=(op==='is_empty'||op==='is_not_empty')?'none':'';
+}
+async function loadAssignmentRules(){
+  try{
+    const r=await fetch(`/admin/assignment-rules?key=${encodeURIComponent(adminKey)}`);
+    assignmentRules=r.ok?await r.json():[];
+    renderAssignmentRules();
+  }catch(e){console.error(e);}
+}
+function renderAssignmentRules(){
+  const el=document.getElementById('assignRulesList');
+  if(!assignmentRules.length){
+    el.innerHTML='<p style="color:var(--g400);font-size:13px;padding:8px 0">No rules yet. Add one above.</p>';return;
+  }
+  el.innerHTML=assignmentRules.map((r,i)=>{
+    const fieldLabel={product_interest:'Product interest',business:'Business',status:'Status',any:'Any lead'}[r.condition_field]||r.condition_field;
+    const opLabel={contains:'contains',equals:'equals',is_empty:'is empty',is_not_empty:'is not empty',any:'(any)'}[r.condition_operator]||r.condition_operator;
+    const condText=r.condition_field==='any'?'Any lead':`${fieldLabel} ${opLabel}${r.condition_value?' "'+r.condition_value+'"':''}`;
+    return `<div class="rule-row">
+      <span style="background:var(--g100);color:var(--g500);font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;flex-shrink:0">#${i+1}</span>
+      <div class="rule-row-text">
+        <span class="rule-condition">${esc(condText)}</span>
+        <span class="rule-arrow"> → </span>
+        <span class="rule-assignee">👤 ${esc(r.assign_to)}</span>
+      </div>
+      <button onclick="deleteAssignmentRule(${r.id})" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--g400);padding:2px 6px;flex-shrink:0" title="Delete rule">✕</button>
+    </div>`;
+  }).join('');
+}
+async function saveAssignmentRule(){
+  const field=document.getElementById('ruleField').value;
+  const op=field==='any'?'any':document.getElementById('ruleOp').value;
+  const val=document.getElementById('ruleValue').value.trim();
+  const agent=document.getElementById('ruleAgent').value;
+  const errEl=document.getElementById('ruleErr');
+  errEl.style.display='none';
+  if(!agent){errEl.textContent='Please select an agent.';errEl.style.display='block';return;}
+  if(field!=='any'&&op!=='is_empty'&&op!=='is_not_empty'&&!val){errEl.textContent='Please enter a value to match.';errEl.style.display='block';return;}
+  try{
+    const r=await fetch(`/admin/assignment-rules?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({condition_field:field,condition_operator:op,condition_value:val||null,assign_to:agent,priority:assignmentRules.length})
+    });
+    if(!r.ok){const d=await r.json();errEl.textContent=d.detail||'Failed to save rule.';errEl.style.display='block';return;}
+    document.getElementById('ruleValue').value='';
+    document.getElementById('ruleAgent').value='';
+    await loadAssignmentRules();
+  }catch(e){errEl.textContent='Network error.';errEl.style.display='block';}
+}
+async function deleteAssignmentRule(id){
+  if(!confirm('Delete this rule?'))return;
+  try{
+    await fetch(`/admin/assignment-rules/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+    await loadAssignmentRules();
+  }catch(e){alert('Failed to delete rule.');}
+}
+async function runAutoAssign(){
+  const btn=document.querySelector('#assignRulesPanel button[onclick="runAutoAssign()"]');
+  const origText=btn.textContent;btn.textContent='Running…';btn.disabled=true;
+  const resEl=document.getElementById('autoAssignResult');resEl.style.display='none';
+  try{
+    const r=await fetch(`/admin/assignment-rules/run?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    const d=await r.json();
+    resEl.textContent='✓ '+d.message;resEl.style.display='block';
+    await loadLeads();
+  }catch(e){resEl.textContent='Error running auto-assign.';resEl.style.color='#dc2626';resEl.style.display='block';}
+  finally{btn.textContent=origText;btn.disabled=false;}
 }
 
 // ── Analytics ──────────────────────────────────────────────────────────

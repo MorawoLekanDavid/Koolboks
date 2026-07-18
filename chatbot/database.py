@@ -168,6 +168,25 @@ def init_database():
     except Exception as _e:
         log.warning(f"tags migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS lead_assignment_rules (
+                    id SERIAL PRIMARY KEY,
+                    condition_field VARCHAR(50) NOT NULL,
+                    condition_operator VARCHAR(20) NOT NULL,
+                    condition_value VARCHAR(255),
+                    assign_to VARCHAR(255) NOT NULL,
+                    priority INTEGER DEFAULT 0,
+                    active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_lar_priority ON lead_assignment_rules (priority)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"lead_assignment_rules migration: {_e}")
+
     log.info("Database initialized successfully")
 
 
