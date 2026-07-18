@@ -7,14 +7,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  --orange:#FF6B00; --orange-d:#E05A00; --orange-s:#FFF3E8; --orange-b:#FFD4A8;
-  --white:#fff; --g50:#F8F9FA; --g100:#F3F4F6; --g200:#E5E7EB; --g300:#D1D5DB;
-  --g400:#9CA3AF; --g500:#6B7280; --g700:#374151; --g900:#111827;
-  --green:#22c55e; --green-s:#dcfce7; --red:#EF4444;
-  --sh:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --orange:#FF6B00; --orange-d:#D95C00; --orange-s:rgba(255,107,0,.08); --orange-b:#FFD4A8;
+  --white:#fff;
+  --g50:#F8FAFC; --g100:#F1F5F9; --g200:#E2E8F0; --g300:#CBD5E1;
+  --g400:#94A3B8; --g500:#64748B; --g600:#475569; --g700:#334155;
+  --g800:#1E293B; --g900:#0F172A;
+  --bg:#F5F6FA; --surface:#fff; --border:#E2E8F0;
+  --text:#1E293B; --text-2:#64748B; --text-3:#94A3B8;
+  --green:#22c55e; --green-s:#dcfce7; --red:#EF4444; --red-s:#fee2e2;
+  --sh:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --sh-md:0 4px 12px rgba(0,0,0,.08); --sh-lg:0 8px 30px rgba(0,0,0,.12);
+  --sidebar-bg:#1A1D23; --sidebar-text:#94A3B8;
+  --sidebar-hover:rgba(255,255,255,.06); --sidebar-active:rgba(255,107,0,.14);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100vh;overflow:hidden}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100vh;overflow:hidden}
 .hidden{display:none!important}
 
 /* ── Login ── */
@@ -34,36 +41,41 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .login-link:hover{text-decoration:underline}
 
 /* ── App shell ── */
-.app-shell{display:flex;flex-direction:column;height:100vh}
+.app-shell{display:flex;flex-direction:row;height:100vh}
 
-/* Header */
-.app-header{height:56px;background:#fff;border-bottom:1px solid var(--g200);display:flex;align-items:center;padding:0 16px;gap:20px;flex-shrink:0;z-index:10}
-.brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;color:var(--g900);white-space:nowrap;text-decoration:none}
-.brand-logo{width:32px;height:32px;background:var(--orange);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff}
-.header-tabs{display:flex;gap:2px;flex:1;overflow-x:auto}
-.htab{padding:6px 16px;border:none;background:none;font-size:14px;font-weight:600;color:var(--g500);cursor:pointer;font-family:inherit;border-radius:8px;white-space:nowrap;transition:all .15s}
-.htab:hover{background:var(--g100);color:var(--g900)}
-.htab.active{color:var(--orange);background:var(--orange-s)}
-.header-user{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.notif-wrap{position:relative;cursor:pointer}
-.notif-icon{width:36px;height:36px;background:var(--g100);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px}
+/* Sidebar */
+.sidebar{width:220px;background:var(--sidebar-bg);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;z-index:20}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:18px 14px 14px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
+.brand-logo{width:32px;height:32px;background:var(--orange);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0}
+.sb-brand-name{font-size:15px;font-weight:800;color:#fff;white-space:nowrap}
+.sb-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.sb-nav-item,.htab{border:none;background:none;font-family:inherit;cursor:pointer}
+.sb-nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--sidebar-text);transition:background .15s,color .15s;text-align:left}
+.sb-nav-item:hover{background:var(--sidebar-hover);color:#fff}
+.sb-nav-item.active{background:var(--sidebar-active);color:var(--orange)}
+.sb-icon{font-size:16px;flex-shrink:0;width:20px;text-align:center}
+.sb-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-footer{border-top:1px solid rgba(255,255,255,.07);padding:12px 10px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.sb-user{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .15s}
+.sb-user:hover{background:var(--sidebar-hover)}
+.sb-user .user-av{width:28px;height:28px;font-size:11px;flex-shrink:0;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+.sb-user-info{flex:1;min-width:0}
+.user-name{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role-lbl{font-size:10px;color:var(--sidebar-text)}
+.sb-notif{display:flex;align-items:center;justify-content:space-between;padding:4px 8px}
+.notif-wrap{position:relative;cursor:pointer;display:inline-flex}
+.notif-icon{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px}
 .notif-badge{position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:1px 4px;border-radius:10px;min-width:14px;text-align:center}
-.user-chip{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;background:var(--g50);border:1px solid var(--g200);border-radius:100px;cursor:pointer}
-.user-av{width:30px;height:30px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
-.user-name{font-size:13px;font-weight:700;color:var(--g900)}
-.user-role-lbl{font-size:11px;color:var(--g400)}
-.hdr-logout{padding:6px 12px;background:none;border:1px solid var(--g200);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--g700)}
-.hdr-logout:hover{background:var(--g100)}
+.sb-logout{padding:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--sidebar-text);text-align:center;transition:all .15s;width:100%}
+.sb-logout:hover{background:rgba(255,107,0,.18);border-color:var(--orange);color:var(--orange)}
 
-/* Body */
+/* Main area */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;background:var(--bg)}
+
+/* htab class kept for JS .active toggling — no independent display rule needed */
+
+/* Conv tab body */
 .app-body{display:flex;flex:1;overflow:hidden}
-
-/* Icon nav */
-.icon-nav{width:56px;background:#fff;border-right:1px solid var(--g200);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;flex-shrink:0}
-.inav-btn{width:40px;height:40px;border:none;background:none;border-radius:10px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;color:var(--g500);position:relative}
-.inav-btn:hover{background:var(--g100)}
-.inav-btn.active{background:var(--orange-s);color:var(--orange)}
-.inav-spacer{flex:1}
 
 /* Conversation list panel */
 .conv-panel{width:280px;background:#fff;border-right:1px solid var(--g200);display:flex;flex-direction:column;flex-shrink:0}
@@ -324,8 +336,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .send-tmpl-btn:hover{background:var(--orange-d)}
 
 /* Other tabs */
-.tab-full{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px}
-.card{background:#fff;border-radius:12px;padding:22px;box-shadow:var(--sh)}
+.tab-full{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px;background:var(--bg)}
+.card{background:var(--surface);border-radius:12px;padding:22px;box-shadow:var(--sh)}
 .card h3{font-size:14px;font-weight:700;color:var(--g900);margin-bottom:18px}
 .card.full{width:100%}
 .cards-grid{display:flex;gap:20px;flex-wrap:wrap}
@@ -428,7 +440,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
   .detail-panel{display:none}
   .detail-panel.force-show{
     display:flex!important;
-    position:fixed;top:56px;right:0;bottom:0;
+    position:fixed;top:0;right:0;bottom:0;
     width:300px;max-width:90vw;
     z-index:30;
     box-shadow:-4px 0 24px rgba(0,0,0,.18);
@@ -438,10 +450,17 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 .detail-toggle{padding:6px 10px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g700);white-space:nowrap}
 .detail-toggle:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
 @media(max-width:768px){
-  .icon-nav{display:none}
+  .sidebar{width:56px}
+  .sb-brand-name,.sb-label{display:none}
+  .sb-brand{justify-content:center;padding:14px 0}
+  .sb-nav-item{justify-content:center;padding:10px;gap:0}
+  .sb-footer{padding:8px 4px}
+  .sb-user-info,.sb-logout{display:none}
+  .sb-user{justify-content:center;padding:8px 4px}
+  .sb-notif{justify-content:center}
   .detail-panel{display:none}
   .conv-panel{width:100%;border-right:none}
-  .chat-panel{display:none;position:fixed;inset:56px 0 0 0;z-index:20;background:var(--g50)}
+  .chat-panel{display:none;position:fixed;inset:0 0 0 56px;z-index:20;background:var(--g50)}
   .chat-panel.mobile-open{display:flex}
   .chat-back-btn{display:flex!important}
   .app-body{flex-direction:column}
@@ -484,42 +503,48 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
 <!-- App -->
 <div class="app-shell hidden" id="appScreen">
 
-  <!-- Header -->
-  <header class="app-header">
-    <div class="brand"><div class="brand-logo">🤖</div>KoolBot Admin</div>
-    <nav class="header-tabs">
-      <button class="htab active" id="htabConv"      onclick="switchTab('conv')">Conversations</button>
-      <button class="htab"        id="htabLeads"     onclick="switchTab('leads')">Leads</button>
-      <button class="htab"        id="htabProducts"  onclick="switchTab('products')">Products</button>
-      <button class="htab"        id="htabCanned"    onclick="switchTab('canned')">Canned Responses</button>
-      <button class="htab hidden" id="htabAnalytics"  onclick="switchTab('analytics')">Analytics</button>
-      <button class="htab hidden" id="htabTeam"       onclick="switchTab('team')">Team</button>
-      <button class="htab hidden" id="htabTemplates"  onclick="switchTab('templates')">Templates</button>
-      <button class="htab hidden" id="htabAISettings" onclick="switchTab('aiSettings')">🤖 AI Settings</button>
-    </nav>
-    <div class="header-user">
-      <div class="notif-wrap">
-        <div class="notif-icon">🔔</div>
-        <span class="notif-badge hidden" id="notifCount">0</span>
-      </div>
-      <div class="user-chip" onclick="openProfileModal()" title="View profile">
-        <div class="user-av" id="userAv">A</div>
-        <div><div class="user-name" id="agentNameDisplay"></div><div class="user-role-lbl" id="agentRoleDisplay">Agent</div></div>
-      </div>
-      <button class="hdr-logout" onclick="logout()">Sign Out</button>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="appSidebar">
+    <div class="sb-brand">
+      <div class="brand-logo">🤖</div>
+      <span class="sb-brand-name">KoolBot</span>
     </div>
-  </header>
+    <nav class="sb-nav">
+      <button class="htab sb-nav-item active" id="htabConv"       onclick="switchTab('conv')"><span class="sb-icon">💬</span><span class="sb-label">Conversations</span></button>
+      <button class="htab sb-nav-item"        id="htabLeads"      onclick="switchTab('leads')"><span class="sb-icon">👥</span><span class="sb-label">Leads</span></button>
+      <button class="htab sb-nav-item"        id="htabProducts"   onclick="switchTab('products')"><span class="sb-icon">📦</span><span class="sb-label">Products</span></button>
+      <button class="htab sb-nav-item"        id="htabCanned"     onclick="switchTab('canned')"><span class="sb-icon">💾</span><span class="sb-label">Canned Responses</span></button>
+      <button class="htab sb-nav-item hidden" id="htabAnalytics"  onclick="switchTab('analytics')"><span class="sb-icon">📊</span><span class="sb-label">Analytics</span></button>
+      <button class="htab sb-nav-item hidden" id="htabTeam"       onclick="switchTab('team')"><span class="sb-icon">⚙️</span><span class="sb-label">Team</span></button>
+      <button class="htab sb-nav-item hidden" id="htabTemplates"  onclick="switchTab('templates')"><span class="sb-icon">📨</span><span class="sb-label">Templates</span></button>
+      <button class="htab sb-nav-item hidden" id="htabAISettings" onclick="switchTab('aiSettings')"><span class="sb-icon">🤖</span><span class="sb-label">AI Settings</span></button>
+    </nav>
+    <!-- Zero-size placeholders JS references by id -->
+    <button id="inavAnalytics" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;opacity:0" onclick="switchTab('analytics')"></button>
+    <button id="inavTeam"      style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;opacity:0" onclick="switchTab('team')"></button>
+    <div class="sb-footer">
+      <div class="sb-notif">
+        <div class="notif-wrap">
+          <div class="notif-icon">🔔</div>
+          <span class="notif-badge hidden" id="notifCount">0</span>
+        </div>
+      </div>
+      <div class="sb-user" onclick="openProfileModal()" title="View profile">
+        <div class="user-av" id="userAv">A</div>
+        <div class="sb-user-info">
+          <div class="user-name" id="agentNameDisplay"></div>
+          <div class="user-role-lbl" id="agentRoleDisplay">Agent</div>
+        </div>
+      </div>
+      <button class="sb-logout" onclick="logout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main area -->
+  <div class="main-area">
 
   <!-- Conversations tab -->
   <div class="app-body" id="convTab">
-    <!-- Icon nav -->
-    <nav class="icon-nav">
-      <button class="inav-btn active" title="Conversations">💬</button>
-      <button class="inav-btn" title="Leads" onclick="switchTab('leads')">👥</button>
-      <div class="inav-spacer"></div>
-      <button class="inav-btn hidden" id="inavAnalytics" title="Analytics" onclick="switchTab('analytics')">📊</button>
-      <button class="inav-btn hidden" id="inavTeam"      title="Team"      onclick="switchTab('team')">⚙️</button>
-    </nav>
 
     <!-- Conversation list -->
     <aside class="conv-panel">
@@ -959,6 +984,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--g50);height:100
       </div>
     </div>
   </div>
+  </div><!-- /main-area -->
 
 </div><!-- /appScreen -->
 
