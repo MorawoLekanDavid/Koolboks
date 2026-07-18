@@ -356,7 +356,7 @@ def _fmt_inst(inst: AIInstruction | None) -> dict | None:
         "status": inst.status,
         "version": inst.version,
         "created_by": inst.created_by,
-        "created_at": inst.created_at.isoformat(),
+        "created_at": inst.created_at.isoformat() if inst.created_at else None,
     }
 
 
@@ -368,6 +368,6 @@ def _fmt_doc(doc: KBDocument) -> dict:
         "file_size": doc.file_size,
         "status": doc.status,
         "created_by": doc.created_by,
-        "created_at": doc.created_at.isoformat(),
+        "created_at": doc.created_at.isoformat() if doc.created_at else None,
         "preview": doc.content[:200] + ("…" if len(doc.content) > 200 else ""),
     }

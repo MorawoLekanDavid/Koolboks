@@ -89,7 +89,7 @@ def init_database():
             row = _c.execute(sa_text("SELECT COUNT(*) FROM ai_instructions")).scalar()
             if row == 0 and SYSTEM_PROMPT_TEMPLATE:
                 _c.execute(
-                    sa_text("INSERT INTO ai_instructions (content, status, version, created_by) VALUES (:c, 'live', 1, 'system')"),
+                    sa_text("INSERT INTO ai_instructions (content, status, version, created_by, created_at) VALUES (:c, 'live', 1, 'system', NOW())"),
                     {"c": SYSTEM_PROMPT_TEMPLATE},
                 )
                 _c.commit()
@@ -117,7 +117,7 @@ def init_database():
             row = _c.execute(sa_text("SELECT COUNT(*) FROM kb_documents")).scalar()
             if row == 0 and KNOWLEDGE_BASE:
                 _c.execute(
-                    sa_text("INSERT INTO kb_documents (name, content, file_type, status, created_by) VALUES (:n, :c, 'txt', 'live', 'system')"),
+                    sa_text("INSERT INTO kb_documents (name, content, file_type, status, created_by, created_at) VALUES (:n, :c, 'txt', 'live', 'system', NOW())"),
                     {"n": "knowledge_base.txt", "c": KNOWLEDGE_BASE},
                 )
                 _c.commit()
