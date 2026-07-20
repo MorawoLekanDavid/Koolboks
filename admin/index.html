@@ -385,8 +385,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .role-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
 .role-badge.super_admin{background:#fef3c7;color:#92400e}
 .role-badge.admin{background:var(--orange-s);color:var(--orange)}
-.role-badge.agent{background:var(--g100);color:var(--g500)}
-.role-badge.sales_agent{background:#ede9fe;color:#7c3aed}
+.role-badge.agent,.role-badge.customer_success_agent{background:#dbeafe;color:#1d4ed8}
+.role-badge.sales_agent,.role-badge.telesales_agent{background:#ede9fe;color:#7c3aed}
 /* View filter */
 .view-filter-row{display:flex;gap:4px;padding:0 12px 8px}
 .vf-btn{flex:1;padding:5px 4px;border:1.5px solid var(--g200);background:#fff;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g600);transition:all .15s}
@@ -914,13 +914,18 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   <div id="teamTab" class="tab-full hidden">
     <div class="card">
       <h3>Team Members</h3>
-      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add agents. Only the super admin can promote or demote roles.</p>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add members. Only the super admin can promote or demote roles.</p>
       <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
       <div class="add-agent-form" style="margin-top:18px">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
         <input type="email"    id="newAgentEmail"    placeholder="Email address"/>
         <input type="password" id="newAgentPassword" placeholder="Password"/>
-        <button class="btn-primary" onclick="addAgent()">+ Add Agent</button>
+        <select id="newAgentRole" style="padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g700);outline:none;min-width:160px">
+          <option value="customer_success_agent">Customer Success Agent</option>
+          <option value="telesales_agent">Telesales Agent</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="btn-primary" onclick="addAgent()">+ Add Member</button>
       </div>
     </div>
   </div>
@@ -1317,18 +1322,19 @@ function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   const a=document.getElementById('appScreen');a.classList.remove('hidden');a.style.display='flex';
   document.getElementById('agentNameDisplay').textContent=agentName;
-  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent','sales_agent':'Sales Agent'};
+  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success','customer_success_agent':'Customer Success','sales_agent':'Telesales','telesales_agent':'Telesales'};
   document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   if(agentRole==='super_admin'||agentRole==='admin'){
     ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
     document.getElementById('htabCanned')?.classList.add('hidden');
-  } else if(agentRole==='sales_agent'){
-    // Sales agents see Conversations + Templates only; default to My Chats view
+  } else if(agentRole==='telesales_agent'||agentRole==='sales_agent'){
+    // Telesales: Conversations + Templates only, default to My Chats
     ['htabLeads','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
     document.getElementById('htabTemplates')?.classList.remove('hidden');
     setTimeout(()=>setConvView('mine'),0);
   }
+  // customer_success_agent and agent: default nav (Conversations, Leads, Products, Canned)
   requestNotificationPermission();isFirstLoad=true;
   convOffset=0;loadConversations();loadAllTags();
   // Pre-load agent list so conversation owner dropdown is ready immediately
@@ -1385,8 +1391,8 @@ async function submitLoginChangePassword(){
 function openProfileModal(){
   document.getElementById('profileName').textContent=agentName;
   document.getElementById('profileEmail').textContent=agentEmail||'—';
-  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent','sales_agent':'Sales Agent'};
-  document.getElementById('profileRole').textContent=roleLabels[agentRole]||'Agent';
+  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success Agent','customer_success_agent':'Customer Success Agent','sales_agent':'Telesales Agent','telesales_agent':'Telesales Agent'};
+  document.getElementById('profileRole').textContent=roleLabels[agentRole]||agentRole;
   document.getElementById('profileModal').classList.remove('hidden');
 }
 function closeProfileModal(){
@@ -2154,7 +2160,8 @@ function _populateOwnerSelect(phone){
   if(!sel)return;
   const conv=allConversations.find(c=>c.phone===phone);
   const currentOwner=conv?.owner?.name||'';
-  sel.innerHTML='<option value="">— Unassigned —</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${esc(a.role==='sales_agent'?'Sales':a.role)})</option>`).join('');
+  const _rl={'super_admin':'Super Admin','admin':'Admin','agent':'CS','customer_success_agent':'CS','sales_agent':'Telesales','telesales_agent':'Telesales'};
+  sel.innerHTML='<option value="">— Unassigned —</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${_rl[a.role]||a.role})</option>`).join('');
   sel.value=currentOwner;
   const status=document.getElementById('assignOwnerStatus');
   if(status)status.style.display='none';
@@ -2577,19 +2584,22 @@ async function loadAgentList(){
     const isSuperAdmin=agentRole==='super_admin';
     document.getElementById('agentTableBody').innerHTML=agents.length
       ?agents.map(a=>{
-          const roleBadge=`<span class="role-badge ${a.role}">${a.role==='super_admin'?'Super Admin':a.role==='admin'?'Admin':a.role==='sales_agent'?'Sales Agent':'Agent'}</span>`;
-          const canManage=(a.role!=='super_admin')&&(isSuperAdmin||(a.role==='agent'||a.role==='sales_agent'));
+          const _rl={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success','customer_success_agent':'Customer Success','sales_agent':'Telesales','telesales_agent':'Telesales'};
+          const roleBadge=`<span class="role-badge ${a.role}">${_rl[a.role]||a.role}</span>`;
+          const isAgentRole=a.role==='agent'||a.role==='customer_success_agent';
+          const isTelRole=a.role==='telesales_agent'||a.role==='sales_agent';
+          const canManage=(a.role!=='super_admin')&&(isSuperAdmin||(isAgentRole||isTelRole));
           const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
           const rn=(a.name||'').replace(/'/g,"\\'");
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
           let promoteBtn='';
           if(isSuperAdmin&&a.role!=='super_admin'){
-            const toAgent=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:var(--g100);color:var(--g700);border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'agent')">→ Agent</button>`;
+            const toCS=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:#dbeafe;color:#1d4ed8;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'customer_success_agent')">→ CS</button>`;
+            const toTel=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:#ede9fe;color:#7c3aed;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'telesales_agent')">→ Telesales</button>`;
             const toAdmin=`<button class="btn-primary" style="padding:4px 10px;font-size:11px;margin-right:4px" onclick="setRole(${a.id},'admin')">→ Admin</button>`;
-            const toSales=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:#ede9fe;color:#7c3aed;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'sales_agent')">→ Sales</button>`;
-            if(a.role==='agent') promoteBtn=toAdmin+toSales;
-            else if(a.role==='sales_agent') promoteBtn=toAdmin+toAgent;
-            else promoteBtn=toAgent+toSales;
+            if(a.role==='admin') promoteBtn=toCS+toTel;
+            else if(isTelRole) promoteBtn=toAdmin+toCS;
+            else promoteBtn=toAdmin+toTel;
           }
           return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
         }).join('')
@@ -2597,7 +2607,8 @@ async function loadAgentList(){
   }catch(e){console.error(e);}
 }
 async function setRole(id,role){
-  const label=role==='admin'?'promote to Admin':role==='sales_agent'?'set as Sales Agent':'set as Agent';
+  const _rl={'admin':'promote to Admin','customer_success_agent':'set as Customer Success','telesales_agent':'set as Telesales','agent':'set as Customer Success'};
+  const label=_rl[role]||`set role to ${role}`;
   if(!confirm(`Are you sure you want to ${label} this person?`))return;
   const r=await fetch(`/admin/agents/${id}/role?key=${encodeURIComponent(adminKey)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})}).catch(()=>null);
   if(r&&r.ok)await loadAgentList();
@@ -2607,10 +2618,11 @@ async function addAgent(){
   const name=document.getElementById('newAgentName').value.trim();
   const email=document.getElementById('newAgentEmail').value.trim();
   const password=document.getElementById('newAgentPassword').value;
+  const role=document.getElementById('newAgentRole')?.value||'customer_success_agent';
   if(!name||!email||!password){alert('Please fill in name, email and password.');return;}
-  const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password})}).catch(()=>null);
+  const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password,role})}).catch(()=>null);
   if(r&&r.ok){['newAgentName','newAgentEmail','newAgentPassword'].forEach(id=>document.getElementById(id).value='');await loadAgentList();}
-  else if(r){const e=await r.json().catch(()=>({}));alert(e.detail||'Failed to add agent.');}
+  else if(r){const e=await r.json().catch(()=>({}));alert(e.detail||'Failed to add member.');}
 }
 async function removeAgent(id){
   if(!confirm('Remove this agent?'))return;

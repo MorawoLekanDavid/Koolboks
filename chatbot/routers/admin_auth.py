@@ -86,10 +86,14 @@ async def agent_login(body: AgentLoginRequest):
 
 # ── Agent Management ──────────────────────────────────────────────────────────
 
+AGENT_ROLES = ("agent", "customer_success_agent", "telesales_agent", "admin", "sales_agent")
+
+
 class AgentCreate(BaseModel):
     name: str
     email: str
     password: str
+    role: Optional[str] = "customer_success_agent"
 
 
 @router.get("/agents")
@@ -114,11 +118,14 @@ async def register_agent(body: AgentCreate, ctx: dict = Depends(require_admin)):
         ).first()
         if existing:
             raise HTTPException(409, "An agent with this email already exists.")
+        new_role = body.role if body.role in AGENT_ROLES else "customer_success_agent"
+        if new_role in ("admin", "super_admin") and ctx.get("role") != "super_admin":
+            new_role = "customer_success_agent"
         agent = Agent(
             name=body.name.strip(),
             email=body.email.strip().lower(),
             password_hash=hash_password(body.password),
-            role="agent",
+            role=new_role,
         )
         db.add(agent)
         db.commit()
@@ -134,8 +141,8 @@ class RoleUpdate(BaseModel):
 
 @router.patch("/agents/{agent_id}/role")
 async def update_agent_role(agent_id: int, body: RoleUpdate, ctx: dict = Depends(require_super_admin)):
-    if body.role not in ("admin", "agent", "sales_agent"):
-        raise HTTPException(400, "Role must be 'admin', 'agent', or 'sales_agent'")
+    if body.role not in ("admin", "agent", "customer_success_agent", "telesales_agent", "sales_agent"):
+        raise HTTPException(400, "Role must be one of: admin, customer_success_agent, telesales_agent, agent")
     db = get_db()
     try:
         agent = db.query(Agent).filter(Agent.id == agent_id).first()
