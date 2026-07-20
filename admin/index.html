@@ -44,7 +44,20 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .app-shell{display:flex;flex-direction:row;height:100vh}
 
 /* Sidebar */
-.sidebar{width:220px;background:var(--sidebar-bg);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;z-index:20}
+.sidebar{width:220px;background:var(--sidebar-bg);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;z-index:20;transition:width .2s ease}
+.sidebar.sb-collapsed{width:56px}
+.sidebar.sb-collapsed .sb-brand-name,
+.sidebar.sb-collapsed .sb-label,
+.sidebar.sb-collapsed .sb-user-info,
+.sidebar.sb-collapsed .sb-logout{display:none!important}
+.sidebar.sb-collapsed .sb-nav-item{justify-content:center;padding:10px;gap:0}
+.sidebar.sb-collapsed .sb-brand{justify-content:center;padding:14px 0;gap:0}
+.sidebar.sb-collapsed .sb-user{justify-content:center;padding:8px 4px}
+.sidebar.sb-collapsed .sb-footer{align-items:center;padding:8px 4px}
+.sidebar.sb-collapsed .sb-notif{padding:4px 0}
+.sb-toggle-btn{margin-left:auto;flex-shrink:0;background:none;border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:2px 7px;font-size:14px;line-height:1.5;cursor:pointer;color:rgba(255,255,255,.5);transition:all .15s}
+.sb-toggle-btn:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.3)}
+.sidebar.sb-collapsed .sb-toggle-btn{margin-left:0}
 .sb-brand{display:flex;align-items:center;gap:10px;padding:18px 14px 14px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
 .brand-logo{width:32px;height:32px;background:var(--orange);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0}
 .sb-brand-name{font-size:15px;font-weight:800;color:#fff;white-space:nowrap}
@@ -400,10 +413,34 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .conv-panel.collapsed .conv-panel-body{display:none}
 .conv-collapse-btn{margin-left:auto;background:none;border:1px solid var(--g200);border-radius:6px;padding:2px 8px;font-size:15px;cursor:pointer;color:var(--g500);line-height:1.4;flex-shrink:0;transition:all .15s}
 .conv-collapse-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
-/* Compact filter bar */
-.cfilter-row{display:flex;gap:4px;padding:0 8px 5px}
-.cfilter-sel{flex:1;min-width:0;padding:5px 6px;border:1px solid var(--g200);border-radius:7px;font-size:11px;font-family:inherit;color:var(--g700);background:#fff;outline:none;cursor:pointer;text-overflow:ellipsis}
-.cfilter-sel:focus{border-color:var(--orange)}
+/* Filter trigger button */
+.cfilter-trigger-row{padding:0 8px 6px;display:flex;gap:6px;align-items:center}
+.cfilter-btn{flex:1;display:flex;align-items:center;gap:6px;padding:6px 10px;border:1.5px solid var(--g200);border-radius:8px;background:#fff;font-size:12px;font-weight:600;color:var(--g600);cursor:pointer;font-family:inherit;transition:all .15s}
+.cfilter-btn:hover,.cfilter-btn.active{border-color:var(--orange);color:var(--orange);background:var(--orange-s)}
+.cfilter-active-count{background:var(--orange);color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center}
+/* Filter panel */
+.filter-panel{background:#fff;border-bottom:1.5px solid var(--g200);padding:0}
+.fp-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 6px;border-bottom:1px solid var(--g100)}
+.fp-header-title{font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.04em}
+.fp-logic-wrap{display:flex;border:1.5px solid var(--g200);border-radius:7px;overflow:hidden}
+.fp-logic-btn{padding:2px 8px;font-size:11px;font-weight:700;border:none;background:#fff;color:var(--g500);cursor:pointer;font-family:inherit;transition:all .1s}
+.fp-logic-btn.active{background:var(--orange);color:#fff}
+.fp-clear-btn{font-size:11px;color:var(--g400);background:none;border:none;cursor:pointer;padding:2px 4px;font-family:inherit}
+.fp-clear-btn:hover{color:var(--red)}
+.fp-conditions{padding:4px 0}
+.fp-cond-row{display:flex;align-items:center;gap:4px;padding:4px 8px}
+.fp-cond-row+.fp-cond-row::before{content:attr(data-logic);position:absolute;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:var(--g400)}
+.fp-type-sel,.fp-op-sel,.fp-val-sel{padding:4px 6px;border:1px solid var(--g200);border-radius:6px;font-size:11px;font-family:inherit;color:var(--g700);background:#fff;outline:none;cursor:pointer}
+.fp-type-sel{flex:0 0 auto;max-width:115px;min-width:0}
+.fp-op-sel{flex:0 0 auto;max-width:80px}
+.fp-val-sel{flex:1;min-width:0}
+.fp-type-sel:focus,.fp-op-sel:focus,.fp-val-sel:focus{border-color:var(--orange)}
+.fp-rem-btn{background:none;border:none;color:var(--g400);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0}
+.fp-rem-btn:hover{color:var(--red)}
+.fp-footer{padding:6px 10px;border-top:1px solid var(--g100)}
+.fp-add-btn{font-size:12px;font-weight:600;color:var(--orange);background:none;border:1.5px dashed var(--orange);border-radius:7px;padding:5px 10px;cursor:pointer;font-family:inherit;width:100%;transition:background .15s}
+.fp-add-btn:hover{background:var(--orange-s)}
+.fp-logic-separator{font-size:9px;font-weight:800;color:var(--g400);text-align:center;padding:0 8px;letter-spacing:.05em}
 /* Tag tray */
 .tag-tray{display:flex;gap:6px;padding:8px 12px;background:var(--surface,#fff);border-top:1px solid var(--border,var(--g200));flex-shrink:0;flex-wrap:wrap;align-items:center;min-height:44px}
 .tt-pill{padding:4px 11px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid;background:transparent;transition:all .15s;font-family:inherit;white-space:nowrap}
@@ -554,6 +591,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     <div class="sb-brand">
       <div class="brand-logo">🤖</div>
       <span class="sb-brand-name">KoolBot</span>
+      <button class="sb-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
     </div>
     <nav class="sb-nav">
       <button class="htab sb-nav-item active" id="htabConv"       onclick="switchTab('conv')"><span class="sb-icon">💬</span><span class="sb-label">Conversations</span></button>
@@ -609,47 +647,23 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="onConvSearch()" style="flex:1"/>
           <button onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
         </div>
-        <!-- Filter bar row 1: Mode + Agent -->
-        <div class="cfilter-row">
-          <select class="cfilter-sel" id="modeFilter" onchange="renderConversations()">
-            <option value="all">All chats</option>
-            <option value="bot">🤖 Bot</option>
-            <option value="agent">👤 Agent</option>
-          </select>
-          <select class="cfilter-sel" id="agentFilter" onchange="renderConversations()">
-            <option value="">All agents</option>
-          </select>
+        <!-- Filter trigger -->
+        <div class="cfilter-trigger-row">
+          <button class="cfilter-btn" id="filterToggleBtn" onclick="toggleFilterPanel()">
+            <span>⊞ Filter</span>
+            <span class="cfilter-active-count hidden" id="filterActiveCount">0</span>
+          </button>
         </div>
-        <!-- Filter bar row 2: Tag + Time -->
-        <div class="cfilter-row">
-          <select class="cfilter-sel" id="tagFilter2" onchange="cfTagChange(this.value)">
-            <option value="">All tags</option>
-          </select>
-          <select class="cfilter-sel" id="timeFilter" onchange="renderConversations()">
-            <option value="">All time</option>
-            <option value="today">Today</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-          </select>
-        </div>
-        <!-- Filter bar row 3: Read + Lead status -->
-        <div class="cfilter-row">
-          <select class="cfilter-sel" id="readFilter" onchange="renderConversations()">
-            <option value="">Read/Unread</option>
-            <option value="unread">Unread only</option>
-            <option value="read">Read only</option>
-          </select>
-          <select class="cfilter-sel" id="leadFilter" onchange="renderConversations()">
-            <option value="">Any lead</option>
-            <option value="has">Has lead</option>
-            <option value="no">No lead</option>
-          </select>
-        </div>
+        <!-- Filter panel (hidden by default) -->
+        <div id="filterPanel" class="filter-panel" style="display:none"></div>
         <!-- Hidden stubs for JS backward compat -->
         <div style="display:none">
           <span id="mAll"></span><span id="mBot"></span><span id="mAgent"></span>
           <span id="cntAll"></span><span id="cntBot"></span><span id="cntAgent"></span>
           <div id="tagFilterRow"><div id="tagFilterChips"></div></div>
+          <select id="modeFilter"></select><select id="agentFilter"></select>
+          <select id="tagFilter2"></select><select id="timeFilter"></select>
+          <select id="readFilter"></select><select id="leadFilter"></select>
         </div>
         <div class="conv-list" id="convList"></div>
       </div>
@@ -1459,6 +1473,16 @@ function setConvView(v){
   renderConversations();
 }
 
+// ── Collapsible nav sidebar ────────────────────────────────────────────
+let _sidebarCollapsed=false;
+function toggleSidebar(){
+  _sidebarCollapsed=!_sidebarCollapsed;
+  const sb=document.getElementById('appSidebar');
+  const btn=document.getElementById('sidebarToggleBtn');
+  if(sb)sb.classList.toggle('sb-collapsed',_sidebarCollapsed);
+  if(btn)btn.textContent=_sidebarCollapsed?'›':'‹';
+}
+
 // ── Collapsible conv panel ─────────────────────────────────────────────
 let _convPanelCollapsed=false;
 function toggleConvPanel(){
@@ -1469,7 +1493,142 @@ function toggleConvPanel(){
   if(btn)btn.textContent=_convPanelCollapsed?'›':'‹';
 }
 
-// ── Tag filter (select-based) ──────────────────────────────────────────
+// ── Filter panel (Chatwoot-style) ──────────────────────────────────────
+const FILTER_DEF={
+  tag:  {label:'Conversation Tag', ops:['Include','Exclude'], valType:'tags'},
+  agent:{label:'Agent',            ops:['Is','Is not'],       valType:'agents'},
+  mode: {label:'Chat Mode',        ops:['Is'],                valType:'enum',  vals:[['bot','Bot'],['agent','Agent']]},
+  time: {label:'Last Activity',    ops:['Within'],            valType:'enum',  vals:[['today','Today'],['7d','Last 7 days'],['30d','Last 30 days']]},
+  read: {label:'Read Status',      ops:['Is'],                valType:'enum',  vals:[['unread','Unread'],['read','Read']]},
+  lead: {label:'Lead',             ops:['Has','No lead'],     valType:'none'},
+};
+let _activeFilters=[];
+let _filterLogic='AND';
+let _filterNextId=1;
+let _filterPanelOpen=false;
+
+function toggleFilterPanel(){
+  _filterPanelOpen=!_filterPanelOpen;
+  const panel=document.getElementById('filterPanel');
+  const btn=document.getElementById('filterToggleBtn');
+  if(panel)panel.style.display=_filterPanelOpen?'block':'none';
+  if(btn)btn.classList.toggle('active',_filterPanelOpen);
+  if(_filterPanelOpen)_renderFilterPanel();
+}
+
+function _renderFilterPanel(){
+  const panel=document.getElementById('filterPanel');
+  if(!panel)return;
+  const typeOpts=Object.entries(FILTER_DEF).map(([k,d])=>`<option value="${k}">${d.label}</option>`).join('');
+  let html=`<div class="fp-header">
+    <span class="fp-header-title">Filters</span>
+    <div style="display:flex;align-items:center;gap:6px">
+      <div class="fp-logic-wrap">
+        <button class="fp-logic-btn${_filterLogic==='AND'?' active':''}" onclick="_setFilterLogic('AND')">AND</button>
+        <button class="fp-logic-btn${_filterLogic==='OR'?' active':''}" onclick="_setFilterLogic('OR')">OR</button>
+      </div>
+      <button class="fp-clear-btn" onclick="_clearFilters()">Clear all</button>
+    </div>
+  </div>
+  <div class="fp-conditions" id="fpConditions">`;
+  if(!_activeFilters.length){
+    html+=`<div style="padding:10px 12px;font-size:12px;color:var(--g400)">No filters — add one below</div>`;
+  } else {
+    _activeFilters.forEach((f,i)=>{
+      const def=FILTER_DEF[f.type]||FILTER_DEF.tag;
+      const opOpts=def.ops.map(o=>`<option value="${o}"${f.operator===o?' selected':''}>${o}</option>`).join('');
+      let valSel='';
+      if(def.valType==='tags'){
+        valSel=`<select class="fp-val-sel" onchange="_updateConditionVal(${f.id},this.value)">
+          <option value="">Pick tag…</option>`+
+          _allTags.map(t=>`<option value="${t.id}"${String(t.id)===String(f.value)?' selected':''}>${esc(t.name)}</option>`).join('')+
+        `</select>`;
+      } else if(def.valType==='agents'){
+        valSel=`<select class="fp-val-sel" onchange="_updateConditionVal(${f.id},this.value)">
+          <option value="">Pick agent…</option>`+
+          (allAgents||[]).map(a=>`<option value="${a.name}"${f.value===a.name?' selected':''}>${esc(a.name)}</option>`).join('')+
+        `</select>`;
+      } else if(def.valType==='enum'){
+        valSel=`<select class="fp-val-sel" onchange="_updateConditionVal(${f.id},this.value)">
+          <option value="">Choose…</option>`+
+          def.vals.map(([v,l])=>`<option value="${v}"${f.value===v?' selected':''}>${l}</option>`).join('')+
+        `</select>`;
+      } else {
+        valSel=`<span class="fp-val-sel" style="background:var(--g50);cursor:default;color:var(--g400)">—</span>`;
+      }
+      const sep=i>0?`<div class="fp-logic-separator">${_filterLogic}</div>`:'';
+      html+=`${sep}<div class="fp-cond-row">
+        <select class="fp-type-sel" onchange="_updateConditionType(${f.id},this.value)">${
+          Object.entries(FILTER_DEF).map(([k,d])=>`<option value="${k}"${f.type===k?' selected':''}>${d.label}</option>`).join('')
+        }</select>
+        <select class="fp-op-sel" onchange="_updateConditionOp(${f.id},this.value)">${opOpts}</select>
+        ${valSel}
+        <button class="fp-rem-btn" onclick="_removeFilter(${f.id})" title="Remove">×</button>
+      </div>`;
+    });
+  }
+  html+=`</div><div class="fp-footer"><button class="fp-add-btn" onclick="_addFilterCondition()">+ Add filter</button></div>`;
+  panel.innerHTML=html;
+}
+
+function _addFilterCondition(){
+  _activeFilters.push({id:_filterNextId++,type:'tag',operator:'Include',value:''});
+  _renderFilterPanel();
+  _syncFilterBadge();
+}
+function _removeFilter(id){
+  _activeFilters=_activeFilters.filter(f=>f.id!==id);
+  _renderFilterPanel();
+  _syncFilterBadge();
+  renderConversations();
+}
+function _updateConditionType(id,type){
+  const f=_activeFilters.find(x=>x.id===id);if(!f)return;
+  const def=FILTER_DEF[type];
+  f.type=type;f.operator=def.ops[0];f.value='';
+  _renderFilterPanel();renderConversations();
+}
+function _updateConditionOp(id,op){
+  const f=_activeFilters.find(x=>x.id===id);if(!f)return;
+  f.operator=op;renderConversations();
+}
+function _updateConditionVal(id,val){
+  const f=_activeFilters.find(x=>x.id===id);if(!f)return;
+  f.value=val;renderConversations();
+}
+function _setFilterLogic(logic){
+  _filterLogic=logic;
+  _renderFilterPanel();renderConversations();
+}
+function _clearFilters(){
+  _activeFilters=[];_filterLogic='AND';
+  _renderFilterPanel();_syncFilterBadge();renderConversations();
+}
+function _syncFilterBadge(){
+  const cnt=document.getElementById('filterActiveCount');
+  const btn=document.getElementById('filterToggleBtn');
+  const n=_activeFilters.filter(f=>f.value||FILTER_DEF[f.type]?.valType==='none').length;
+  if(cnt){cnt.textContent=n;cnt.classList.toggle('hidden',n===0);}
+  if(btn)btn.classList.toggle('active',n>0);
+}
+function _passesFilters(c){
+  const valid=_activeFilters.filter(f=>f.value||FILTER_DEF[f.type]?.valType==='none');
+  if(!valid.length)return true;
+  const checks=valid.map(f=>{
+    switch(f.type){
+      case 'tag':{const has=(c.tags||[]).some(t=>t.tag_id===parseInt(f.value));return f.operator==='Include'?has:!has;}
+      case 'agent':{const ag=(c.agents_involved||[]);return f.operator==='Is'?ag.includes(f.value):!ag.includes(f.value);}
+      case 'mode':return c.mode===f.value;
+      case 'time':{const now=Date.now();const ts=f.value==='today'?now-86400000:f.value==='7d'?now-7*86400000:now-30*86400000;return !c.last_message||(new Date(c.last_message).getTime()>=ts);}
+      case 'read':{const u=c.unread||0;return f.value==='unread'?u>0:u===0;}
+      case 'lead':return f.operator==='Has'?!!c.has_lead:!c.has_lead;
+      default:return true;
+    }
+  });
+  return _filterLogic==='AND'?checks.every(Boolean):checks.some(Boolean);
+}
+
+// ── Tag filter (select-based) — legacy compat ──────────────────────────
 function cfTagChange(v){
   _activeTagFilter=v?parseInt(v):null;
   renderConversations();
@@ -1591,24 +1750,10 @@ function setFilter(f,el){
 }
 function renderConversations(){
   const rawQ=(document.getElementById('searchInput')?.value||'').trim();
-  const af=document.getElementById('agentFilter')?.value||'';
-  const mf2=document.getElementById('modeFilter')?.value||'all';
-  const tf=document.getElementById('timeFilter')?.value||'';
-  const rf=document.getElementById('readFilter')?.value||'';
-  const lf=document.getElementById('leadFilter')?.value||'';
-  const now=Date.now();
-  const tsMin=tf==='today'?now-86400000:tf==='7d'?now-7*86400000:tf==='30d'?now-30*86400000:0;
   const isSearch=_searchResults!==null;
   function _pass(c){
-    const mf=mf2==='all'||c.mode===mf2;
-    const ag=!af||(c.agents_involved||[]).includes(af);
-    const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
     const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
-    const tm=!tsMin||!c.last_message||(new Date(c.last_message).getTime()>=tsMin);
-    const unread=c.unread||0;
-    const rm=!rf||(rf==='unread'&&unread>0)||(rf==='read'&&unread===0);
-    const lm=!lf||(lf==='has'&&c.has_lead)||(lf==='no'&&!c.has_lead);
-    return mf&&ag&&tg&&vf&&tm&&rm&&lm;
+    return vf&&_passesFilters(c);
   }
   let filtered;
   if(isSearch){
@@ -1808,6 +1953,14 @@ function renderTagFilterChips(){
 }
 function setTagFilter(tagId, el){
   _activeTagFilter=(_activeTagFilter===tagId)?null:tagId;
+  if(_activeTagFilter){
+    const existing=_activeFilters.find(f=>f.type==='tag');
+    if(existing)existing.value=String(_activeTagFilter);
+    else _activeFilters.push({id:_filterNextId++,type:'tag',operator:'Include',value:String(_activeTagFilter)});
+  } else {
+    _activeFilters=_activeFilters.filter(f=>f.type!=='tag');
+  }
+  _syncFilterBadge();
   renderTagFilterChips();
   renderConversations();
 }
