@@ -171,6 +171,18 @@ class LeadAssignmentRule(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ConversationOwner(Base):
+    """Tracks which agent initiated / owns a conversation (e.g. via outreach)"""
+    __tablename__ = "conversation_owners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String(30), unique=True, index=True)
+    owner_name = Column(String(255), nullable=True)
+    owner_email = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)

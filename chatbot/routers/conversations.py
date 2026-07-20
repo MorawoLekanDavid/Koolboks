@@ -17,7 +17,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import CannedResponse, ConversationTag, HandoffEvent, Message, Tag
+from chatbot.models import CannedResponse, ConversationOwner, ConversationTag, HandoffEvent, Message, Tag
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -122,17 +122,29 @@ async def list_conversations(
                     .where(ConversationTag.phone.in_(phones))
                 ).all()
 
-            return total, rows, phones, agent_rows, inbound_totals, tags_rows
+            owner_rows = []
+            if phones:
+                owner_rows = db.execute(
+                    select(
+                        ConversationOwner.phone,
+                        ConversationOwner.owner_name,
+                        ConversationOwner.owner_email,
+                    ).where(ConversationOwner.phone.in_(phones))
+                ).all()
+
+            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows
         finally:
             db.close()
 
-    total, rows, phones, agent_rows, inbound_totals, tags_rows = await run_in_threadpool(_db_fetch)
+    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows = await run_in_threadpool(_db_fetch)
 
     tags_map: dict = {}
     for tr in tags_rows:
         tags_map.setdefault(tr.phone, []).append(
             {"tag_id": tr.tag_id, "name": tr.tag_name, "color": tr.tag_color, "tagged_by": tr.tagged_by}
         )
+
+    owner_map: dict = {r.phone: {"name": r.owner_name, "email": r.owner_email} for r in owner_rows}
 
     agent_map: dict = {}
     for ar in agent_rows:
@@ -202,6 +214,7 @@ async def list_conversations(
                 "unread": unread,
                 "agents_involved": agent_map.get(r.phone, []),
                 "tags": tags_map.get(r.phone, []),
+                "owner": owner_map.get(r.phone),
             }
         )
 
@@ -391,6 +404,30 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(get_admi
         await redis_client.save_history(session_id, history)
 
     return {"status": "sent"}
+
+
+class OwnerUpdate(BaseModel):
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+
+
+@router.patch("/conversations/{phone}/owner")
+async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(get_admin_ctx)):
+    def _upsert():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            existing = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+            if existing:
+                existing.owner_name = body.owner_name
+                existing.owner_email = body.owner_email
+            else:
+                db.add(ConversationOwner(phone=norm, owner_name=body.owner_name, owner_email=body.owner_email))
+            db.commit()
+            return {"ok": True, "phone": norm, "owner_name": body.owner_name}
+        finally:
+            db.close()
+    return await run_in_threadpool(_upsert)
 
 
 class HandoffRequest(BaseModel):

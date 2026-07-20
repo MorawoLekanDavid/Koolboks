@@ -187,6 +187,23 @@ def init_database():
     except Exception as _e:
         log.warning(f"lead_assignment_rules migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS conversation_owners (
+                    id SERIAL PRIMARY KEY,
+                    phone VARCHAR(30) UNIQUE NOT NULL,
+                    owner_name VARCHAR(255),
+                    owner_email VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_conversation_owners_phone ON conversation_owners (phone)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"conversation_owners migration: {_e}")
+
     log.info("Database initialized successfully")
 
 

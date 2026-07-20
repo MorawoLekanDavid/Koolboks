@@ -134,8 +134,8 @@ class RoleUpdate(BaseModel):
 
 @router.patch("/agents/{agent_id}/role")
 async def update_agent_role(agent_id: int, body: RoleUpdate, ctx: dict = Depends(require_super_admin)):
-    if body.role not in ("admin", "agent"):
-        raise HTTPException(400, "Role must be 'admin' or 'agent'")
+    if body.role not in ("admin", "agent", "sales_agent"):
+        raise HTTPException(400, "Role must be 'admin', 'agent', or 'sales_agent'")
     db = get_db()
     try:
         agent = db.query(Agent).filter(Agent.id == agent_id).first()

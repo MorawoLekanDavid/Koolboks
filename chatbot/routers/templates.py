@@ -15,9 +15,12 @@ from chatbot.config import (
     WHATSAPP_PHONE_NUMBER_ID,
 )
 from chatbot.core import redis_client
+from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
+from chatbot.models import ConversationOwner
 from chatbot.services.whatsapp_service import save_message_db
 from chatbot.utils.phone import normalize_phone
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/admin", tags=["templates"])
 
@@ -128,8 +131,21 @@ async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dic
     if r.is_success:
         session_id = f"wa_{norm}"
         agent_name = ctx.get("name", "Agent")
+        agent_email = ctx.get("email", "")
         save_message_db(session_id, norm, agent_name, "outbound",
                         f"[Template: {body.template_name}]" + (f" — {', '.join(body.variables)}" if body.variables else ""))
+
+        def _claim_owner():
+            db = get_db()
+            try:
+                existing = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+                if not existing:
+                    db.add(ConversationOwner(phone=norm, owner_name=agent_name, owner_email=agent_email))
+                    db.commit()
+            finally:
+                db.close()
+        await run_in_threadpool(_claim_owner)
+
     data = r.json()
     if not r.is_success:
         raise HTTPException(status_code=r.status_code, detail=data)

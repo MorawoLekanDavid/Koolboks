@@ -386,6 +386,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .role-badge.super_admin{background:#fef3c7;color:#92400e}
 .role-badge.admin{background:var(--orange-s);color:var(--orange)}
 .role-badge.agent{background:var(--g100);color:var(--g500)}
+.role-badge.sales_agent{background:#ede9fe;color:#7c3aed}
+/* View filter */
+.view-filter-row{display:flex;gap:4px;padding:0 12px 8px}
+.vf-btn{flex:1;padding:5px 4px;border:1.5px solid var(--g200);background:#fff;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g600);transition:all .15s}
+.vf-btn:hover{border-color:var(--orange);color:var(--orange)}
+.vf-btn.active{border-color:var(--orange);background:var(--orange-s);color:var(--orange)}
+/* Owner badge on conv item */
+.owner-chip{font-size:10px;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;font-weight:700;white-space:nowrap}
 /* Assignment */
 .assign-sel{padding:4px 8px;border:1.5px solid var(--g200);border-radius:7px;font-size:12px;font-family:inherit;color:var(--g700);background:#fff;cursor:pointer;max-width:130px}
 .assign-sel:focus{outline:none;border-color:var(--orange)}
@@ -570,6 +578,11 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <span class="conv-panel-title">Conversations</span>
         <span class="conv-total-pill" id="convCount">0</span>
       </div>
+      <div class="view-filter-row">
+        <button class="vf-btn active" data-view="all"   onclick="setConvView('all')">All</button>
+        <button class="vf-btn"        data-view="mine"  onclick="setConvView('mine')">My Chats</button>
+        <button class="vf-btn"        data-view="sales" onclick="setConvView('sales')">Outreach</button>
+      </div>
       <div class="conv-search-wrap" style="display:flex;gap:6px;align-items:center">
         <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="onConvSearch()" style="flex:1"/>
         <button onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
@@ -705,6 +718,16 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
             <div class="d-row"><span class="lbl">Payment</span><span class="val" id="dPayment">-</span></div>
             <div class="d-row"><span class="lbl">Address</span><span class="val" id="dAddress">-</span></div>
             <div class="d-row"><span class="lbl">Captured</span><span class="val" id="dCaptured">-</span></div>
+          </div>
+          <div class="d-section">
+            <div class="d-section-title">Conversation Owner</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="assignOwnerSelect" style="flex:1;padding:6px 8px;border:1px solid var(--g200);border-radius:8px;font-size:12px;font-family:inherit;color:var(--g700);outline:none">
+                <option value="">— Unassigned —</option>
+              </select>
+              <button onclick="saveConvOwner()" style="padding:6px 12px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Assign</button>
+            </div>
+            <div id="assignOwnerStatus" style="font-size:11px;color:var(--green);margin-top:4px;display:none">Saved</div>
           </div>
         </div>
         <div class="detail-scroll hidden" id="dTabActivity">
@@ -1294,15 +1317,23 @@ function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   const a=document.getElementById('appScreen');a.classList.remove('hidden');a.style.display='flex';
   document.getElementById('agentNameDisplay').textContent=agentName;
-  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent'};
+  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent','sales_agent':'Sales Agent'};
   document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   if(agentRole==='super_admin'||agentRole==='admin'){
     ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
     document.getElementById('htabCanned')?.classList.add('hidden');
+  } else if(agentRole==='sales_agent'){
+    // Sales agents see Conversations + Templates only; default to My Chats view
+    ['htabLeads','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+    document.getElementById('htabTemplates')?.classList.remove('hidden');
+    setTimeout(()=>setConvView('mine'),0);
   }
   requestNotificationPermission();isFirstLoad=true;
-  convOffset=0;loadConversations();loadAllTags();pollInterval=setInterval(loadConversations,15000);
+  convOffset=0;loadConversations();loadAllTags();
+  // Pre-load agent list so conversation owner dropdown is ready immediately
+  fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`).then(r=>r.ok?r.json():[]).then(a=>{allAgents=a;}).catch(()=>{});
+  pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);
@@ -1354,12 +1385,20 @@ async function submitLoginChangePassword(){
 function openProfileModal(){
   document.getElementById('profileName').textContent=agentName;
   document.getElementById('profileEmail').textContent=agentEmail||'—';
-  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent'};
+  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Agent','sales_agent':'Sales Agent'};
   document.getElementById('profileRole').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('profileModal').classList.remove('hidden');
 }
 function closeProfileModal(){
   document.getElementById('profileModal').classList.add('hidden');
+}
+
+// ── Conv view filter ───────────────────────────────────────────────────
+let convView='all';
+function setConvView(v){
+  convView=v;
+  document.querySelectorAll('.vf-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  renderConversations();
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
@@ -1447,7 +1486,8 @@ function renderConversations(){
       const mf=currentFilter==='all'||c.mode===currentFilter;
       const ag=!af||(c.agents_involved||[]).includes(af);
       const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
-      return mf&&ag&&tg;
+      const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
+      return mf&&ag&&tg&&vf;
     });
   } else {
     const q=rawQ.toLowerCase();
@@ -1456,7 +1496,8 @@ function renderConversations(){
       const mf=currentFilter==='all'||c.mode===currentFilter;
       const ag=!af||(c.agents_involved||[]).includes(af);
       const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
-      return ms&&mf&&ag&&tg;
+      const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
+      return ms&&mf&&ag&&tg&&vf;
     });
   }
   const list=document.getElementById('convList');
@@ -1471,12 +1512,13 @@ function renderConversations(){
     const rn=displayName.replace(/'/g,"\\'");
     const avLetter=c.name?c.name[0].toUpperCase():'#';
     const tagPills=(c.tags||[]).map(t=>`<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${t.color}22;border:1px solid ${t.color};color:${t.color};font-weight:600;white-space:nowrap">${esc(t.name)}</span>`).join('');
+    const ownerChip=c.owner&&c.owner.name?`<span class="owner-chip">👤 ${esc(c.owner.name)}</span>`:'';
     return `<div class="conv-item ${selectedPhone===c.phone?'active':''}" onclick="selectConv('${c.phone}','${rn}','${c.mode}','${c.agent||''}')">
       <div class="c-av ${c.mode==='agent'?'ag':''}">${avLetter}</div>
       <div class="c-info">
         <div class="c-name">${esc(displayName)}</div>
         ${c.name?`<div class="c-phone">${c.phone}</div>`:''}
-        ${tagPills?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">${tagPills}</div>`:''}
+        ${tagPills||ownerChip?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">${tagPills}${ownerChip}</div>`:''}
       </div>
       <div class="c-right">
         <div class="c-time">${timeAgo(c.last_message)}</div>
@@ -1783,6 +1825,7 @@ async function selectConv(phone,name,mode,agent){
   renderConversations();
   loadMessages(); // fire without await — guard inside handles race
   loadLeadDetails(phone);
+  _populateOwnerSelect(phone);
   fetch(`/admin/conversations/${phone}/mark-read?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>{});
   const conv=allConversations.find(c=>c.phone===phone);if(conv){conv.unread=0;renderConversations();}
   msgPollInterval=setInterval(loadMessages,7000);
@@ -2102,6 +2145,39 @@ function restoreChatPanel(){
   if(chatPanel.parentElement!==convTab){
     convTab.appendChild(chatPanel);
     convTab.appendChild(detailPanel);
+  }
+}
+
+// ── Conversation Owner (assign) ────────────────────────────────────────
+function _populateOwnerSelect(phone){
+  const sel=document.getElementById('assignOwnerSelect');
+  if(!sel)return;
+  const conv=allConversations.find(c=>c.phone===phone);
+  const currentOwner=conv?.owner?.name||'';
+  sel.innerHTML='<option value="">— Unassigned —</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${esc(a.role==='sales_agent'?'Sales':a.role)})</option>`).join('');
+  sel.value=currentOwner;
+  const status=document.getElementById('assignOwnerStatus');
+  if(status)status.style.display='none';
+}
+async function saveConvOwner(){
+  const phone=selectedPhone;if(!phone)return;
+  const sel=document.getElementById('assignOwnerSelect');
+  const ownerName=sel?.value||null;
+  const agent=ownerName?(allAgents||[]).find(a=>a.name===ownerName):null;
+  const ownerEmail=agent?.email||null;
+  const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({owner_name:ownerName,owner_email:ownerEmail})
+  }).catch(()=>null);
+  const status=document.getElementById('assignOwnerStatus');
+  if(r&&r.ok){
+    // Update local cache
+    const conv=allConversations.find(c=>c.phone===phone);
+    if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
+    renderConversations();
+    if(status){status.style.display='block';setTimeout(()=>status.style.display='none',2000);}
+  } else {
+    if(status){status.style.display='block';status.style.color='var(--red)';status.textContent='Failed';setTimeout(()=>{status.style.display='none';status.style.color='var(--green)';status.textContent='Saved';},2500);}
   }
 }
 
@@ -2501,16 +2577,19 @@ async function loadAgentList(){
     const isSuperAdmin=agentRole==='super_admin';
     document.getElementById('agentTableBody').innerHTML=agents.length
       ?agents.map(a=>{
-          const roleBadge=`<span class="role-badge ${a.role}">${a.role==='super_admin'?'Super Admin':a.role==='admin'?'Admin':'Agent'}</span>`;
-          const canManage=(a.role!=='super_admin')&&(isSuperAdmin||(a.role==='agent'));
+          const roleBadge=`<span class="role-badge ${a.role}">${a.role==='super_admin'?'Super Admin':a.role==='admin'?'Admin':a.role==='sales_agent'?'Sales Agent':'Agent'}</span>`;
+          const canManage=(a.role!=='super_admin')&&(isSuperAdmin||(a.role==='agent'||a.role==='sales_agent'));
           const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
           const rn=(a.name||'').replace(/'/g,"\\'");
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
           let promoteBtn='';
           if(isSuperAdmin&&a.role!=='super_admin'){
-            promoteBtn=a.role==='agent'
-              ?`<button class="btn-primary" style="padding:4px 10px;font-size:11px;margin-right:4px" onclick="setRole(${a.id},'admin')">→ Admin</button>`
-              :`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:var(--g100);color:var(--g700);border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'agent')">→ Agent</button>`;
+            const toAgent=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:var(--g100);color:var(--g700);border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'agent')">→ Agent</button>`;
+            const toAdmin=`<button class="btn-primary" style="padding:4px 10px;font-size:11px;margin-right:4px" onclick="setRole(${a.id},'admin')">→ Admin</button>`;
+            const toSales=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:#ede9fe;color:#7c3aed;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'sales_agent')">→ Sales</button>`;
+            if(a.role==='agent') promoteBtn=toAdmin+toSales;
+            else if(a.role==='sales_agent') promoteBtn=toAdmin+toAgent;
+            else promoteBtn=toAgent+toSales;
           }
           return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
         }).join('')
@@ -2518,7 +2597,7 @@ async function loadAgentList(){
   }catch(e){console.error(e);}
 }
 async function setRole(id,role){
-  const label=role==='admin'?'promote to Admin':'demote to Agent';
+  const label=role==='admin'?'promote to Admin':role==='sales_agent'?'set as Sales Agent':'set as Agent';
   if(!confirm(`Are you sure you want to ${label} this person?`))return;
   const r=await fetch(`/admin/agents/${id}/role?key=${encodeURIComponent(adminKey)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})}).catch(()=>null);
   if(r&&r.ok)await loadAgentList();
