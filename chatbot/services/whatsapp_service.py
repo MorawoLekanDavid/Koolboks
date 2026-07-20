@@ -36,7 +36,11 @@ async def send_whatsapp_message(to: str, body: str, image_url: str = None) -> Op
         async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
             if image_url:
                 img_payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": {"link": image_url}}
-                await client.post(url, json=img_payload, headers=headers)
+                img_resp = await client.post(url, json=img_payload, headers=headers)
+                if img_resp.is_success:
+                    log.info(f"Product image sent to {to}")
+                else:
+                    log.warning(f"Product image send failed ({img_resp.status_code}): {img_resp.text}")
             text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}}
             resp = await client.post(url, json=text_payload, headers=headers)
         log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")

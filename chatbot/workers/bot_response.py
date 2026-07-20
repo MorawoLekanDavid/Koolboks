@@ -1,5 +1,4 @@
 import asyncio
-from urllib.parse import unquote
 
 from fastapi import BackgroundTasks
 
@@ -35,8 +34,9 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     if chat_resp.products:
         product = chat_resp.products[0]
         reply_text += f"\n\n🛒 *{product.name}*\n💰 N{float(product.price):,.0f}"
-        if product.image_url and "img-proxy?url=" in product.image_url:
-            image_url = unquote(product.image_url.split("img-proxy?url=")[1])
+        image_url = product.original_image_url  # raw S3/CDN URL — WhatsApp fetches directly
+        if image_url:
+            log.info(f"[bot] sending product image to {wa_from}: {image_url}")
 
     save_message_db(session_id, wa_from, "KoolBot", "outbound", reply_text)
     await send_whatsapp_message(wa_from, reply_text, image_url)

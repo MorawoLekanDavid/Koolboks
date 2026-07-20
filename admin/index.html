@@ -394,6 +394,26 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .vf-btn.active{border-color:var(--orange);background:var(--orange-s);color:var(--orange)}
 /* Owner badge on conv item */
 .owner-chip{font-size:10px;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;font-weight:700;white-space:nowrap}
+/* Collapsible conv panel */
+.conv-panel{transition:width .2s ease}
+.conv-panel.collapsed{width:44px!important;min-width:44px}
+.conv-panel.collapsed .conv-panel-body{display:none}
+.conv-collapse-btn{margin-left:auto;background:none;border:1px solid var(--g200);border-radius:6px;padding:2px 8px;font-size:15px;cursor:pointer;color:var(--g500);line-height:1.4;flex-shrink:0;transition:all .15s}
+.conv-collapse-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
+/* Compact filter bar */
+.cfilter-row{display:flex;gap:4px;padding:0 8px 5px}
+.cfilter-sel{flex:1;min-width:0;padding:5px 6px;border:1px solid var(--g200);border-radius:7px;font-size:11px;font-family:inherit;color:var(--g700);background:#fff;outline:none;cursor:pointer;text-overflow:ellipsis}
+.cfilter-sel:focus{border-color:var(--orange)}
+/* Tag tray */
+.tag-tray{display:flex;gap:6px;padding:8px 12px;background:var(--surface,#fff);border-top:1px solid var(--border,var(--g200));flex-shrink:0;flex-wrap:wrap;align-items:center;min-height:44px}
+.tt-pill{padding:4px 11px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid;background:transparent;transition:all .15s;font-family:inherit;white-space:nowrap}
+.tt-pill:hover{opacity:.8;transform:scale(1.04)}
+.tt-more{padding:4px 10px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;background:var(--g50);color:var(--g500);border:1.5px solid var(--g200);font-family:inherit}
+.tt-more:hover{background:var(--g100)}
+.tt-empty{font-size:12px;color:var(--g400);font-style:italic}
+/* Header assign */
+.hdr-assign-sel{padding:4px 8px;border:1.5px solid var(--g200);border-radius:7px;font-size:11px;font-family:inherit;color:var(--g600);background:#fff;cursor:pointer;outline:none;max-width:130px}
+.hdr-assign-sel:focus{border-color:var(--orange)}
 /* Assignment */
 .assign-sel{padding:4px 8px;border:1.5px solid var(--g200);border-radius:7px;font-size:12px;font-family:inherit;color:var(--g700);background:#fff;cursor:pointer;max-width:130px}
 .assign-sel:focus{outline:none;border-color:var(--orange)}
@@ -573,35 +593,66 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   <div class="app-body" id="convTab">
 
     <!-- Conversation list -->
-    <aside class="conv-panel">
+    <aside class="conv-panel" id="convPanel">
       <div class="conv-panel-hdr">
         <span class="conv-panel-title">Conversations</span>
         <span class="conv-total-pill" id="convCount">0</span>
+        <button class="conv-collapse-btn" id="collapseConvBtn" onclick="toggleConvPanel()" title="Collapse sidebar">‹</button>
       </div>
-      <div class="view-filter-row">
-        <button class="vf-btn active" data-view="all"   onclick="setConvView('all')">All</button>
-        <button class="vf-btn"        data-view="mine"  onclick="setConvView('mine')">My Chats</button>
-        <button class="vf-btn"        data-view="sales" onclick="setConvView('sales')">Outreach</button>
+      <div class="conv-panel-body" id="convPanelBody">
+        <div class="view-filter-row">
+          <button class="vf-btn active" data-view="all"   onclick="setConvView('all')">All</button>
+          <button class="vf-btn"        data-view="mine"  onclick="setConvView('mine')">My Chats</button>
+          <button class="vf-btn"        data-view="sales" onclick="setConvView('sales')">Outreach</button>
+        </div>
+        <div class="conv-search-wrap" style="display:flex;gap:6px;align-items:center">
+          <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="onConvSearch()" style="flex:1"/>
+          <button onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
+        </div>
+        <!-- Filter bar row 1: Mode + Agent -->
+        <div class="cfilter-row">
+          <select class="cfilter-sel" id="modeFilter" onchange="renderConversations()">
+            <option value="all">All chats</option>
+            <option value="bot">🤖 Bot</option>
+            <option value="agent">👤 Agent</option>
+          </select>
+          <select class="cfilter-sel" id="agentFilter" onchange="renderConversations()">
+            <option value="">All agents</option>
+          </select>
+        </div>
+        <!-- Filter bar row 2: Tag + Time -->
+        <div class="cfilter-row">
+          <select class="cfilter-sel" id="tagFilter2" onchange="cfTagChange(this.value)">
+            <option value="">All tags</option>
+          </select>
+          <select class="cfilter-sel" id="timeFilter" onchange="renderConversations()">
+            <option value="">All time</option>
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+        </div>
+        <!-- Filter bar row 3: Read + Lead status -->
+        <div class="cfilter-row">
+          <select class="cfilter-sel" id="readFilter" onchange="renderConversations()">
+            <option value="">Read/Unread</option>
+            <option value="unread">Unread only</option>
+            <option value="read">Read only</option>
+          </select>
+          <select class="cfilter-sel" id="leadFilter" onchange="renderConversations()">
+            <option value="">Any lead</option>
+            <option value="has">Has lead</option>
+            <option value="no">No lead</option>
+          </select>
+        </div>
+        <!-- Hidden stubs for JS backward compat -->
+        <div style="display:none">
+          <span id="mAll"></span><span id="mBot"></span><span id="mAgent"></span>
+          <span id="cntAll"></span><span id="cntBot"></span><span id="cntAgent"></span>
+          <div id="tagFilterRow"><div id="tagFilterChips"></div></div>
+        </div>
+        <div class="conv-list" id="convList"></div>
       </div>
-      <div class="conv-search-wrap" style="display:flex;gap:6px;align-items:center">
-        <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="onConvSearch()" style="flex:1"/>
-        <button onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
-      </div>
-      <div class="mode-row">
-        <button class="mode-btn active" id="mAll"   onclick="setFilter('all',this)">All <span class="cnt" id="cntAll">0</span></button>
-        <button class="mode-btn"        id="mBot"   onclick="setFilter('bot',this)">Bot <span class="cnt" id="cntBot">0</span></button>
-        <button class="mode-btn"        id="mAgent" onclick="setFilter('agent',this)">Agent <span class="cnt" id="cntAgent">0</span></button>
-      </div>
-      <div class="agent-filter-wrap">
-        <select class="agent-filter-sel" id="agentFilter" onchange="renderConversations()">
-          <option value="">All agents</option>
-        </select>
-      </div>
-      <div id="tagFilterRow" style="display:none;padding:0 12px 8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
-        <span style="font-size:11px;color:var(--g400);font-weight:600;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">Tags:</span>
-        <div id="tagFilterChips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
-      </div>
-      <div class="conv-list" id="convList"></div>
     </aside>
 
     <!-- Chat -->
@@ -622,6 +673,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
             <div class="chat-sub-row" id="chatSubtitle">-</div>
           </div>
           <div class="chat-act-btns">
+            <select id="headerOwnerSelect" class="hdr-assign-sel" onchange="headerAssignOwner(this.value)" title="Assign conversation to agent">
+              <option value="">Assign to…</option>
+            </select>
             <button class="ca-btn" title="WhatsApp" onclick="openWhatsApp()">💬</button>
             <button class="detail-toggle" onclick="toggleDetailPanel()" id="detailToggleBtn">👤 Details</button>
           </div>
@@ -638,10 +692,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           </div>
         </div>
         <div class="messages" id="messages"></div>
-        <div class="quick-actions" id="quickActions">
-          <button class="qa-btn" onclick="quickReply('What area or city should we deliver to?')">📍 Ask for address</button>
-          <button class="qa-btn" onclick="quickReply('Let me check availability for you!')">✅ Check availability</button>
-          <button class="qa-btn" onclick="quickReply('Our agent will call you shortly to confirm your order.')">🛒 Confirm order</button>
+        <div class="tag-tray" id="tagTray">
+          <span class="tt-empty">Select a chat to apply tags</span>
         </div>
         <div id="replyArea">
           <div id="cannedPicker" class="canned-picker">
@@ -1407,6 +1459,60 @@ function setConvView(v){
   renderConversations();
 }
 
+// ── Collapsible conv panel ─────────────────────────────────────────────
+let _convPanelCollapsed=false;
+function toggleConvPanel(){
+  _convPanelCollapsed=!_convPanelCollapsed;
+  const panel=document.getElementById('convPanel');
+  const btn=document.getElementById('collapseConvBtn');
+  if(panel)panel.classList.toggle('collapsed',_convPanelCollapsed);
+  if(btn)btn.textContent=_convPanelCollapsed?'›':'‹';
+}
+
+// ── Tag filter (select-based) ──────────────────────────────────────────
+function cfTagChange(v){
+  _activeTagFilter=v?parseInt(v):null;
+  renderConversations();
+}
+
+// ── Tag tray ───────────────────────────────────────────────────────────
+const TAG_TRAY_LIMIT=8;
+let _tagTrayExpanded=false;
+function renderTagTray(){
+  const el=document.getElementById('tagTray');
+  if(!el)return;
+  if(!selectedPhone){el.innerHTML='<span class="tt-empty">Select a chat to apply tags</span>';return;}
+  if(!_allTags.length){el.innerHTML='<span class="tt-empty">No tags created yet</span>';return;}
+  const applied=new Set(_convTags.map(t=>t.tag_id));
+  const available=_allTags.filter(t=>!applied.has(t.id));
+  if(!available.length){el.innerHTML='<span class="tt-empty">All tags applied</span>';return;}
+  const show=_tagTrayExpanded?available:available.slice(0,TAG_TRAY_LIMIT);
+  let html=show.map(t=>`<button class="tt-pill" onclick="addConvTag(${t.id})" style="background:${t.color}22;color:${t.color};border-color:${t.color}">${esc(t.name)}</button>`).join('');
+  if(available.length>TAG_TRAY_LIMIT){
+    if(_tagTrayExpanded)html+=`<button class="tt-more" onclick="_tagTrayExpanded=false;renderTagTray()">‹ Less</button>`;
+    else html+=`<button class="tt-more" onclick="_tagTrayExpanded=true;renderTagTray()">+${available.length-TAG_TRAY_LIMIT} more</button>`;
+  }
+  el.innerHTML=html;
+}
+
+// ── Header assign dropdown ─────────────────────────────────────────────
+async function headerAssignOwner(ownerName){
+  const phone=selectedPhone;if(!phone)return;
+  const agent=ownerName?(allAgents||[]).find(a=>a.name===ownerName):null;
+  const ownerEmail=agent?.email||null;
+  const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({owner_name:ownerName||null,owner_email:ownerEmail})
+  }).catch(()=>null);
+  if(r&&r.ok){
+    const conv=allConversations.find(c=>c.phone===phone);
+    if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
+    const detailSel=document.getElementById('assignOwnerSelect');
+    if(detailSel)detailSel.value=ownerName||'';
+    renderConversations();
+  }
+}
+
 // ── Tabs ───────────────────────────────────────────────────────────────
 const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
 const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates',aiSettings:'htabAISettings'};
@@ -1479,31 +1585,39 @@ async function loadConversations(append=false){
 function setFilter(f,el){
   currentFilter=f;
   ['mAll','mBot','mAgent'].forEach(id=>document.getElementById(id)?.classList.remove('active'));
-  el.classList.add('active');
+  if(el)el.classList.add('active');
+  const ms=document.getElementById('modeFilter');if(ms)ms.value=f;
   renderConversations();
 }
 function renderConversations(){
   const rawQ=(document.getElementById('searchInput')?.value||'').trim();
   const af=document.getElementById('agentFilter')?.value||'';
+  const mf2=document.getElementById('modeFilter')?.value||'all';
+  const tf=document.getElementById('timeFilter')?.value||'';
+  const rf=document.getElementById('readFilter')?.value||'';
+  const lf=document.getElementById('leadFilter')?.value||'';
+  const now=Date.now();
+  const tsMin=tf==='today'?now-86400000:tf==='7d'?now-7*86400000:tf==='30d'?now-30*86400000:0;
   const isSearch=_searchResults!==null;
+  function _pass(c){
+    const mf=mf2==='all'||c.mode===mf2;
+    const ag=!af||(c.agents_involved||[]).includes(af);
+    const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
+    const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
+    const tm=!tsMin||!c.last_message||(new Date(c.last_message).getTime()>=tsMin);
+    const unread=c.unread||0;
+    const rm=!rf||(rf==='unread'&&unread>0)||(rf==='read'&&unread===0);
+    const lm=!lf||(lf==='has'&&c.has_lead)||(lf==='no'&&!c.has_lead);
+    return mf&&ag&&tg&&vf&&tm&&rm&&lm;
+  }
   let filtered;
   if(isSearch){
-    filtered=_searchResults.filter(c=>{
-      const mf=currentFilter==='all'||c.mode===currentFilter;
-      const ag=!af||(c.agents_involved||[]).includes(af);
-      const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
-      const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
-      return mf&&ag&&tg&&vf;
-    });
+    filtered=_searchResults.filter(c=>_pass(c));
   } else {
     const q=rawQ.toLowerCase();
     filtered=allConversations.filter(c=>{
       const ms=!q||(c.name||'').toLowerCase().includes(q)||c.phone.includes(q);
-      const mf=currentFilter==='all'||c.mode===currentFilter;
-      const ag=!af||(c.agents_involved||[]).includes(af);
-      const tg=!_activeTagFilter||(c.tags||[]).some(t=>t.tag_id===_activeTagFilter);
-      const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
-      return ms&&mf&&ag&&tg&&vf;
+      return ms&&_pass(c);
     });
   }
   const list=document.getElementById('convList');
@@ -1680,12 +1794,16 @@ async function loadAllTags(){
   }catch(e){console.error(e);}
 }
 function renderTagFilterChips(){
+  // Populate the compact tagFilter2 select in the filter bar
+  const sel=document.getElementById('tagFilter2');
+  if(sel){
+    const cur=_activeTagFilter?String(_activeTagFilter):'';
+    sel.innerHTML='<option value="">All tags</option>'+_allTags.map(t=>`<option value="${t.id}" ${String(t.id)===cur?'selected':''}>${esc(t.name)}</option>`).join('');
+  }
+  // Keep legacy chips updated (hidden but referenced by setTagFilter)
   const el=document.getElementById('tagFilterChips');
-  const row=document.getElementById('tagFilterRow');
-  if(!el)return;
-  if(row)row.style.display=_allTags.length?'flex':'none';
-  el.innerHTML=_allTags.map(t=>`<button onclick="setTagFilter(${t.id},this)"
-    style="font-size:11px;padding:2px 9px;border-radius:12px;border:2px solid ${t.color};background:${_activeTagFilter===t.id?t.color:'transparent'};color:${_activeTagFilter===t.id?'#fff':t.color};cursor:pointer;font-weight:600;transition:all .15s"
+  if(el)el.innerHTML=_allTags.map(t=>`<button onclick="setTagFilter(${t.id},this)"
+    style="font-size:11px;padding:2px 9px;border-radius:12px;border:2px solid ${t.color};background:${_activeTagFilter===t.id?t.color:'transparent'};color:${_activeTagFilter===t.id?'#fff':t.color};cursor:pointer;font-weight:600"
     >${esc(t.name)}</button>`).join('');
 }
 function setTagFilter(tagId, el){
@@ -1736,6 +1854,7 @@ async function loadConvTags(phone){
     _convTags=await r.json();
     renderChatTagPills();
     renderTagDropdown();
+    renderTagTray();
   }catch(e){console.error(e);}
 }
 function renderChatTagPills(){
@@ -1782,6 +1901,7 @@ async function addConvTag(tagId){
     if(!_convTags.find(x=>x.tag_id===t.tag_id))_convTags.push(t);
     renderChatTagPills();
     renderTagDropdown();
+    renderTagTray();
     // Update conversation list item in-memory
     const conv=allConversations.find(c=>c.phone===selectedPhone);
     if(conv){conv.tags=_convTags.slice();renderConversations();}
@@ -1794,6 +1914,7 @@ async function removeConvTag(tagId){
     _convTags=_convTags.filter(t=>t.tag_id!==tagId);
     renderChatTagPills();
     renderTagDropdown();
+    renderTagTray();
     const conv=allConversations.find(c=>c.phone===selectedPhone);
     if(conv){conv.tags=_convTags.slice();renderConversations();}
   }catch(e){console.error(e);}
@@ -1824,7 +1945,7 @@ async function selectConv(phone,name,mode,agent){
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
   document.getElementById('chatName').textContent=name;
   updateChatUI(mode,agent);
-  _convTags=[];renderChatTagPills();loadConvTags(phone);
+  _convTags=[];_tagTrayExpanded=false;renderChatTagPills();renderTagTray();loadConvTags(phone);
   document.getElementById('chatPanel').classList.add('mobile-open');
   // Clear messages immediately so stale content never shows
   document.getElementById('messages').innerHTML='<div style="padding:40px;text-align:center;color:var(--g400);font-size:13px">Loading…</div>';
@@ -2156,13 +2277,18 @@ function restoreChatPanel(){
 
 // ── Conversation Owner (assign) ────────────────────────────────────────
 function _populateOwnerSelect(phone){
-  const sel=document.getElementById('assignOwnerSelect');
-  if(!sel)return;
   const conv=allConversations.find(c=>c.phone===phone);
   const currentOwner=conv?.owner?.name||'';
   const _rl={'super_admin':'Super Admin','admin':'Admin','agent':'CS','customer_success_agent':'CS','sales_agent':'Telesales','telesales_agent':'Telesales'};
-  sel.innerHTML='<option value="">— Unassigned —</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${_rl[a.role]||a.role})</option>`).join('');
-  sel.value=currentOwner;
+  const opts='<option value="">— Unassigned —</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${_rl[a.role]||a.role})</option>`).join('');
+  const sel=document.getElementById('assignOwnerSelect');
+  if(sel){sel.innerHTML=opts;sel.value=currentOwner;}
+  // Sync header assign dropdown
+  const hSel=document.getElementById('headerOwnerSelect');
+  if(hSel){
+    hSel.innerHTML='<option value="">Assign to…</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+    hSel.value=currentOwner;
+  }
   const status=document.getElementById('assignOwnerStatus');
   if(status)status.style.display='none';
 }
@@ -2594,12 +2720,12 @@ async function loadAgentList(){
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
           let promoteBtn='';
           if(isSuperAdmin&&a.role!=='super_admin'){
-            const toCS=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:#dbeafe;color:#1d4ed8;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'customer_success_agent')">→ CS</button>`;
-            const toTel=`<button style="padding:4px 10px;font-size:11px;margin-right:4px;background:#ede9fe;color:#7c3aed;border:none;border-radius:6px;cursor:pointer;font-weight:700" onclick="setRole(${a.id},'telesales_agent')">→ Telesales</button>`;
-            const toAdmin=`<button class="btn-primary" style="padding:4px 10px;font-size:11px;margin-right:4px" onclick="setRole(${a.id},'admin')">→ Admin</button>`;
-            if(a.role==='admin') promoteBtn=toCS+toTel;
-            else if(isTelRole) promoteBtn=toAdmin+toCS;
-            else promoteBtn=toAdmin+toTel;
+            promoteBtn=`<select onchange="setRole(${a.id},this.value);this.value='${a.role}'" style="padding:4px 8px;border:1.5px solid var(--g200);border-radius:6px;font-size:12px;font-family:inherit;color:var(--g700);cursor:pointer;background:#fff;outline:none;margin-right:4px">
+              <option value="${a.role}" selected disabled>Change role…</option>
+              <option value="customer_success_agent" ${a.role==='customer_success_agent'||a.role==='agent'?'disabled':''}>Customer Success</option>
+              <option value="telesales_agent" ${isTelRole?'disabled':''}>Telesales Agent</option>
+              <option value="admin" ${a.role==='admin'?'disabled':''}>Admin</option>
+            </select>`;
           }
           return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
         }).join('')
