@@ -418,29 +418,63 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .cfilter-btn{flex:1;display:flex;align-items:center;gap:6px;padding:6px 10px;border:1.5px solid var(--g200);border-radius:8px;background:#fff;font-size:12px;font-weight:600;color:var(--g600);cursor:pointer;font-family:inherit;transition:all .15s}
 .cfilter-btn:hover,.cfilter-btn.active{border-color:var(--orange);color:var(--orange);background:var(--orange-s)}
 .cfilter-active-count{background:var(--orange);color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center}
-/* Filter panel */
-.filter-panel{background:#fff;border-bottom:1.5px solid var(--g200);padding:0}
-.fp-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 6px;border-bottom:1px solid var(--g100)}
-.fp-header-title{font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.04em}
-.fp-logic-wrap{display:flex;border:1.5px solid var(--g200);border-radius:7px;overflow:hidden}
-.fp-logic-btn{padding:2px 8px;font-size:11px;font-weight:700;border:none;background:#fff;color:var(--g500);cursor:pointer;font-family:inherit;transition:all .1s}
-.fp-logic-btn.active{background:var(--orange);color:#fff}
-.fp-clear-btn{font-size:11px;color:var(--g400);background:none;border:none;cursor:pointer;padding:2px 4px;font-family:inherit}
-.fp-clear-btn:hover{color:var(--red)}
-.fp-conditions{padding:4px 0}
-.fp-cond-row{display:flex;align-items:center;gap:4px;padding:4px 8px}
-.fp-cond-row+.fp-cond-row::before{content:attr(data-logic);position:absolute;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:var(--g400)}
-.fp-type-sel,.fp-op-sel,.fp-val-sel{padding:4px 6px;border:1px solid var(--g200);border-radius:6px;font-size:11px;font-family:inherit;color:var(--g700);background:#fff;outline:none;cursor:pointer}
-.fp-type-sel{flex:0 0 auto;max-width:115px;min-width:0}
-.fp-op-sel{flex:0 0 auto;max-width:80px}
-.fp-val-sel{flex:1;min-width:0}
-.fp-type-sel:focus,.fp-op-sel:focus,.fp-val-sel:focus{border-color:var(--orange)}
-.fp-rem-btn{background:none;border:none;color:var(--g400);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0}
-.fp-rem-btn:hover{color:var(--red)}
-.fp-footer{padding:6px 10px;border-top:1px solid var(--g100)}
-.fp-add-btn{font-size:12px;font-weight:600;color:var(--orange);background:none;border:1.5px dashed var(--orange);border-radius:7px;padding:5px 10px;cursor:pointer;font-family:inherit;width:100%;transition:background .15s}
-.fp-add-btn:hover{background:var(--orange-s)}
-.fp-logic-separator{font-size:9px;font-weight:800;color:var(--g400);text-align:center;padding:0 8px;letter-spacing:.05em}
+/* Filter modal panel */
+.fm-panel{background:#fff;border-radius:16px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden;display:flex;flex-direction:column;max-height:90vh}
+.fm-hdr{display:flex;align-items:center;gap:8px;padding:16px 18px 12px;border-bottom:1px solid var(--g100);flex-shrink:0}
+.fm-back-btn{background:none;border:none;font-size:13px;font-weight:700;color:var(--orange);cursor:pointer;padding:0;font-family:inherit;white-space:nowrap}
+.fm-back-btn:hover{text-decoration:underline}
+.fm-title{flex:1;font-size:15px;font-weight:800;color:var(--g900)}
+.fm-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--g400);padding:0;line-height:1;margin-left:auto}
+.fm-close:hover{color:var(--g900)}
+.fm-body{flex:1;overflow-y:auto;padding:0 18px}
+/* ── Filter drawer ── */
+.fd-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:199;opacity:0;pointer-events:none;transition:opacity .25s ease}
+.fd-backdrop.open{opacity:1;pointer-events:all}
+.fd-drawer{position:fixed;top:0;right:0;bottom:0;width:320px;background:#fff;z-index:200;display:flex;flex-direction:column;box-shadow:-6px 0 40px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1)}
+.fd-drawer.open{transform:translateX(0)}
+.fd-slide-wrap{display:flex;width:200%;height:100%;transition:transform .28s cubic-bezier(.4,0,.2,1)}
+.fd-slide-wrap.show-detail{transform:translateX(-50%)}
+.fd-panel{width:50%;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.fd-hdr{display:flex;align-items:center;gap:10px;padding:16px 18px 14px;border-bottom:1px solid var(--g100);flex-shrink:0;background:#fff}
+.fd-hdr-title{flex:1;font-size:15px;font-weight:800;color:var(--g900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fd-back-btn{background:none;border:none;font-size:20px;font-weight:400;color:var(--orange);cursor:pointer;padding:0;font-family:inherit;flex-shrink:0;line-height:1}
+.fd-back-btn:hover{opacity:.7}
+.fd-close-btn{background:none;border:none;font-size:18px;cursor:pointer;color:var(--g400);padding:0;line-height:1;flex-shrink:0;margin-left:auto}
+.fd-close-btn:hover{color:var(--g900)}
+.fd-scroll{flex:1;overflow-y:auto}
+.fd-search-row{padding:10px 14px 8px;border-bottom:1px solid var(--g100);flex-shrink:0;background:#fff}
+.fd-search-inp{width:100%;padding:8px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;outline:none;color:var(--g900);box-sizing:border-box}
+.fd-search-inp:focus{border-color:var(--orange)}
+/* Filter rows */
+.fd-row{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--g100);cursor:pointer;gap:10px;transition:background .12s}
+.fd-row:hover{background:var(--g50)}
+.fd-row-icon{font-size:16px;flex-shrink:0}
+.fd-row-label{flex:1;font-size:14px;font-weight:600;color:var(--g800)}
+.fd-row-count{font-size:10px;font-weight:800;background:var(--orange);color:#fff;border-radius:100px;padding:2px 7px;min-width:18px;text-align:center;flex-shrink:0}
+.fd-row-chevron{color:var(--g300);font-size:18px;flex-shrink:0;font-weight:300}
+/* Checkbox list */
+.fd-check-item{display:flex;align-items:center;gap:12px;padding:12px 18px;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--g50)}
+.fd-check-item:hover{background:var(--g50)}
+.fd-check-item input{width:18px;height:18px;accent-color:var(--orange);cursor:pointer;flex-shrink:0}
+/* Tag pills in checklist */
+.fd-tag-pill{display:inline-block;padding:4px 14px;border-radius:100px;font-size:12px;font-weight:700;color:#fff;letter-spacing:.02em;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.fd-plain-label{font-size:14px;color:var(--g800);font-weight:500}
+/* Operator toggle */
+.fd-op-row{display:flex;gap:0;margin:10px 14px 0;border:1.5px solid var(--g200);border-radius:8px;overflow:hidden;flex-shrink:0}
+.fd-op-btn{flex:1;padding:7px 0;font-size:12px;font-weight:700;border:none;background:#fff;color:var(--g500);cursor:pointer;font-family:inherit;transition:all .12s}
+.fd-op-btn.active{background:var(--orange);color:#fff}
+/* Logic toggle in main header area */
+.fd-logic-row{display:flex;align-items:center;justify-content:space-between;padding:8px 18px;background:var(--g50);border-bottom:1px solid var(--g100);flex-shrink:0;font-size:12px;color:var(--g600);font-weight:600}
+.fd-logic-btns{display:flex;border:1.5px solid var(--g200);border-radius:6px;overflow:hidden}
+.fd-logic-btn{padding:3px 10px;font-size:11px;font-weight:700;border:none;background:#fff;color:var(--g500);cursor:pointer;font-family:inherit}
+.fd-logic-btn.active{background:var(--orange);color:#fff}
+.fd-empty{padding:24px 18px;font-size:13px;color:var(--g400);text-align:center}
+/* Footer */
+.fd-footer{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--g100);flex-shrink:0;background:#fff}
+.fd-btn-ghost{flex:1;background:#fff;border:1.5px solid var(--g200);border-radius:8px;padding:9px;font-size:13px;font-weight:600;color:var(--g600);cursor:pointer;font-family:inherit}
+.fd-btn-ghost:hover{border-color:var(--red);color:var(--red)}
+.fd-btn-primary{flex:1;background:var(--orange);border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit}
+.fd-btn-primary:hover{background:var(--orange-d)}
 /* Tag tray */
 .tag-tray{display:flex;gap:6px;padding:8px 12px;background:var(--surface,#fff);border-top:1px solid var(--border,var(--g200));flex-shrink:0;flex-wrap:wrap;align-items:center;min-height:44px}
 .tt-pill{padding:4px 11px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid;background:transparent;transition:all .15s;font-family:inherit;white-space:nowrap}
@@ -635,7 +669,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <div class="conv-panel-hdr">
         <span class="conv-panel-title">Conversations</span>
         <span class="conv-total-pill" id="convCount">0</span>
-        <button class="conv-collapse-btn" id="collapseConvBtn" onclick="toggleConvPanel()" title="Collapse sidebar">‹</button>
       </div>
       <div class="conv-panel-body" id="convPanelBody">
         <div class="view-filter-row">
@@ -649,13 +682,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         </div>
         <!-- Filter trigger -->
         <div class="cfilter-trigger-row">
-          <button class="cfilter-btn" id="filterToggleBtn" onclick="toggleFilterPanel()">
+          <button class="cfilter-btn" id="filterToggleBtn" onclick="openFilterDrawer()">
             <span>⊞ Filter</span>
             <span class="cfilter-active-count hidden" id="filterActiveCount">0</span>
           </button>
         </div>
-        <!-- Filter panel (hidden by default) -->
-        <div id="filterPanel" class="filter-panel" style="display:none"></div>
+        <!-- filterPanel placeholder removed — now a modal -->
         <!-- Hidden stubs for JS backward compat -->
         <div style="display:none">
           <span id="mAll"></span><span id="mBot"></span><span id="mAgent"></span>
@@ -1324,6 +1356,41 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   </div>
 </div>
 
+<!-- Filter drawer -->
+<div class="fd-backdrop" id="fdBackdrop" onclick="closeFilterDrawer()"></div>
+<div class="fd-drawer" id="fdDrawer">
+  <div class="fd-slide-wrap" id="fdSlideWrap">
+    <!-- Panel 1: filter type list -->
+    <div class="fd-panel">
+      <div class="fd-hdr">
+        <span class="fd-hdr-title">Filter Conversations</span>
+        <button class="fd-close-btn" onclick="closeFilterDrawer()">✕</button>
+      </div>
+      <div class="fd-scroll" id="fdListScroll"></div>
+      <div class="fd-footer">
+        <button class="fd-btn-ghost" onclick="_fdClear()">Clear all</button>
+        <button class="fd-btn-primary" onclick="_fdApply()">Apply</button>
+      </div>
+    </div>
+    <!-- Panel 2: detail / checklist -->
+    <div class="fd-panel">
+      <div class="fd-hdr">
+        <button class="fd-back-btn" onclick="closeFDSub()">‹</button>
+        <span class="fd-hdr-title" id="fdDetailTitle"></span>
+        <button class="fd-close-btn" onclick="closeFilterDrawer()">✕</button>
+      </div>
+      <div class="fd-op-row" id="fdOpRow" style="display:none"></div>
+      <div class="fd-search-row">
+        <input type="text" class="fd-search-inp" id="fdSearchInp" placeholder="Search…" oninput="renderFDCheckList()">
+      </div>
+      <div class="fd-scroll" id="fdDetailScroll"></div>
+      <div class="fd-footer">
+        <button class="fd-btn-primary" style="flex:1" onclick="closeFDSub()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────
 let adminKey='', agentName='', agentRole='agent', agentEmail='';
@@ -1493,135 +1560,174 @@ function toggleConvPanel(){
   if(btn)btn.textContent=_convPanelCollapsed?'›':'‹';
 }
 
-// ── Filter panel (Chatwoot-style) ──────────────────────────────────────
+// ── Filter Drawer ───────────────────────────────────────────────────────
 const FILTER_DEF={
-  tag:  {label:'Conversation Tag', ops:['Include','Exclude'], valType:'tags'},
-  agent:{label:'Agent',            ops:['Is','Is not'],       valType:'agents'},
-  mode: {label:'Chat Mode',        ops:['Is'],                valType:'enum',  vals:[['bot','Bot'],['agent','Agent']]},
-  time: {label:'Last Activity',    ops:['Within'],            valType:'enum',  vals:[['today','Today'],['7d','Last 7 days'],['30d','Last 30 days']]},
-  read: {label:'Read Status',      ops:['Is'],                valType:'enum',  vals:[['unread','Unread'],['read','Read']]},
-  lead: {label:'Lead',             ops:['Has','No lead'],     valType:'none'},
+  tag:  {label:'Conversation Tag', icon:'🏷', ops:['Include','Exclude'], valType:'tags'},
+  agent:{label:'Agent',            icon:'👤', ops:['Is','Is not'],       valType:'agents'},
+  mode: {label:'Chat Mode',        icon:'💬', ops:['Is'],                valType:'enum', vals:[['bot','🤖 Bot'],['agent','👤 Agent']]},
+  time: {label:'Last Activity',    icon:'🕐', ops:['Within'],            valType:'enum', vals:[['today','Today'],['7d','Last 7 days'],['30d','Last 30 days']]},
+  read: {label:'Read Status',      icon:'👁', ops:['Is'],                valType:'enum', vals:[['unread','Unread only'],['read','Read only']]},
+  lead: {label:'Lead Status',      icon:'📋', ops:[],                    valType:'enum', vals:[['has','Has lead'],['no','No lead']]},
 };
-let _activeFilters=[];
+// _filterSels: {tag:{op:'Include',vals:['1','3']}, agent:{op:'Is',vals:['John']}, ...}
+let _filterSels={};
 let _filterLogic='AND';
-let _filterNextId=1;
-let _filterPanelOpen=false;
+let _fdCurrentType=null; // which sub-view is open
 
-function toggleFilterPanel(){
-  _filterPanelOpen=!_filterPanelOpen;
-  const panel=document.getElementById('filterPanel');
-  const btn=document.getElementById('filterToggleBtn');
-  if(panel)panel.style.display=_filterPanelOpen?'block':'none';
-  if(btn)btn.classList.toggle('active',_filterPanelOpen);
-  if(_filterPanelOpen)_renderFilterPanel();
+function openFilterDrawer(){
+  document.getElementById('fdDrawer').classList.add('open');
+  document.getElementById('fdBackdrop').classList.add('open');
+  document.getElementById('fdSlideWrap').classList.remove('show-detail');
+  _fdCurrentType=null;
+  renderFDList();
 }
-
-function _renderFilterPanel(){
-  const panel=document.getElementById('filterPanel');
-  if(!panel)return;
-  const typeOpts=Object.entries(FILTER_DEF).map(([k,d])=>`<option value="${k}">${d.label}</option>`).join('');
-  let html=`<div class="fp-header">
-    <span class="fp-header-title">Filters</span>
-    <div style="display:flex;align-items:center;gap:6px">
-      <div class="fp-logic-wrap">
-        <button class="fp-logic-btn${_filterLogic==='AND'?' active':''}" onclick="_setFilterLogic('AND')">AND</button>
-        <button class="fp-logic-btn${_filterLogic==='OR'?' active':''}" onclick="_setFilterLogic('OR')">OR</button>
-      </div>
-      <button class="fp-clear-btn" onclick="_clearFilters()">Clear all</button>
-    </div>
-  </div>
-  <div class="fp-conditions" id="fpConditions">`;
-  if(!_activeFilters.length){
-    html+=`<div style="padding:10px 12px;font-size:12px;color:var(--g400)">No filters — add one below</div>`;
+function closeFilterDrawer(){
+  document.getElementById('fdDrawer').classList.remove('open');
+  document.getElementById('fdBackdrop').classList.remove('open');
+}
+function openFDSub(type){
+  _fdCurrentType=type;
+  const def=FILTER_DEF[type];
+  document.getElementById('fdDetailTitle').textContent=def.label;
+  if(!_filterSels[type])_filterSels[type]={op:def.ops[0]||'',vals:[]};
+  // Operator row
+  const opRow=document.getElementById('fdOpRow');
+  if(def.ops.length>1){
+    opRow.style.display='flex';
+    opRow.innerHTML=def.ops.map(op=>
+      `<button class="fd-op-btn${_filterSels[type].op===op?' active':''}" onclick="_fdSetOp('${type}','${op}')">${op}</button>`
+    ).join('');
   } else {
-    _activeFilters.forEach((f,i)=>{
-      const def=FILTER_DEF[f.type]||FILTER_DEF.tag;
-      const opOpts=def.ops.map(o=>`<option value="${o}"${f.operator===o?' selected':''}>${o}</option>`).join('');
-      let valSel='';
-      if(def.valType==='tags'){
-        valSel=`<select class="fp-val-sel" onchange="_updateConditionVal(${f.id},this.value)">
-          <option value="">Pick tag…</option>`+
-          _allTags.map(t=>`<option value="${t.id}"${String(t.id)===String(f.value)?' selected':''}>${esc(t.name)}</option>`).join('')+
-        `</select>`;
-      } else if(def.valType==='agents'){
-        valSel=`<select class="fp-val-sel" onchange="_updateConditionVal(${f.id},this.value)">
-          <option value="">Pick agent…</option>`+
-          (allAgents||[]).map(a=>`<option value="${a.name}"${f.value===a.name?' selected':''}>${esc(a.name)}</option>`).join('')+
-        `</select>`;
-      } else if(def.valType==='enum'){
-        valSel=`<select class="fp-val-sel" onchange="_updateConditionVal(${f.id},this.value)">
-          <option value="">Choose…</option>`+
-          def.vals.map(([v,l])=>`<option value="${v}"${f.value===v?' selected':''}>${l}</option>`).join('')+
-        `</select>`;
-      } else {
-        valSel=`<span class="fp-val-sel" style="background:var(--g50);cursor:default;color:var(--g400)">—</span>`;
-      }
-      const sep=i>0?`<div class="fp-logic-separator">${_filterLogic}</div>`:'';
-      html+=`${sep}<div class="fp-cond-row">
-        <select class="fp-type-sel" onchange="_updateConditionType(${f.id},this.value)">${
-          Object.entries(FILTER_DEF).map(([k,d])=>`<option value="${k}"${f.type===k?' selected':''}>${d.label}</option>`).join('')
-        }</select>
-        <select class="fp-op-sel" onchange="_updateConditionOp(${f.id},this.value)">${opOpts}</select>
-        ${valSel}
-        <button class="fp-rem-btn" onclick="_removeFilter(${f.id})" title="Remove">×</button>
-      </div>`;
+    opRow.style.display='none';
+  }
+  document.getElementById('fdSearchInp').value='';
+  renderFDCheckList();
+  document.getElementById('fdSlideWrap').classList.add('show-detail');
+}
+function closeFDSub(){
+  document.getElementById('fdSlideWrap').classList.remove('show-detail');
+  _fdCurrentType=null;
+  renderFDList();
+}
+function renderFDList(){
+  const el=document.getElementById('fdListScroll');
+  if(!el)return;
+  let html='';
+  // Logic toggle row — only show if >1 type has selections
+  const activeCount=Object.values(_filterSels).filter(s=>s.vals.length).length;
+  if(activeCount>1){
+    html+=`<div class="fd-logic-row">
+      <span>Conversations match</span>
+      <div class="fd-logic-btns">
+        <button class="fd-logic-btn${_filterLogic==='AND'?' active':''}" onclick="_filterLogic='AND';renderFDList();renderConversations()">ALL</button>
+        <button class="fd-logic-btn${_filterLogic==='OR'?' active':''}" onclick="_filterLogic='OR';renderFDList();renderConversations()">ANY</button>
+      </div>
+    </div>`;
+  }
+  Object.entries(FILTER_DEF).forEach(([k,d])=>{
+    const count=(_filterSels[k]?.vals||[]).length;
+    const badge=count?`<span class="fd-row-count">${count}</span>`:'';
+    html+=`<div class="fd-row" onclick="openFDSub('${k}')">
+      <span class="fd-row-icon">${d.icon}</span>
+      <span class="fd-row-label">${d.label}</span>
+      ${badge}
+      <span class="fd-row-chevron">›</span>
+    </div>`;
+  });
+  if(!activeCount)html+=`<div class="fd-empty">No filters active — tap a row to add one</div>`;
+  el.innerHTML=html;
+}
+function renderFDCheckList(){
+  const el=document.getElementById('fdDetailScroll');
+  if(!el||!_fdCurrentType)return;
+  const type=_fdCurrentType, def=FILTER_DEF[type];
+  if(!_filterSels[type])_filterSels[type]={op:def.ops[0]||'',vals:[]};
+  const sel=_filterSels[type];
+  const q=(document.getElementById('fdSearchInp')?.value||'').toLowerCase().trim();
+  let html='';
+  if(def.valType==='tags'){
+    const items=_allTags.filter(t=>!q||t.name.toLowerCase().includes(q));
+    if(!items.length){html=`<div class="fd-empty">No tags found</div>`;}
+    else items.forEach(t=>{
+      const checked=sel.vals.includes(String(t.id));
+      html+=`<label class="fd-check-item">
+        <input type="checkbox" value="${t.id}" ${checked?'checked':''} onchange="_fdToggle('${type}','${t.id}',this.checked)">
+        <span class="fd-tag-pill" style="background:${t.color}">${esc(t.name)}</span>
+      </label>`;
+    });
+  } else if(def.valType==='agents'){
+    const agents=(allAgents||[]).filter(a=>!q||a.name.toLowerCase().includes(q));
+    if(!agents.length){html=`<div class="fd-empty">No agents found</div>`;}
+    else agents.forEach(a=>{
+      const checked=sel.vals.includes(a.name);
+      html+=`<label class="fd-check-item">
+        <input type="checkbox" value="${a.name}" ${checked?'checked':''} onchange="_fdToggle('${type}','${a.name}',this.checked)">
+        <span class="fd-plain-label">${esc(a.name)}</span>
+      </label>`;
+    });
+  } else if(def.valType==='enum'){
+    const items=(def.vals||[]).filter(([v,l])=>!q||l.toLowerCase().includes(q));
+    items.forEach(([v,l])=>{
+      const checked=sel.vals.includes(v);
+      html+=`<label class="fd-check-item">
+        <input type="checkbox" value="${v}" ${checked?'checked':''} onchange="_fdToggle('${type}','${v}',this.checked)">
+        <span class="fd-plain-label">${l}</span>
+      </label>`;
     });
   }
-  html+=`</div><div class="fp-footer"><button class="fp-add-btn" onclick="_addFilterCondition()">+ Add filter</button></div>`;
-  panel.innerHTML=html;
+  el.innerHTML=html;
 }
-
-function _addFilterCondition(){
-  _activeFilters.push({id:_filterNextId++,type:'tag',operator:'Include',value:''});
-  _renderFilterPanel();
-  _syncFilterBadge();
+function _fdSetOp(type,op){
+  if(!_filterSels[type])_filterSels[type]={op,vals:[]};
+  else _filterSels[type].op=op;
+  // update op row buttons
+  document.getElementById('fdOpRow').querySelectorAll('.fd-op-btn').forEach(b=>{
+    b.classList.toggle('active',b.textContent===op);
+  });
+  renderConversations();
 }
-function _removeFilter(id){
-  _activeFilters=_activeFilters.filter(f=>f.id!==id);
-  _renderFilterPanel();
+function _fdToggle(type,val,checked){
+  if(!_filterSels[type])_filterSels[type]={op:FILTER_DEF[type].ops[0]||'',vals:[]};
+  const arr=_filterSels[type].vals;
+  if(checked){if(!arr.includes(String(val)))arr.push(String(val));}
+  else{_filterSels[type].vals=arr.filter(v=>v!==String(val));}
   _syncFilterBadge();
   renderConversations();
 }
-function _updateConditionType(id,type){
-  const f=_activeFilters.find(x=>x.id===id);if(!f)return;
-  const def=FILTER_DEF[type];
-  f.type=type;f.operator=def.ops[0];f.value='';
-  _renderFilterPanel();renderConversations();
-}
-function _updateConditionOp(id,op){
-  const f=_activeFilters.find(x=>x.id===id);if(!f)return;
-  f.operator=op;renderConversations();
-}
-function _updateConditionVal(id,val){
-  const f=_activeFilters.find(x=>x.id===id);if(!f)return;
-  f.value=val;renderConversations();
-}
-function _setFilterLogic(logic){
-  _filterLogic=logic;
-  _renderFilterPanel();renderConversations();
-}
-function _clearFilters(){
-  _activeFilters=[];_filterLogic='AND';
-  _renderFilterPanel();_syncFilterBadge();renderConversations();
+function _fdApply(){renderConversations();closeFilterDrawer();}
+function _fdClear(){
+  _filterSels={};_filterLogic='AND';
+  _syncFilterBadge();renderConversations();renderFDList();
 }
 function _syncFilterBadge(){
+  const n=Object.values(_filterSels).filter(s=>s.vals.length).length;
   const cnt=document.getElementById('filterActiveCount');
   const btn=document.getElementById('filterToggleBtn');
-  const n=_activeFilters.filter(f=>f.value||FILTER_DEF[f.type]?.valType==='none').length;
   if(cnt){cnt.textContent=n;cnt.classList.toggle('hidden',n===0);}
   if(btn)btn.classList.toggle('active',n>0);
 }
 function _passesFilters(c){
-  const valid=_activeFilters.filter(f=>f.value||FILTER_DEF[f.type]?.valType==='none');
-  if(!valid.length)return true;
-  const checks=valid.map(f=>{
-    switch(f.type){
-      case 'tag':{const has=(c.tags||[]).some(t=>t.tag_id===parseInt(f.value));return f.operator==='Include'?has:!has;}
-      case 'agent':{const ag=(c.agents_involved||[]);return f.operator==='Is'?ag.includes(f.value):!ag.includes(f.value);}
-      case 'mode':return c.mode===f.value;
-      case 'time':{const now=Date.now();const ts=f.value==='today'?now-86400000:f.value==='7d'?now-7*86400000:now-30*86400000;return !c.last_message||(new Date(c.last_message).getTime()>=ts);}
-      case 'read':{const u=c.unread||0;return f.value==='unread'?u>0:u===0;}
-      case 'lead':return f.operator==='Has'?!!c.has_lead:!c.has_lead;
+  const entries=Object.entries(_filterSels).filter(([,s])=>s.vals.length);
+  if(!entries.length)return true;
+  const checks=entries.map(([type,sel])=>{
+    const vals=sel.vals;
+    switch(type){
+      case 'tag':{
+        const convIds=(c.tags||[]).map(t=>String(t.tag_id));
+        const hit=vals.some(v=>convIds.includes(v));
+        return sel.op==='Include'?hit:!hit;
+      }
+      case 'agent':{
+        const ag=c.agents_involved||[];
+        return sel.op==='Is'?vals.some(v=>ag.includes(v)):!vals.some(v=>ag.includes(v));
+      }
+      case 'mode':return vals.includes(c.mode);
+      case 'time':{
+        const now=Date.now();const ms={today:86400000,'7d':7*86400000,'30d':30*86400000};
+        return vals.some(v=>!c.last_message||(new Date(c.last_message).getTime()>=now-(ms[v]||0)));
+      }
+      case 'read':{const u=c.unread||0;return vals.some(v=>v==='unread'?u>0:u===0);}
+      case 'lead':return vals.some(v=>v==='has'?!!c.has_lead:!c.has_lead);
       default:return true;
     }
   });
@@ -1954,11 +2060,10 @@ function renderTagFilterChips(){
 function setTagFilter(tagId, el){
   _activeTagFilter=(_activeTagFilter===tagId)?null:tagId;
   if(_activeTagFilter){
-    const existing=_activeFilters.find(f=>f.type==='tag');
-    if(existing)existing.value=String(_activeTagFilter);
-    else _activeFilters.push({id:_filterNextId++,type:'tag',operator:'Include',value:String(_activeTagFilter)});
+    if(!_filterSels.tag)_filterSels.tag={op:'Include',vals:[]};
+    _filterSels.tag.vals=[String(_activeTagFilter)];
   } else {
-    _activeFilters=_activeFilters.filter(f=>f.type!=='tag');
+    delete _filterSels.tag;
   }
   _syncFilterBadge();
   renderTagFilterChips();
