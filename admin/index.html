@@ -2478,15 +2478,14 @@ function updateChatUI(mode,agent){
   const btn=document.getElementById('handoffBtn');
   const ra=document.getElementById('replyArea');const rd=document.getElementById('replyDisabled');
   const sub=document.getElementById('chatSubtitle');const pill=document.getElementById('chatModePill');
-  const qa=document.getElementById('quickActions');
   if(mode==='agent'){
     btn.textContent='🤖 Hand Back to Bot';btn.className='handoff-btn hand-back';
-    ra.classList.remove('hidden');rd.classList.add('hidden');qa.classList.remove('hidden');
+    ra.classList.remove('hidden');rd.classList.add('hidden');
     sub.textContent=`Handled by ${agent||agentName}`;
     pill.textContent='Agent';pill.className='chat-mode-pill agent';
   }else{
     btn.textContent='👤 Take Over';btn.className='handoff-btn take-over';
-    ra.classList.add('hidden');rd.classList.remove('hidden');qa.classList.add('hidden');
+    ra.classList.add('hidden');rd.classList.remove('hidden');
     sub.textContent=selectedPhone||'';
     pill.textContent='Bot';pill.className='chat-mode-pill bot';
   }
