@@ -16,7 +16,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
+    mem_limit: 512m
+    memswap_limit: 512m
     networks:
       - koolbuy-network
 
@@ -28,13 +30,15 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
+    mem_limit: 128m
+    memswap_limit: 128m
     networks:
       - koolbuy-network
 
@@ -75,9 +79,17 @@ services:
     volumes:
       - ./knowledge_base.txt:/app/knowledge_base.txt
       - ./system_prompt.txt:/app/system_prompt.txt
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - koolbuy-network
-    restart: unless-stopped
+    restart: always
+    mem_limit: 900m
+    memswap_limit: 1400m
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
 
