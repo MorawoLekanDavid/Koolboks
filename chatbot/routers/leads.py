@@ -8,7 +8,7 @@ from sqlalchemy import case, func, select
 
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import Lead, LeadNote, Message
+from chatbot.models import ConversationTag, Lead, LeadNote, Message, Tag
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/leads", tags=["leads"])
@@ -83,6 +83,32 @@ async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx)):
     return await run_in_threadpool(_fetch)
 
 
+class LeadCreateIn(BaseModel):
+    name: str
+    phone: str
+    product_interest: Optional[str] = None
+    amount: Optional[str] = None
+    payment_plan: Optional[str] = None
+    address: Optional[str] = None
+    status: str = "new"
+    tag_id: Optional[int] = None  # auto-tag after creation
+
+
+class LeadImportItem(BaseModel):
+    name: str
+    phone: str
+    product_interest: Optional[str] = None
+    amount: Optional[str] = None
+    payment_plan: Optional[str] = None
+    address: Optional[str] = None
+
+
+class LeadImportIn(BaseModel):
+    contacts: list[LeadImportItem]
+    tag_id: Optional[int] = None
+    status: str = "new"
+
+
 class AssignIn(BaseModel):
     assign_to: Optional[str] = None   # None = unassign
 
@@ -117,6 +143,127 @@ async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_
         finally:
             db.close()
     return await run_in_threadpool(_create)
+
+
+@router.post("")
+async def create_lead(body: LeadCreateIn, ctx: dict = Depends(get_admin_ctx)):
+    def _create():
+        db = get_db()
+        try:
+            norm = normalize_phone(body.phone)
+            existing = db.query(Lead).filter(Lead.phone == norm).first()
+            if existing:
+                raise HTTPException(409, f"Contact with phone {norm} already exists")
+            lead = Lead(
+                name=body.name.strip(),
+                phone=norm,
+                product_interest=body.product_interest or None,
+                amount=body.amount or None,
+                payment_plan=body.payment_plan or None,
+                address=body.address or None,
+                status=body.status,
+                source="manual",
+            )
+            db.add(lead)
+            db.flush()
+            if body.tag_id:
+                tag = db.query(Tag).filter(Tag.id == body.tag_id).first()
+                if tag:
+                    existing_tag = db.query(ConversationTag).filter(
+                        ConversationTag.phone == norm,
+                        ConversationTag.tag_id == body.tag_id,
+                    ).first()
+                    if not existing_tag:
+                        db.add(ConversationTag(phone=norm, tag_id=body.tag_id, tagged_by=ctx.get("name", "Agent")))
+            db.commit()
+            return {"ok": True, "phone": norm, "name": lead.name}
+        finally:
+            db.close()
+    return await run_in_threadpool(_create)
+
+
+@router.post("/import")
+async def import_leads(body: LeadImportIn, ctx: dict = Depends(get_admin_ctx)):
+    def _import():
+        db = get_db()
+        try:
+            created, skipped = 0, 0
+            tag = None
+            if body.tag_id:
+                tag = db.query(Tag).filter(Tag.id == body.tag_id).first()
+            agent_name = ctx.get("name", "Agent")
+            for item in body.contacts:
+                if not item.phone or not item.name:
+                    skipped += 1
+                    continue
+                try:
+                    norm = normalize_phone(item.phone)
+                except Exception:
+                    skipped += 1
+                    continue
+                existing = db.query(Lead).filter(Lead.phone == norm).first()
+                if existing:
+                    skipped += 1
+                else:
+                    lead = Lead(
+                        name=item.name.strip(),
+                        phone=norm,
+                        product_interest=item.product_interest or None,
+                        amount=item.amount or None,
+                        payment_plan=item.payment_plan or None,
+                        address=item.address or None,
+                        status=body.status,
+                        source="import",
+                    )
+                    db.add(lead)
+                    db.flush()
+                    if tag:
+                        existing_tag = db.query(ConversationTag).filter(
+                            ConversationTag.phone == norm,
+                            ConversationTag.tag_id == body.tag_id,
+                        ).first()
+                        if not existing_tag:
+                            db.add(ConversationTag(phone=norm, tag_id=body.tag_id, tagged_by=agent_name))
+                    created += 1
+            db.commit()
+            return {"created": created, "skipped": skipped}
+        finally:
+            db.close()
+    return await run_in_threadpool(_import)
+
+
+@router.get("/by-tag/{tag_id}")
+async def leads_by_tag(tag_id: int, ctx: dict = Depends(get_admin_ctx)):
+    def _fetch():
+        db = get_db()
+        try:
+            tagged_phones = {
+                r.phone for r in db.query(ConversationTag.phone)
+                .filter(ConversationTag.tag_id == tag_id).all()
+            }
+            if not tagged_phones:
+                return []
+            leads = (
+                db.query(Lead)
+                .filter(Lead.phone.in_(tagged_phones), Lead.phone != None, Lead.phone != "")
+                .order_by(Lead.created_at.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": l.id, "name": l.name or "", "phone": l.phone,
+                    "product_interest": l.product_interest or "",
+                    "amount": l.amount or "",
+                    "payment_plan": l.payment_plan or "",
+                    "address": l.address or "",
+                    "status": l.status or "new",
+                    "source": getattr(l, "source", "bot"),
+                }
+                for l in leads
+            ]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
 
 
 @router.get("")

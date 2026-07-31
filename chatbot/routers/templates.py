@@ -156,11 +156,20 @@ async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dic
     return data
 
 
+class RecipientItem(BaseModel):
+    phone: str
+    variables: List[str] = []
+
+
 class BulkBroadcastRequest(BaseModel):
-    phones: List[str]
+    # Mode A: same variables for every number
+    phones: List[str] = []
+    variables: List[str] = []
+    # Mode B: per-recipient personalised variables
+    recipients: List[RecipientItem] = []
+    # Common
     template_name: str
     language: str = "en"
-    variables: List[str] = []
 
 
 def _save_broadcast_recipient(campaign_id: int, phone: str, wamid: str | None, status: str):
@@ -179,18 +188,23 @@ def _save_broadcast_recipient(campaign_id: int, phone: str, wamid: str | None, s
         db.close()
 
 
-async def _run_bulk_broadcast(job_id: str, phones: List[str], template_name: str,
-                               language: str, variables: List[str], agent_name: str,
+async def _run_bulk_broadcast(job_id: str,
+                               recipients: List[dict],  # [{phone, variables}]
+                               template_name: str,
+                               language: str,
+                               agent_name: str,
                                campaign_id: int):
-    """Background task: send template to each phone, track progress in Redis and DB."""
-    total = len(phones)
+    """Background task: send template to each recipient with per-person variables."""
+    total = len(recipients)
     failed = []
 
     async with httpx.AsyncClient(
         timeout=15.0,
         transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0"),
     ) as client:
-        for i, raw_phone in enumerate(phones):
+        for i, recipient in enumerate(recipients):
+            raw_phone = recipient["phone"]
+            variables = recipient.get("variables", [])
             try:
                 norm = normalize_phone(raw_phone)
                 wa_to = norm.lstrip("+")
@@ -291,26 +305,37 @@ async def bulk_broadcast(
     background_tasks: BackgroundTasks,
     ctx: dict = Depends(get_admin_ctx),
 ):
-    if not body.phones:
-        raise HTTPException(400, "No phone numbers provided")
-    if len(body.phones) > 1000:
-        raise HTTPException(400, "Maximum 1,000 numbers per broadcast")
+    if not body.phones and not body.recipients:
+        raise HTTPException(400, "No recipients provided")
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         raise HTTPException(400, "WhatsApp API not configured")
 
-    # Deduplicate
+    # Build unified recipients list (deduplicated by phone)
     seen: set = set()
-    clean: List[str] = []
-    for p in body.phones:
-        p = p.strip()
+    clean: List[dict] = []
+    raw_list = (
+        [{"phone": r.phone, "variables": r.variables} for r in body.recipients]
+        if body.recipients
+        else [{"phone": p.strip(), "variables": body.variables} for p in body.phones if p.strip()]
+    )
+    for item in raw_list:
+        p = item["phone"]
         if p and p not in seen:
             seen.add(p)
-            clean.append(p)
+            clean.append(item)
+
+    if not clean:
+        raise HTTPException(400, "No valid phone numbers provided")
+    if len(clean) > 1000:
+        raise HTTPException(400, "Maximum 1,000 recipients per broadcast")
 
     job_id = uuid.uuid4().hex
     agent_name = ctx.get("name", "Agent")
 
     # Create campaign record in DB
+    # sample_vars — store first recipient's vars as a campaign-level hint
+    sample_vars = clean[0]["variables"] if clean else []
+
     def _create_campaign():
         db = get_db()
         try:
@@ -318,7 +343,7 @@ async def bulk_broadcast(
                 job_id=job_id,
                 template_name=body.template_name,
                 language=body.language,
-                variables=json.dumps(body.variables),
+                variables=json.dumps(sample_vars),
                 total=len(clean),
                 created_by=agent_name,
             )
@@ -342,7 +367,7 @@ async def bulk_broadcast(
 
     background_tasks.add_task(
         _run_bulk_broadcast, job_id, clean,
-        body.template_name, body.language, body.variables, agent_name, campaign_id,
+        body.template_name, body.language, agent_name, campaign_id,
     )
     return {"job_id": job_id, "total": len(clean)}
 

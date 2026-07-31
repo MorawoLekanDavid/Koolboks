@@ -38,6 +38,7 @@ class Lead(Base):
     address = Column(String(512), nullable=True)
     active_duration = Column(String(50), nullable=True)
     status = Column(String(50), default="new", index=True)  # new, interested, follow_up, drop_off, converted
+    source = Column(String(20), default="bot", index=True)  # bot | manual | import
     assigned_to = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow,
