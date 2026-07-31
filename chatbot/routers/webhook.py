@@ -8,12 +8,48 @@ from sqlalchemy import and_, func, select
 from chatbot.config import HANDOFF_AUTO_RESET_HOURS, WHATSAPP_VERIFY_TOKEN, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
-from chatbot.models import Message
+from chatbot.models import BroadcastRecipient, Message
 from chatbot.services.whatsapp_service import mark_whatsapp_read, save_message_db
 from chatbot.utils.phone import normalize_phone
 from chatbot.workers.bot_response import delayed_bot_response
 
 router = APIRouter(tags=["webhook"])
+
+
+def _update_broadcast_delivery(wamid: str, status: str):
+    """Update delivery_status on a broadcast recipient when Meta fires a status event."""
+    db = get_db()
+    try:
+        recipient = db.query(BroadcastRecipient).filter(BroadcastRecipient.wamid == wamid).first()
+        if recipient:
+            # Only upgrade status rank; never downgrade (read > delivered > sent)
+            rank = {"sent": 0, "delivered": 1, "read": 2, "failed": -1}
+            if rank.get(status, 0) > rank.get(recipient.delivery_status, 0) or status == "failed":
+                recipient.delivery_status = status
+                db.commit()
+    except Exception as e:
+        log.warning(f"Broadcast delivery update failed for wamid {wamid}: {e}")
+    finally:
+        db.close()
+
+
+def _mark_broadcast_responded(phone: str):
+    """Mark the most recent broadcast recipient for this phone as responded."""
+    db = get_db()
+    try:
+        recipient = (
+            db.query(BroadcastRecipient)
+            .filter(BroadcastRecipient.phone == phone, BroadcastRecipient.responded == False)
+            .order_by(BroadcastRecipient.created_at.desc())
+            .first()
+        )
+        if recipient:
+            recipient.responded = True
+            db.commit()
+    except Exception as e:
+        log.warning(f"Broadcast responded update failed for phone {phone}: {e}")
+    finally:
+        db.close()
 
 
 @router.get("/webhook")
@@ -37,6 +73,13 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
                 value = change.get("value", {})
+                # Handle delivery status events (delivered / read / failed)
+                for status_evt in value.get("statuses", []):
+                    wamid = status_evt.get("id")
+                    status_type = status_evt.get("status")
+                    if wamid and status_type in ("delivered", "read", "failed"):
+                        background_tasks.add_task(_update_broadcast_delivery, wamid, status_type)
+
                 messages = value.get("messages", [])
                 for msg in messages:
                     if msg.get("type") != "text":
@@ -55,6 +98,9 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                     # Save inbound message to DB
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text)
+
+                    # Mark broadcast campaign as responded if this phone was a recipient
+                    background_tasks.add_task(_mark_broadcast_responded, wa_from)
 
                     # Check if agent has taken over this session
                     handoff_key = f"koolbuy:handoff:{session_id}"

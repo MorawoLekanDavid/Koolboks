@@ -16,11 +16,12 @@ from chatbot.config import (
     WHATSAPP_API_TOKEN,
     WHATSAPP_API_URL,
     WHATSAPP_PHONE_NUMBER_ID,
+    log,
 )
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
-from chatbot.models import ConversationOwner
+from chatbot.models import BroadcastCampaign, BroadcastRecipient, ConversationOwner
 from chatbot.services.whatsapp_service import save_message_db
 from chatbot.utils.phone import normalize_phone
 from fastapi.concurrency import run_in_threadpool
@@ -162,9 +163,26 @@ class BulkBroadcastRequest(BaseModel):
     variables: List[str] = []
 
 
+def _save_broadcast_recipient(campaign_id: int, phone: str, wamid: str | None, status: str):
+    db = get_db()
+    try:
+        db.add(BroadcastRecipient(
+            campaign_id=campaign_id,
+            phone=phone,
+            wamid=wamid,
+            delivery_status=status,
+        ))
+        db.commit()
+    except Exception as e:
+        log.warning(f"Failed to save broadcast recipient: {e}")
+    finally:
+        db.close()
+
+
 async def _run_bulk_broadcast(job_id: str, phones: List[str], template_name: str,
-                               language: str, variables: List[str], agent_name: str):
-    """Background task: send template to each phone, track progress in Redis."""
+                               language: str, variables: List[str], agent_name: str,
+                               campaign_id: int):
+    """Background task: send template to each phone, track progress in Redis and DB."""
     total = len(phones)
     failed = []
 
@@ -199,12 +217,19 @@ async def _run_bulk_broadcast(job_id: str, phones: List[str], template_name: str
                 )
 
                 if r.is_success:
+                    resp_json = r.json()
+                    wamid = None
+                    msgs = resp_json.get("messages", [])
+                    if msgs:
+                        wamid = msgs[0].get("id")
+                    _save_broadcast_recipient(campaign_id, norm, wamid, "sent")
                     session_id = f"wa_{norm}"
                     save_message_db(
                         session_id, norm, agent_name, "outbound",
                         f"[Template: {template_name}]" + (f" — {', '.join(variables)}" if variables else ""),
                     )
                 else:
+                    _save_broadcast_recipient(campaign_id, norm, None, "failed")
                     failed.append({"phone": raw_phone, "error": r.text[:120]})
 
             except Exception as e:
@@ -242,6 +267,23 @@ async def _run_bulk_broadcast(job_id: str, phones: List[str], template_name: str
             f"koolbuy:broadcast:{job_id}", json.dumps(final), ex=86400
         )
 
+    # Update campaign record in DB
+    def _finish_campaign():
+        db = get_db()
+        try:
+            campaign = db.query(BroadcastCampaign).filter(BroadcastCampaign.job_id == job_id).first()
+            if campaign:
+                campaign.sent_count = total - len(failed)
+                campaign.failed_count = len(failed)
+                campaign.status = "done"
+                campaign.finished_at = datetime.utcnow()
+                db.commit()
+        except Exception as e:
+            log.warning(f"Failed to finalize campaign: {e}")
+        finally:
+            db.close()
+    _finish_campaign()
+
 
 @router.post("/templates/bulk-broadcast")
 async def bulk_broadcast(
@@ -268,6 +310,27 @@ async def bulk_broadcast(
     job_id = uuid.uuid4().hex
     agent_name = ctx.get("name", "Agent")
 
+    # Create campaign record in DB
+    def _create_campaign():
+        db = get_db()
+        try:
+            campaign = BroadcastCampaign(
+                job_id=job_id,
+                template_name=body.template_name,
+                language=body.language,
+                variables=json.dumps(body.variables),
+                total=len(clean),
+                created_by=agent_name,
+            )
+            db.add(campaign)
+            db.commit()
+            db.refresh(campaign)
+            return campaign.id
+        finally:
+            db.close()
+
+    campaign_id = await run_in_threadpool(_create_campaign)
+
     # Seed Redis with initial state so /status is immediately available
     if redis_client.client:
         await redis_client.client.set(
@@ -279,7 +342,7 @@ async def bulk_broadcast(
 
     background_tasks.add_task(
         _run_bulk_broadcast, job_id, clean,
-        body.template_name, body.language, body.variables, agent_name,
+        body.template_name, body.language, body.variables, agent_name, campaign_id,
     )
     return {"job_id": job_id, "total": len(clean)}
 

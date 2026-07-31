@@ -183,6 +183,40 @@ class ConversationOwner(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class BroadcastCampaign(Base):
+    __tablename__ = "broadcast_campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String(64), unique=True, index=True)
+    template_name = Column(String(255))
+    language = Column(String(20))
+    variables = Column(String(1000), nullable=True)  # JSON-encoded list
+    total = Column(Integer, default=0)
+    sent_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    status = Column(String(20), default="running")  # running | done
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    recipients = relationship("BroadcastRecipient", back_populates="campaign", cascade="all, delete-orphan")
+
+
+class BroadcastRecipient(Base):
+    __tablename__ = "broadcast_recipients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("broadcast_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone = Column(String(30), index=True)
+    wamid = Column(String(100), nullable=True, index=True)
+    delivery_status = Column(String(20), default="sent")  # sent | delivered | read | failed
+    responded = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    campaign = relationship("BroadcastCampaign", back_populates="recipients")
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)
