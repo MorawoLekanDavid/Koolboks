@@ -69,6 +69,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .sb-icon{font-size:16px;flex-shrink:0;width:20px;text-align:center}
 .sb-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-footer{border-top:1px solid rgba(255,255,255,.07);padding:12px 10px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.sb-nav-divider{height:1px;background:rgba(255,255,255,.08);margin:8px 6px}
+.sidebar.sb-collapsed .sb-nav-divider{margin:8px 10px}
 .sb-user{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .15s}
 .sb-user:hover{background:var(--sidebar-hover)}
 .sb-user .user-av{width:28px;height:28px;font-size:11px;flex-shrink:0;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
@@ -646,11 +648,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="htab sb-nav-item"        id="htabLeads"      onclick="switchTab('leads')"><span class="sb-icon">👥</span><span class="sb-label">Leads</span></button>
       <button class="htab sb-nav-item"        id="htabContacts"   onclick="switchTab('contacts')"><span class="sb-icon">📋</span><span class="sb-label">Contacts</span></button>
       <button class="htab sb-nav-item"        id="htabProducts"   onclick="switchTab('products')"><span class="sb-icon">📦</span><span class="sb-label">Products</span></button>
-      <button class="htab sb-nav-item"        id="htabCanned"     onclick="switchTab('canned')"><span class="sb-icon">💾</span><span class="sb-label">Canned Responses</span></button>
       <button class="htab sb-nav-item hidden" id="htabAnalytics"  onclick="switchTab('analytics')"><span class="sb-icon">📊</span><span class="sb-label">Analytics</span></button>
-      <button class="htab sb-nav-item hidden" id="htabTeam"       onclick="switchTab('team')"><span class="sb-icon">⚙️</span><span class="sb-label">Team</span></button>
-      <button class="htab sb-nav-item hidden" id="htabTemplates"  onclick="switchTab('templates')"><span class="sb-icon">📨</span><span class="sb-label">Templates</span></button>
-      <button class="htab sb-nav-item hidden" id="htabAISettings" onclick="switchTab('aiSettings')"><span class="sb-icon">🤖</span><span class="sb-label">AI Settings</span></button>
+      <button class="htab sb-nav-item hidden" id="htabMessaging"  onclick="switchTab(_lastMessagingTab)"><span class="sb-icon">📢</span><span class="sb-label">Messaging</span></button>
+      <div class="sb-nav-divider"></div>
+      <button class="htab sb-nav-item hidden" id="htabSettings"   onclick="switchTab(_lastSettingsTab)"><span class="sb-icon">⚙️</span><span class="sb-label">Settings</span></button>
     </nav>
     <!-- Zero-size placeholders JS references by id -->
     <button id="inavAnalytics" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;opacity:0" onclick="switchTab('analytics')"></button>
@@ -1038,9 +1039,11 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
   <!-- Templates tab -->
   <div id="templatesTab" class="tab-full hidden">
-    <div class="bulk-tabs tmpl-subnav hidden" id="tmplSubNavTemplates">
-      <button class="bulk-tab active" data-subtab="templates" onclick="switchTab('templates')">WhatsApp Templates</button>
-      <button class="bulk-tab" data-subtab="canned" onclick="switchTab('canned')">Canned Responses</button>
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavTemplates">
+      <button class="bulk-tab" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab active" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -1049,7 +1052,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn-primary" style="background:var(--g600)" onclick="openBulkBroadcastModal()">📤 Bulk Broadcast</button>
           <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
         </div>
       </div>
@@ -1074,11 +1076,28 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     </div>
   </div>
 
+  <!-- Broadcast tab -->
+  <div id="broadcastTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="msgSubNavBroadcast">
+      <button class="bulk-tab active" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')">📤 Broadcast</button>
+      <button class="bulk-tab" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin-bottom:4px">Broadcast</h3>
+          <p style="font-size:12px;color:var(--g400)">Send an approved WhatsApp template to a list of numbers or an entire tag. Delivery and read counts show live as it sends.</p>
+        </div>
+        <button class="btn-primary" style="background:var(--g600)" onclick="openBulkBroadcastModal()">📤 New Broadcast</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Canned Responses tab -->
   <div id="cannedTab" class="tab-full hidden">
-    <div class="bulk-tabs tmpl-subnav hidden" id="tmplSubNavCanned">
-      <button class="bulk-tab" data-subtab="templates" onclick="switchTab('templates')">WhatsApp Templates</button>
-      <button class="bulk-tab active" data-subtab="canned" onclick="switchTab('canned')">Canned Responses</button>
+    <div class="bulk-tabs tmpl-subnav" id="msgSubNavCanned">
+      <button class="bulk-tab" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')">📤 Broadcast</button>
+      <button class="bulk-tab active" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -1094,6 +1113,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
   <!-- Team tab -->
   <div id="teamTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavTeam">
+      <button class="bulk-tab active" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+    </div>
     <div class="card">
       <h3>Team Members</h3>
       <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add members. Only the super admin can promote or demote roles.</p>
@@ -1110,9 +1135,17 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <button class="btn-primary" onclick="addAgent()">+ Add Member</button>
       </div>
     </div>
+  </div>
 
-    <!-- Role Permissions matrix — visible to admin/super_admin only -->
-    <div class="card" style="margin-top:20px" id="rolePermCard">
+  <!-- Roles & Permissions tab -->
+  <div id="rolePermTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavRolePerm">
+      <button class="bulk-tab" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab active" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+    </div>
+    <div class="card" id="rolePermCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div>
           <h3 style="margin:0">Role Permissions</h3>
@@ -1128,6 +1161,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
   <!-- AI Settings tab -->
   <div id="aiSettingsTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavAISettings">
+      <button class="bulk-tab" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab active" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+    </div>
     <div class="ai-settings-layout">
 
       <!-- Left column: Instructions + KB sub-tabs -->
@@ -2050,20 +2089,28 @@ async function headerAssignOwner(ownerName){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates',aiSettings:'htabAISettings'};
+const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings'};
+const MESSAGING_TABS=['broadcast','canned'];
+const SETTINGS_TABS=['team','rolePerm','templates','aiSettings'];
+let _lastMessagingTab='broadcast';
+let _lastSettingsTab='team';
 function switchTab(t){
+  if(MESSAGING_TABS.includes(t))_lastMessagingTab=t;
+  if(SETTINGS_TABS.includes(t))_lastSettingsTab=t;
   Object.keys(TABS).forEach(k=>{
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
-    const ht=document.getElementById(HTABS[k]);if(ht)ht.classList.toggle('active',k===t);
   });
+  document.querySelectorAll('.sb-nav-item.htab').forEach(b=>b.classList.remove('active'));
+  document.getElementById(HTABS[t])?.classList.add('active');
   if(t!=='leads'){restoreChatPanel();document.getElementById('leadsTab').classList.remove('split');}
   if(t==='templates')loadTemplates();
   if(t==='canned')loadCanned();
   if(t==='leads')loadLeads();
   if(t==='contacts')loadContacts();
   if(t==='analytics')loadAnalytics();
-  if(t==='team'){loadAgentList();loadRolePermissions();}
+  if(t==='team')loadAgentList();
+  if(t==='rolePerm')loadRolePermissions();
   if(t==='products')loadProducts();
   if(t==='aiSettings')loadAISettings();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
@@ -3298,34 +3345,44 @@ const PERM_ROLE_LABELS={
   telesales_agent:'Telesales',sales_agent:'Sales'
 };
 
-async function applyNavPermissions(role){
-  const tabNavMap={
+function _applyPerms(perms){
+  // Top-level tabs with a single dedicated sidebar button
+  const directMap={
     conv:['htabConv'],
     leads:['htabLeads'],contacts:['htabContacts'],products:['htabProducts'],
-    canned:['htabCanned'],
     analytics:['htabAnalytics','inavAnalytics'],
-    team:['htabTeam','inavTeam'],
-    templates:['htabTemplates','tmplSubNavTemplates','tmplSubNavCanned'],
-    aiSettings:['htabAISettings'],
   };
+  Object.entries(directMap).forEach(([tab,ids])=>{
+    const show=perms[tab]!==false;
+    ids.forEach(id=>document.getElementById(id)?.classList.toggle('hidden',!show));
+  });
+  document.getElementById('inavTeam')?.classList.toggle('hidden',perms.team===false);
+  // Sub-nav buttons duplicated across Messaging/Settings host tabs — gate every copy at once
+  ['canned','templates','aiSettings','team'].forEach(tab=>{
+    const show=perms[tab]!==false;
+    document.querySelectorAll(`[data-permtab="${tab}"]`).forEach(el=>el.classList.toggle('hidden',!show));
+  });
+  // Group buttons show if any child tab is allowed
+  const messagingOn=perms.templates!==false||perms.canned!==false;
+  const settingsOn=perms.team!==false||perms.templates!==false||perms.aiSettings!==false;
+  document.getElementById('htabMessaging')?.classList.toggle('hidden',!messagingOn);
+  document.getElementById('htabSettings')?.classList.toggle('hidden',!settingsOn);
+  if(!perms.leads)setTimeout(()=>setConvView('mine'),0);
+}
+
+async function applyNavPermissions(role){
   try{
     const r=await fetch(`/admin/role-permissions/for/${encodeURIComponent(role)}?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok)throw new Error();
-    const perms=await r.json();
-    Object.entries(tabNavMap).forEach(([tab,ids])=>{
-      const show=perms[tab]!==false;
-      ids.forEach(id=>document.getElementById(id)?.classList.toggle('hidden',!show));
-    });
-    if(!perms.leads)setTimeout(()=>setConvView('mine'),0);
+    _applyPerms(await r.json());
   }catch(e){
     // Fallback defaults if API unreachable
     if(role==='super_admin'||role==='admin'){
-      ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
-      document.getElementById('htabCanned')?.classList.add('hidden');
+      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:true,team:true,templates:true,aiSettings:true});
     } else if(role==='telesales_agent'||role==='sales_agent'){
-      ['htabLeads','htabContacts','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
-      document.getElementById('htabTemplates')?.classList.remove('hidden');
-      setTimeout(()=>setConvView('mine'),0);
+      _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:false,team:false,templates:true,aiSettings:false});
+    } else {
+      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:false,team:false,templates:false,aiSettings:false});
     }
   }
 }

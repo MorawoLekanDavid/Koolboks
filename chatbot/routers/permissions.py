@@ -22,11 +22,11 @@ CONFIGURABLE_ROLES = [
 # Default permissions used as fallback when no DB row exists
 DEFAULTS: Dict[str, Dict[str, bool]] = {
     "super_admin": {
-        "leads": True, "contacts": True, "products": True, "canned": False,
+        "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True,
     },
     "admin": {
-        "leads": True, "contacts": True, "products": True, "canned": False,
+        "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True,
     },
     "agent": {
