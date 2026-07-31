@@ -13,11 +13,22 @@ router = APIRouter(prefix="/admin/role-permissions", tags=["permissions"])
 # Tabs that can be toggled per role (conv is always visible — not in this list)
 ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings"]
 
-# Roles whose permissions are configurable (admin/super_admin always have everything)
-CONFIGURABLE_ROLES = ["agent", "customer_success_agent", "telesales_agent", "sales_agent"]
+# Roles whose permissions are configurable via the Team tab UI
+CONFIGURABLE_ROLES = [
+    "super_admin", "admin",
+    "agent", "customer_success_agent", "telesales_agent", "sales_agent",
+]
 
 # Default permissions used as fallback when no DB row exists
 DEFAULTS: Dict[str, Dict[str, bool]] = {
+    "super_admin": {
+        "leads": True, "contacts": True, "products": True, "canned": False,
+        "analytics": True, "team": True, "templates": True, "aiSettings": True,
+    },
+    "admin": {
+        "leads": True, "contacts": True, "products": True, "canned": False,
+        "analytics": True, "team": True, "templates": True, "aiSettings": True,
+    },
     "agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": False, "team": False, "templates": False, "aiSettings": False,

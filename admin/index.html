@@ -3293,37 +3293,36 @@ const PERM_TAB_LABELS={
   analytics:'Analytics',team:'Team',templates:'Templates',aiSettings:'AI Settings'
 };
 const PERM_ROLE_LABELS={
+  super_admin:'Super Admin',admin:'Admin',
   agent:'Agent',customer_success_agent:'Customer Success',
   telesales_agent:'Telesales',sales_agent:'Sales'
 };
 
 async function applyNavPermissions(role){
-  if(role==='super_admin'||role==='admin'){
-    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
-    document.getElementById('htabCanned')?.classList.add('hidden');
-    return;
-  }
+  const tabNavMap={
+    conv:['htabConv'],
+    leads:['htabLeads'],contacts:['htabContacts'],products:['htabProducts'],
+    canned:['htabCanned'],
+    analytics:['htabAnalytics','inavAnalytics'],
+    team:['htabTeam','inavTeam'],
+    templates:['htabTemplates','tmplSubNavTemplates','tmplSubNavCanned'],
+    aiSettings:['htabAISettings'],
+  };
   try{
     const r=await fetch(`/admin/role-permissions/for/${encodeURIComponent(role)}?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok)throw new Error();
     const perms=await r.json();
-    const tabNavMap={
-      conv:['htabConv'],
-      leads:['htabLeads'],contacts:['htabContacts'],products:['htabProducts'],
-      canned:['htabCanned'],
-      analytics:['htabAnalytics','inavAnalytics'],
-      team:['htabTeam','inavTeam'],
-      templates:['htabTemplates','tmplSubNavTemplates','tmplSubNavCanned'],
-      aiSettings:['htabAISettings'],
-    };
     Object.entries(tabNavMap).forEach(([tab,ids])=>{
       const show=perms[tab]!==false;
       ids.forEach(id=>document.getElementById(id)?.classList.toggle('hidden',!show));
     });
     if(!perms.leads)setTimeout(()=>setConvView('mine'),0);
   }catch(e){
-    // Fallback to safe defaults for non-admin roles
-    if(role==='telesales_agent'||role==='sales_agent'){
+    // Fallback defaults if API unreachable
+    if(role==='super_admin'||role==='admin'){
+      ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
+      document.getElementById('htabCanned')?.classList.add('hidden');
+    } else if(role==='telesales_agent'||role==='sales_agent'){
       ['htabLeads','htabContacts','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
       document.getElementById('htabTemplates')?.classList.remove('hidden');
       setTimeout(()=>setConvView('mine'),0);
