@@ -968,7 +968,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <h3 style="margin-bottom:4px">WhatsApp Templates</h3>
           <p style="font-size:12px;color:var(--g400)">Templates let you message customers outside the 24-hour window. Meta must approve each template before use.</p>
         </div>
-        <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-primary" style="background:var(--g600)" onclick="openBulkBroadcastModal()">📤 Bulk Broadcast</button>
+          <button class="btn-primary" id="createTmplBtn" onclick="closeCreateTmplModal();document.getElementById('createTmplModal').classList.remove('hidden')">+ Create Template</button>
+        </div>
       </div>
       <!-- Auto re-engagement config -->
       <div class="reeng-config-card" style="margin-bottom:20px">
@@ -1251,6 +1254,80 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeCreateTmplModal()">Cancel</button>
       <button class="btn-primary" id="createTmplBtn2" onclick="submitCreateTemplate()">Submit for Approval</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Broadcast modal -->
+<div class="modal-overlay hidden" id="bulkBroadcastModal" onclick="if(event.target===this)closeBulkBroadcastModal()">
+  <div class="modal" style="max-width:560px">
+    <h3>📤 Bulk Broadcast</h3>
+    <p style="font-size:12px;color:var(--g400);margin-bottom:16px">Send an approved WhatsApp template to multiple contacts at once. Max 1,000 numbers per batch.</p>
+
+    <!-- Step 1: contacts -->
+    <div id="bbStep1">
+      <div class="modal-field">
+        <label>Phone Numbers</label>
+        <textarea id="bbPhones" rows="6" placeholder="Paste numbers here — one per line&#10;+2348012345678&#10;08012345678&#10;2348012345678" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);resize:vertical;font-family:monospace" oninput="onBBPhonesInput()"></textarea>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <label style="font-size:12px;color:var(--g400);cursor:pointer;text-decoration:underline">
+            📎 Or upload CSV
+            <input type="file" id="bbCsvFile" accept=".csv,.txt" style="display:none" onchange="onBBCsvUpload(event)">
+          </label>
+          <span id="bbPhoneCount" style="font-size:12px;color:var(--g500);margin-left:auto"></span>
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>Template</label>
+        <select id="bbTmplSelect" onchange="onBBTmplSelect()" style="width:100%">
+          <option value="">— loading templates… —</option>
+        </select>
+      </div>
+
+      <div id="bbVarsWrap" class="hidden">
+        <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Template Variables</label>
+        <div id="bbVarInputs" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
+      <div id="bbErr" style="display:none;color:#e53e3e;font-size:13px;margin-top:8px"></div>
+
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn-cancel" onclick="closeBulkBroadcastModal()">Cancel</button>
+        <button class="btn-primary" id="bbSendBtn" onclick="startBulkBroadcast()">Send to All</button>
+      </div>
+    </div>
+
+    <!-- Step 2: progress -->
+    <div id="bbStep2" style="display:none">
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span id="bbProgressLabel">Sending…</span>
+          <span id="bbProgressPct" style="color:var(--g500)">0%</span>
+        </div>
+        <div style="background:var(--border);border-radius:999px;height:10px;overflow:hidden">
+          <div id="bbProgressBar" style="height:100%;width:0%;background:#22c55e;border-radius:999px;transition:width .3s"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;margin-bottom:16px">
+        <div style="text-align:center">
+          <div id="bbStatSent" style="font-size:28px;font-weight:700;color:#22c55e">0</div>
+          <div style="font-size:11px;color:var(--g400)">Sent</div>
+        </div>
+        <div style="text-align:center">
+          <div id="bbStatFailed" style="font-size:28px;font-weight:700;color:#e53e3e">0</div>
+          <div style="font-size:11px;color:var(--g400)">Failed</div>
+        </div>
+        <div style="text-align:center">
+          <div id="bbStatTotal" style="font-size:28px;font-weight:700;color:var(--g500)">0</div>
+          <div style="font-size:11px;color:var(--g400)">Total</div>
+        </div>
+      </div>
+      <div id="bbFailedList" style="display:none;max-height:140px;overflow-y:auto;background:var(--surface-2,var(--surface));border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:monospace;color:#e53e3e"></div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn-cancel" id="bbDoneBtn" style="display:none" onclick="closeBulkBroadcastModal()">Done</button>
+        <button class="btn-primary" id="bbDownloadBtn" style="display:none" onclick="downloadBBFailed()">⬇ Download Failed</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3583,6 +3660,165 @@ async function saveReengConfig(){
     alert(name?`Auto re-engagement set to "${name}"`:'Auto re-engagement disabled.');
   }
 }
+
+// ── Bulk Broadcast ──────────────────────────────────────────────────────────
+let _bbJobId=null, _bbPollTimer=null, _bbFailedPhones=[];
+
+function parseBBPhones(raw){
+  return raw.split(/[\n,;]+/).map(p=>p.trim()).filter(p=>p.length>=7);
+}
+
+function onBBPhonesInput(){
+  const phones=parseBBPhones(document.getElementById('bbPhones').value);
+  const el=document.getElementById('bbPhoneCount');
+  el.textContent=phones.length?`${phones.length} number${phones.length===1?'':'s'} loaded`:'';
+  el.style.color=phones.length?'#22c55e':'var(--g500)';
+}
+
+function onBBCsvUpload(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const text=ev.target.result;
+    // Extract anything that looks like a phone number from CSV
+    const phones=[...new Set(
+      (text.match(/[+\d][\d\s\-().]{6,20}/g)||[])
+        .map(p=>p.replace(/[\s\-().]/g,''))
+        .filter(p=>p.length>=7)
+    )];
+    document.getElementById('bbPhones').value=phones.join('\n');
+    onBBPhonesInput();
+  };
+  reader.readAsText(file);
+}
+
+async function openBulkBroadcastModal(){
+  _bbJobId=null; _bbFailedPhones=[];
+  document.getElementById('bbPhones').value='';
+  document.getElementById('bbPhoneCount').textContent='';
+  document.getElementById('bbErr').style.display='none';
+  document.getElementById('bbStep1').style.display='block';
+  document.getElementById('bbStep2').style.display='none';
+  document.getElementById('bbVarsWrap').classList.add('hidden');
+  document.getElementById('bbBroadcastModal')||true;
+  document.getElementById('bulkBroadcastModal').classList.remove('hidden');
+
+  // Populate template dropdown
+  const sel=document.getElementById('bbTmplSelect');
+  sel.innerHTML='<option value="">— select a template —</option>';
+  try{
+    const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`);
+    const data=await r.json();
+    const approved=(data.data||[]).filter(t=>t.status==='APPROVED');
+    approved.forEach(t=>{
+      const o=document.createElement('option');
+      o.value=t.name; o.textContent=`${t.name} (${t.language})`;
+      o.dataset.components=JSON.stringify(t.components||[]);
+      sel.appendChild(o);
+    });
+    if(!approved.length)sel.innerHTML='<option value="">No approved templates yet</option>';
+  }catch(e){sel.innerHTML='<option value="">Failed to load templates</option>';}
+}
+
+function closeBulkBroadcastModal(){
+  clearInterval(_bbPollTimer);
+  document.getElementById('bulkBroadcastModal').classList.add('hidden');
+}
+
+function onBBTmplSelect(){
+  const sel=document.getElementById('bbTmplSelect');
+  const opt=sel.options[sel.selectedIndex];
+  if(!opt||!opt.dataset.components)return;
+  const comps=JSON.parse(opt.dataset.components||'[]');
+  const body=comps.find(c=>c.type==='BODY');
+  const vars=body?[...new Set((body.text||'').match(/\{\{\d+\}\}/g)||[])].sort():[];
+  const wrap=document.getElementById('bbVarsWrap');
+  const inputs=document.getElementById('bbVarInputs');
+  if(!vars.length){wrap.classList.add('hidden');inputs.innerHTML='';return;}
+  wrap.classList.remove('hidden');
+  inputs.innerHTML=vars.map((v,i)=>
+    `<input type="text" placeholder="${v} — e.g. John" data-idx="${i}"
+      style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:100%;box-sizing:border-box">`
+  ).join('');
+}
+
+async function startBulkBroadcast(){
+  const rawPhones=document.getElementById('bbPhones').value;
+  const phones=parseBBPhones(rawPhones);
+  const tmpl=document.getElementById('bbTmplSelect').value;
+  const errEl=document.getElementById('bbErr');
+  errEl.style.display='none';
+
+  if(!phones.length){errEl.textContent='No valid phone numbers found.';errEl.style.display='block';return;}
+  if(!tmpl){errEl.textContent='Please select a template.';errEl.style.display='block';return;}
+
+  const varInputs=[...document.querySelectorAll('#bbVarInputs input')];
+  const variables=varInputs.map(i=>i.value.trim());
+
+  document.getElementById('bbSendBtn').disabled=true;
+  document.getElementById('bbSendBtn').textContent='Starting…';
+
+  try{
+    const r=await fetch(`/admin/templates/bulk-broadcast?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({phones,template_name:tmpl,language:'en',variables})
+    });
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.detail||'Failed to start broadcast');
+    _bbJobId=data.job_id;
+    document.getElementById('bbStatTotal').textContent=data.total;
+
+    // Switch to progress view
+    document.getElementById('bbStep1').style.display='none';
+    document.getElementById('bbStep2').style.display='block';
+    _bbPollTimer=setInterval(pollBBProgress,1500);
+    pollBBProgress();
+  }catch(e){
+    errEl.textContent=e.message;errEl.style.display='block';
+    document.getElementById('bbSendBtn').disabled=false;
+    document.getElementById('bbSendBtn').textContent='Send to All';
+  }
+}
+
+async function pollBBProgress(){
+  if(!_bbJobId)return;
+  try{
+    const r=await fetch(`/admin/templates/bulk-broadcast/${_bbJobId}?key=${encodeURIComponent(adminKey)}`);
+    const d=await r.json();
+    const pct=d.total?Math.round((d.current||d.sent+d.failed_count)/d.total*100):0;
+    document.getElementById('bbProgressBar').style.width=pct+'%';
+    document.getElementById('bbProgressPct').textContent=pct+'%';
+    document.getElementById('bbStatSent').textContent=d.sent||0;
+    document.getElementById('bbStatFailed').textContent=d.failed_count||0;
+    document.getElementById('bbStatTotal').textContent=d.total||0;
+
+    if(d.failed&&d.failed.length){
+      _bbFailedPhones=d.failed;
+      const fl=document.getElementById('bbFailedList');
+      fl.style.display='block';
+      fl.innerHTML=d.failed.map(f=>`<div>${f.phone} — ${f.error}</div>`).join('');
+    }
+
+    if(d.status==='done'){
+      clearInterval(_bbPollTimer);
+      document.getElementById('bbProgressLabel').textContent='✅ Broadcast complete';
+      document.getElementById('bbDoneBtn').style.display='inline-block';
+      if(d.failed&&d.failed.length)document.getElementById('bbDownloadBtn').style.display='inline-block';
+    }else{
+      document.getElementById('bbProgressLabel').textContent=`Sending… ${d.current||0} of ${d.total}`;
+    }
+  }catch(e){/* keep polling */}
+}
+
+function downloadBBFailed(){
+  if(!_bbFailedPhones.length)return;
+  const csv='phone,error\n'+_bbFailedPhones.map(f=>`"${f.phone}","${f.error}"`).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='broadcast_failed.csv';a.click();
+}
+// ── End Bulk Broadcast ───────────────────────────────────────────────────────
 
 function closeCreateTmplModal(){
   document.getElementById('createTmplModal').classList.add('hidden');
