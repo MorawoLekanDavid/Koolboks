@@ -218,6 +218,18 @@ class BroadcastRecipient(Base):
     campaign = relationship("BroadcastCampaign", back_populates="recipients")
 
 
+class RolePermission(Base):
+    """Configurable per-role tab visibility — admin can toggle from the Team tab"""
+    __tablename__ = "role_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role = Column(String(50), nullable=False, index=True)
+    tab = Column(String(50), nullable=False)
+    allowed = Column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint("role", "tab", name="uq_role_tab"),)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)

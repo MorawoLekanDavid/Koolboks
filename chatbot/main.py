@@ -16,6 +16,7 @@ from chatbot.routers import (
     followup,
     leads,
     misc,
+    permissions,
     products,
     tags,
     templates,
@@ -56,6 +57,7 @@ app.include_router(admin_auth.router)
 app.include_router(conversations.router)
 app.include_router(leads.router)
 app.include_router(leads.contacts_router)
+app.include_router(permissions.router)
 app.include_router(assignment.router)
 app.include_router(products.router)
 app.include_router(templates.router)

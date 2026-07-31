@@ -585,6 +585,19 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   .tab-full{padding:16px}
   .cards-grid{flex-direction:column}
 }
+/* ── Role-permission matrix ── */
+.perm-sw{position:relative;display:inline-block;width:36px;height:20px}
+.perm-sw input{opacity:0;width:0;height:0;position:absolute}
+.perm-sw-slider{position:absolute;inset:0;background:var(--g300);border-radius:20px;cursor:pointer;transition:.2s}
+.perm-sw-slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.perm-sw input:checked+.perm-sw-slider{background:var(--green)}
+.perm-sw input:checked+.perm-sw-slider:before{transform:translateX(16px)}
+.perm-matrix{width:100%;border-collapse:collapse;font-size:13px}
+.perm-matrix th{text-align:center;padding:8px 10px;background:var(--g50);font-weight:700;color:var(--g600);font-size:11px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.perm-matrix th:first-child{text-align:left}
+.perm-matrix td{padding:9px 10px;border-top:1px solid var(--g100);vertical-align:middle;text-align:center}
+.perm-matrix td:first-child{font-weight:600;color:var(--g700);font-size:13px;text-align:left;white-space:nowrap}
+.perm-role-chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--g100);color:var(--g500)}
 </style>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -1095,6 +1108,20 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <option value="admin">Admin</option>
         </select>
         <button class="btn-primary" onclick="addAgent()">+ Add Member</button>
+      </div>
+    </div>
+
+    <!-- Role Permissions matrix — visible to admin/super_admin only -->
+    <div class="card" style="margin-top:20px" id="rolePermCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin:0">Role Permissions</h3>
+          <p style="font-size:13px;color:var(--g400);margin:4px 0 0">Toggle which tabs each role can access. Admin and Super Admin always have full access.</p>
+        </div>
+        <button class="btn-primary" onclick="saveRolePermissions()" id="savePermBtn" style="padding:7px 18px;font-size:13px">Save</button>
+      </div>
+      <div id="permMatrixWrap" style="overflow-x:auto;margin-top:16px">
+        <p style="color:var(--g400);font-size:13px">Loading…</p>
       </div>
     </div>
   </div>
@@ -1710,16 +1737,8 @@ function showApp(){
   const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success','customer_success_agent':'Customer Success','sales_agent':'Telesales','telesales_agent':'Telesales'};
   document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  if(agentRole==='super_admin'||agentRole==='admin'){
-    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
-    document.getElementById('htabCanned')?.classList.add('hidden');
-  } else if(agentRole==='telesales_agent'||agentRole==='sales_agent'){
-    // Telesales: Conversations + Templates only, default to My Chats
-    ['htabLeads','htabContacts','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
-    document.getElementById('htabTemplates')?.classList.remove('hidden');
-    setTimeout(()=>setConvView('mine'),0);
-  }
-  // customer_success_agent and agent: default nav (Conversations, Leads, Products, Canned)
+  applyNavPermissions(agentRole);
+  // Nav visibility is handled dynamically via applyNavPermissions
   requestNotificationPermission();isFirstLoad=true;
   convOffset=0;loadConversations();loadAllTags();
   // Pre-load agent list so conversation owner dropdown is ready immediately
@@ -2044,7 +2063,7 @@ function switchTab(t){
   if(t==='leads')loadLeads();
   if(t==='contacts')loadContacts();
   if(t==='analytics')loadAnalytics();
-  if(t==='team')loadAgentList();
+  if(t==='team'){loadAgentList();loadRolePermissions();}
   if(t==='products')loadProducts();
   if(t==='aiSettings')loadAISettings();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
@@ -3264,6 +3283,103 @@ async function removeAgent(id){
   if(!confirm('Remove this agent?'))return;
   await fetch(`/admin/agents/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'}).catch(()=>{});
   await loadAgentList();
+}
+
+// ── Role Permissions ───────────────────────────────────────────────────
+let _permMatrix={};
+
+const PERM_TAB_LABELS={
+  leads:'Leads',contacts:'Contacts',products:'Products',canned:'Canned Replies',
+  analytics:'Analytics',team:'Team',templates:'Templates',aiSettings:'AI Settings'
+};
+const PERM_ROLE_LABELS={
+  agent:'Agent',customer_success_agent:'Customer Success',
+  telesales_agent:'Telesales',sales_agent:'Sales'
+};
+
+async function applyNavPermissions(role){
+  if(role==='super_admin'||role==='admin'){
+    ['htabAnalytics','htabTeam','inavAnalytics','inavTeam','htabTemplates','tmplSubNavTemplates','tmplSubNavCanned','htabAISettings'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
+    document.getElementById('htabCanned')?.classList.add('hidden');
+    return;
+  }
+  try{
+    const r=await fetch(`/admin/role-permissions/for/${encodeURIComponent(role)}?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)throw new Error();
+    const perms=await r.json();
+    const tabNavMap={
+      conv:['htabConv'],
+      leads:['htabLeads'],contacts:['htabContacts'],products:['htabProducts'],
+      canned:['htabCanned'],
+      analytics:['htabAnalytics','inavAnalytics'],
+      team:['htabTeam','inavTeam'],
+      templates:['htabTemplates','tmplSubNavTemplates','tmplSubNavCanned'],
+      aiSettings:['htabAISettings'],
+    };
+    Object.entries(tabNavMap).forEach(([tab,ids])=>{
+      const show=perms[tab]!==false;
+      ids.forEach(id=>document.getElementById(id)?.classList.toggle('hidden',!show));
+    });
+    if(!perms.leads)setTimeout(()=>setConvView('mine'),0);
+  }catch(e){
+    // Fallback to safe defaults for non-admin roles
+    if(role==='telesales_agent'||role==='sales_agent'){
+      ['htabLeads','htabContacts','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+      document.getElementById('htabTemplates')?.classList.remove('hidden');
+      setTimeout(()=>setConvView('mine'),0);
+    }
+  }
+}
+
+async function loadRolePermissions(){
+  if(agentRole!=='super_admin'&&agentRole!=='admin')return;
+  const wrap=document.getElementById('permMatrixWrap');
+  if(!wrap)return;
+  wrap.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/role-permissions?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok){wrap.innerHTML='<p style="color:var(--red);font-size:13px">Failed to load permissions.</p>';return;}
+    _permMatrix=await r.json();
+    renderPermMatrix();
+  }catch(e){wrap.innerHTML='<p style="color:var(--red);font-size:13px">Error loading permissions.</p>';}
+}
+
+function renderPermMatrix(){
+  const wrap=document.getElementById('permMatrixWrap');
+  if(!wrap)return;
+  const tabs=Object.keys(PERM_TAB_LABELS);
+  const roles=Object.keys(PERM_ROLE_LABELS);
+  let html=`<table class="perm-matrix"><thead><tr><th>Role</th>${tabs.map(t=>`<th>${PERM_TAB_LABELS[t]}</th>`).join('')}</tr></thead><tbody>`;
+  roles.forEach(role=>{
+    const perms=_permMatrix[role]||{};
+    html+=`<tr><td><span class="perm-role-chip">${PERM_ROLE_LABELS[role]}</span></td>`;
+    tabs.forEach(tab=>{
+      const on=perms[tab]!==false;
+      html+=`<td><label class="perm-sw"><input type="checkbox" onchange="togglePerm('${role}','${tab}',this.checked)"${on?' checked':''}><span class="perm-sw-slider"></span></label></td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+}
+
+function togglePerm(role,tab,val){
+  if(!_permMatrix[role])_permMatrix[role]={};
+  _permMatrix[role][tab]=val;
+}
+
+async function saveRolePermissions(){
+  const btn=document.getElementById('savePermBtn');
+  if(!btn)return;
+  btn.disabled=true;btn.textContent='Saving…';
+  try{
+    const r=await fetch(`/admin/role-permissions?key=${encodeURIComponent(adminKey)}`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({permissions:_permMatrix})
+    });
+    if(r.ok){btn.textContent='Saved ✓';setTimeout(()=>{btn.disabled=false;btn.textContent='Save';},2000);}
+    else{btn.textContent='Error';setTimeout(()=>{btn.disabled=false;btn.textContent='Save';},2000);}
+  }catch(e){btn.textContent='Error';setTimeout(()=>{btn.disabled=false;btn.textContent='Save';},2000);}
 }
 
 // ── AI Settings ────────────────────────────────────────────────────────
