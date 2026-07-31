@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
@@ -375,3 +375,102 @@ async def update_lead_status(phone: str, body: StatusIn, ctx: dict = Depends(get
         finally:
             db.close()
     return await run_in_threadpool(_update)
+
+
+# ── Contacts router (source = manual | import) ────────────────────────────────
+contacts_router = APIRouter(prefix="/admin/contacts", tags=["contacts"])
+
+
+class ContactUpdateIn(BaseModel):
+    name: str
+    product_interest: Optional[str] = None
+    amount: Optional[str] = None
+    payment_plan: Optional[str] = None
+    address: Optional[str] = None
+
+
+@contacts_router.get("")
+async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
+    def _fetch():
+        db = get_db()
+        try:
+            leads_list = (
+                db.query(Lead)
+                .filter(Lead.source.in_(["manual", "import"]))
+                .order_by(Lead.created_at.desc())
+                .all()
+            )
+            phones = [l.phone for l in leads_list]
+            tag_rows = (
+                db.query(ConversationTag, Tag)
+                .join(Tag, ConversationTag.tag_id == Tag.id)
+                .filter(ConversationTag.phone.in_(phones))
+                .all()
+            ) if phones else []
+            phone_tags: dict = {}
+            for ct, tag in tag_rows:
+                phone_tags.setdefault(ct.phone, []).append(
+                    {"id": tag.id, "name": tag.name, "color": tag.color}
+                )
+            return [
+                {
+                    "id": l.id,
+                    "name": l.name or "",
+                    "phone": l.phone,
+                    "product_interest": l.product_interest or "",
+                    "amount": l.amount or "",
+                    "payment_plan": l.payment_plan or "",
+                    "address": l.address or "",
+                    "status": l.status or "new",
+                    "source": l.source or "manual",
+                    "created_at": l.created_at.isoformat() if l.created_at else None,
+                    "tags": phone_tags.get(l.phone, []),
+                }
+                for l in leads_list
+            ]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+@contacts_router.patch("/{phone}")
+async def update_contact(phone: str, body: ContactUpdateIn, ctx: dict = Depends(get_admin_ctx)):
+    def _update():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if not lead:
+                raise HTTPException(404, "Contact not found")
+            if lead.source not in ("manual", "import"):
+                raise HTTPException(400, "Cannot edit bot-qualified leads from the Contacts tab")
+            lead.name = body.name.strip()
+            lead.product_interest = body.product_interest or None
+            lead.amount = body.amount or None
+            lead.payment_plan = body.payment_plan or None
+            lead.address = body.address or None
+            db.commit()
+            return {"ok": True}
+        finally:
+            db.close()
+    return await run_in_threadpool(_update)
+
+
+@contacts_router.delete("/{phone}")
+async def delete_contact(phone: str, ctx: dict = Depends(get_admin_ctx)):
+    def _delete():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if not lead:
+                raise HTTPException(404, "Contact not found")
+            if lead.source not in ("manual", "import"):
+                raise HTTPException(400, "Cannot delete bot-qualified leads from the Contacts tab")
+            db.query(ConversationTag).filter(ConversationTag.phone == norm).delete()
+            db.delete(lead)
+            db.commit()
+            return {"ok": True}
+        finally:
+            db.close()
+    return await run_in_threadpool(_delete)

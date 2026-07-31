@@ -631,6 +631,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     <nav class="sb-nav">
       <button class="htab sb-nav-item active" id="htabConv"       onclick="switchTab('conv')"><span class="sb-icon">💬</span><span class="sb-label">Conversations</span></button>
       <button class="htab sb-nav-item"        id="htabLeads"      onclick="switchTab('leads')"><span class="sb-icon">👥</span><span class="sb-label">Leads</span></button>
+      <button class="htab sb-nav-item"        id="htabContacts"   onclick="switchTab('contacts')"><span class="sb-icon">📋</span><span class="sb-label">Contacts</span></button>
       <button class="htab sb-nav-item"        id="htabProducts"   onclick="switchTab('products')"><span class="sb-icon">📦</span><span class="sb-label">Products</span></button>
       <button class="htab sb-nav-item"        id="htabCanned"     onclick="switchTab('canned')"><span class="sb-icon">💾</span><span class="sb-label">Canned Responses</span></button>
       <button class="htab sb-nav-item hidden" id="htabAnalytics"  onclick="switchTab('analytics')"><span class="sb-icon">📊</span><span class="sb-label">Analytics</span></button>
@@ -869,8 +870,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
             <input type="date" class="date-inp" id="leadsDateTo" onchange="applyLeadDateFilter()"/>
             <button class="btn-dl hidden" id="downloadBtn" onclick="downloadCurrentGroup()">⬇ CSV</button>
             <button class="btn-dl" onclick="toggleRulesPanel()">⚡ Auto-assign Rules</button>
-            <button class="btn-primary" style="font-size:12px;padding:5px 12px" onclick="openAddContactModal()">+ Add Contact</button>
-            <button class="btn-dl" onclick="openImportCsvModal()">⬆ Import CSV</button>
           </div>
         </div>
         <span style="font-size:12px;color:var(--g400);display:block;margin-bottom:12px" id="leadsListCount"></span>
@@ -932,6 +931,36 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
     </div>
     <div class="leads-chat-col" id="leadsChatCol"></div>
+  </div>
+
+  <!-- Contacts tab -->
+  <div id="contactsTab" class="tab-full hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin-bottom:4px">Contacts</h3>
+          <p style="font-size:12px;color:var(--g400)">Outreach contacts — added manually or imported from CSV</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-dl" onclick="openImportCsvModal()">⬆ Import CSV</button>
+          <button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--g500)">Total: <strong id="ctTotal" style="color:var(--text)">—</strong></span>
+        <span style="font-size:13px;color:var(--g500)">Manual: <strong id="ctManual" style="color:var(--text)">—</strong></span>
+        <span style="font-size:13px;color:var(--g500)">Imported: <strong id="ctImport" style="color:var(--text)">—</strong></span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <select id="ctTagFilter" onchange="filterContacts()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+          <option value="">All tags</option>
+        </select>
+        <input type="text" id="ctSearch" placeholder="Search name or phone…" oninput="filterContacts()" style="flex:1;min-width:180px;max-width:300px;font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+      </div>
+      <div id="contactsTableWrap" style="overflow-x:auto">
+        <p style="color:var(--g400);font-size:13px">Loading…</p>
+      </div>
+    </div>
   </div>
 
   <!-- Analytics tab -->
@@ -1686,7 +1715,7 @@ function showApp(){
     document.getElementById('htabCanned')?.classList.add('hidden');
   } else if(agentRole==='telesales_agent'||agentRole==='sales_agent'){
     // Telesales: Conversations + Templates only, default to My Chats
-    ['htabLeads','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+    ['htabLeads','htabContacts','htabProducts','htabCanned','htabAnalytics','htabTeam','htabAISettings','inavAnalytics','inavTeam'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
     document.getElementById('htabTemplates')?.classList.remove('hidden');
     setTimeout(()=>setConvView('mine'),0);
   }
@@ -2002,8 +2031,8 @@ async function headerAssignOwner(ownerName){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates',aiSettings:'htabAISettings'};
+const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',canned:'cannedTab',analytics:'analyticsTab',team:'teamTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',canned:'htabCanned',analytics:'htabAnalytics',team:'htabTeam',templates:'htabTemplates',aiSettings:'htabAISettings'};
 function switchTab(t){
   Object.keys(TABS).forEach(k=>{
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
@@ -2013,6 +2042,7 @@ function switchTab(t){
   if(t==='templates')loadTemplates();
   if(t==='canned')loadCanned();
   if(t==='leads')loadLeads();
+  if(t==='contacts')loadContacts();
   if(t==='analytics')loadAnalytics();
   if(t==='team')loadAgentList();
   if(t==='products')loadProducts();
@@ -4063,13 +4093,16 @@ function downloadBBFailed(){
 
 // ── Add Contact ──────────────────────────────────────────────────────────────
 async function openAddContactModal(){
-  // Reset form
+  // Reset form to "add" mode
   ['acName','acPhone','acProduct','acAmount','acPaymentPlan','acAddress'].forEach(id=>{
-    document.getElementById(id).value='';
+    const el=document.getElementById(id);
+    el.value='';
+    el.disabled=false;
   });
   document.getElementById('acErr').style.display='none';
-  document.getElementById('acSaveBtn').disabled=false;
-  document.getElementById('acSaveBtn').textContent='Save Contact';
+  document.querySelector('#addContactModal h3').textContent='+ Add Contact';
+  const btn=document.getElementById('acSaveBtn');
+  btn.disabled=false; btn.textContent='Save Contact'; btn.onclick=saveAddContact;
   // Load tags
   const tagSel=document.getElementById('acTag');
   tagSel.innerHTML='<option value="">— none —</option>';
@@ -4116,6 +4149,7 @@ async function saveAddContact(){
     if(!r.ok)throw new Error(data.detail||'Failed to save contact');
     closeAddContactModal();
     showToast?.(`Contact ${name} added`);
+    if(!document.getElementById('contactsTab').classList.contains('hidden'))loadContacts();
   }catch(e){
     errEl.textContent=e.message;errEl.style.display='block';
     btn.disabled=false; btn.textContent='Save Contact';
@@ -4227,12 +4261,139 @@ async function runCsvImport(){
     if(!r.ok)throw new Error(data.detail||'Import failed');
     closeImportCsvModal();
     showToast?.(`Imported ${data.created} contacts${data.skipped?' ('+data.skipped+' skipped — already exist)':''}`);
+    if(!document.getElementById('contactsTab').classList.contains('hidden'))loadContacts();
   }catch(e){
     errEl.textContent=e.message; errEl.style.display='block';
     btn.disabled=false; btn.textContent='Import Contacts';
   }
 }
 // ── End Import CSV ────────────────────────────────────────────────────────────
+
+// ── Contacts tab ──────────────────────────────────────────────────────────────
+let _allContacts=[];
+let _ctMap={};
+
+async function loadContacts(){
+  const wrap=document.getElementById('contactsTableWrap');
+  wrap.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/contacts?key=${encodeURIComponent(adminKey)}`);
+    if(r.status===403){logout();return;}
+    _allContacts=await r.json();
+    // Stats
+    document.getElementById('ctTotal').textContent=_allContacts.length;
+    document.getElementById('ctManual').textContent=_allContacts.filter(c=>c.source==='manual').length;
+    document.getElementById('ctImport').textContent=_allContacts.filter(c=>c.source==='import').length;
+    // Populate tag filter
+    const tagMap=new Map();
+    _allContacts.forEach(c=>(c.tags||[]).forEach(t=>tagMap.set(t.id,t)));
+    const sel=document.getElementById('ctTagFilter');
+    const prev=sel.value;
+    sel.innerHTML='<option value="">All tags</option>'+
+      [...tagMap.values()].map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    if(prev)sel.value=prev;
+    filterContacts();
+  }catch(e){
+    wrap.innerHTML='<p style="color:#e53e3e;font-size:13px">Failed to load contacts. Please refresh.</p>';
+  }
+}
+
+function filterContacts(){
+  const tagId=document.getElementById('ctTagFilter').value;
+  const search=document.getElementById('ctSearch').value.toLowerCase().trim();
+  let data=_allContacts;
+  if(tagId)data=data.filter(c=>(c.tags||[]).some(t=>String(t.id)===tagId));
+  if(search)data=data.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.phone||'').includes(search));
+  renderContactsTable(data);
+}
+
+function renderContactsTable(data){
+  const wrap=document.getElementById('contactsTableWrap');
+  _ctMap={};
+  data.forEach(c=>{_ctMap[c.phone]=c;});
+  if(!data.length){
+    wrap.innerHTML='<p style="color:var(--g400);font-size:13px;padding:20px 0">No contacts found. Use "+ Add Contact" or "⬆ Import CSV" to get started.</p>';
+    return;
+  }
+  const rows=data.map(c=>{
+    const tags=(c.tags||[]).map(t=>`<span style="display:inline-block;background:${t.color||'#6366f1'}22;color:${t.color||'#6366f1'};border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${esc(t.name)}</span>`).join(' ');
+    const src=c.source==='import'?'<span style="font-size:11px;color:var(--g400)">📥 import</span>':'<span style="font-size:11px;color:var(--g400)">✏️ manual</span>';
+    const added=c.created_at?c.created_at.slice(0,10):'—';
+    const ph=JSON.stringify(c.phone);
+    return `<tr>
+      <td style="font-weight:600">${esc(c.name||'—')}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(c.phone)}</td>
+      <td>${esc(c.product_interest||'—')}</td>
+      <td>${tags||'<span style="color:var(--g300)">—</span>'}</td>
+      <td>${src}</td>
+      <td>${added}</td>
+      <td style="white-space:nowrap">
+        <button onclick="openEditContactModal(_ctMap[${ph}])" style="font-size:12px;padding:3px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer;margin-right:4px">Edit</button>
+        <button onclick="deleteContact(${ph})" style="font-size:12px;padding:3px 10px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;border-radius:6px;cursor:pointer">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML=`<table class="agt-table" style="width:100%">
+    <thead><tr><th>Name</th><th>Phone</th><th>Product Interest</th><th>Tags</th><th>Source</th><th>Added</th><th>Actions</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+async function openEditContactModal(c){
+  await openAddContactModal();
+  document.querySelector('#addContactModal h3').textContent='✏️ Edit Contact';
+  document.getElementById('acName').value=c.name||'';
+  const phoneEl=document.getElementById('acPhone');
+  phoneEl.value=c.phone; phoneEl.disabled=true;
+  document.getElementById('acProduct').value=c.product_interest||'';
+  document.getElementById('acAmount').value=c.amount||'';
+  document.getElementById('acPaymentPlan').value=c.payment_plan||'';
+  document.getElementById('acAddress').value=c.address||'';
+  if(c.tags&&c.tags.length)document.getElementById('acTag').value=c.tags[0].id;
+  const btn=document.getElementById('acSaveBtn');
+  btn.textContent='Update Contact';
+  btn.onclick=()=>updateContact(c.phone);
+}
+
+async function updateContact(phone){
+  const name=document.getElementById('acName').value.trim();
+  const errEl=document.getElementById('acErr');
+  errEl.style.display='none';
+  if(!name){errEl.textContent='Name is required';errEl.style.display='block';return;}
+  const btn=document.getElementById('acSaveBtn');
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const r=await fetch(`/admin/contacts/${encodeURIComponent(phone)}?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        name,
+        product_interest:document.getElementById('acProduct').value.trim()||null,
+        amount:document.getElementById('acAmount').value.trim()||null,
+        payment_plan:document.getElementById('acPaymentPlan').value.trim()||null,
+        address:document.getElementById('acAddress').value.trim()||null,
+      })
+    });
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.detail||'Failed to update');
+    closeAddContactModal();
+    showToast?.('Contact updated');
+    loadContacts();
+  }catch(e){
+    errEl.textContent=e.message;errEl.style.display='block';
+    btn.disabled=false; btn.textContent='Update Contact';
+  }
+}
+
+async function deleteContact(phone){
+  if(!confirm(`Delete contact ${phone}?\nThis cannot be undone.`))return;
+  try{
+    const r=await fetch(`/admin/contacts/${encodeURIComponent(phone)}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+    if(!r.ok){const d=await r.json();alert(d.detail||'Failed to delete');return;}
+    showToast?.('Contact deleted');
+    loadContacts();
+  }catch(e){alert('Network error — please try again');}
+}
+// ── End Contacts tab ──────────────────────────────────────────────────────────
 
 // ── Broadcast Analytics ──────────────────────────────────────────────────────
 async function loadBroadcastAnalytics(){
