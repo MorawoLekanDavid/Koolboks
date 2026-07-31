@@ -88,6 +88,7 @@ async def product_recommendations(ctx: dict = Depends(require_admin)):
                 .where(Lead.product_interest != None, Lead.product_interest != "")
                 .group_by(Lead.product_interest)
                 .order_by(func.count(Lead.id).desc())
+                .limit(10)
             ).all()
             total = sum(r.count for r in rows)
             return [

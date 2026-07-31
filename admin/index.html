@@ -955,10 +955,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <div id="productRecContent"><p style="color:var(--g400);font-size:13px">Loading...</p></div>
     </div>
 
-    <!-- Broadcast Analytics -->
+    <!-- Broadcast Analytics: overview funnel -->
     <div class="card" style="margin-top:20px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-        <h3 style="margin:0">📤 Broadcast Analytics</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin:0 0 2px">📤 Broadcast Analytics</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">Track how your outbound campaigns perform at every stage</p>
+        </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <input type="date" id="bcFromDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
           <span style="font-size:12px;color:var(--g400)">to</span>
@@ -966,13 +969,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <button onclick="loadBroadcastAnalytics()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
         </div>
       </div>
-      <div class="stat-cards-row" id="bcOverviewCards" style="margin-bottom:20px">
-        <p style="color:var(--g400);font-size:13px">Loading…</p>
+      <div id="bcOverviewFunnel"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+    </div>
+
+    <!-- Broadcast Analytics: campaigns + templates side by side -->
+    <div class="cards-grid" style="margin-top:12px">
+      <div class="card">
+        <h4 style="margin:0 0 4px;font-size:14px">Recent Campaigns</h4>
+        <p style="font-size:11px;color:var(--g400);margin:0 0 14px">Each bulk broadcast you send appears here with live delivery stats</p>
+        <div id="bcCampaignsTable" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
       </div>
-      <h4 style="margin:0 0 10px;font-size:13px;color:var(--g600)">Recent Campaigns</h4>
-      <div id="bcCampaignsTable" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-      <h4 style="margin:20px 0 10px;font-size:13px;color:var(--g600)">Performance by Template</h4>
-      <div id="bcTemplateTable" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      <div class="card">
+        <h4 style="margin:0 0 4px;font-size:14px">Performance by Template</h4>
+        <p style="font-size:11px;color:var(--g400);margin:0 0 14px">Which templates get the most responses — ranked by response rate</p>
+        <div id="bcTemplateChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      </div>
     </div>
   </div>
 
@@ -3848,7 +3859,7 @@ async function loadBroadcastAnalytics(){
 async function loadBCOverview(){
   const from=document.getElementById('bcFromDate')?.value||'';
   const to=document.getElementById('bcToDate')?.value||'';
-  const el=document.getElementById('bcOverviewCards');
+  const el=document.getElementById('bcOverviewFunnel');
   if(!el)return;
   try{
     const qs=new URLSearchParams({key:adminKey});
@@ -3857,15 +3868,39 @@ async function loadBCOverview(){
     const r=await fetch(`/admin/analytics/broadcast-overview?${qs}`);
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const d=await r.json();
-    const pct=n=>d.total_sent?Math.round(n/d.total_sent*100)+'%':'—';
+    const total=d.total_sent||0;
+    const pctN=n=>total?Math.round(n/total*100):0;
+    if(!total){
+      el.innerHTML='<p style="color:var(--g400);font-size:13px">No broadcasts sent yet. Use the Bulk Broadcast button on the Templates tab to send your first campaign.</p>';
+      return;
+    }
+    const fBar=(label,n,color,note)=>`
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+          <span style="font-size:13px;font-weight:600;color:var(--g700)">${label}</span>
+          <span style="font-size:14px;font-weight:800;color:${color}">${n.toLocaleString()} <span style="font-size:11px;font-weight:400;color:var(--g400)">${note}</span></span>
+        </div>
+        <div style="height:22px;background:var(--g100);border-radius:5px;overflow:hidden">
+          <div style="height:100%;width:${pctN(n)}%;background:${color};border-radius:5px;min-width:${n>0?'3px':'0'};transition:width .5s ease;display:flex;align-items:center;padding-left:8px;box-sizing:border-box">
+            ${n>0&&pctN(n)>8?`<span style="color:#fff;font-size:11px;font-weight:700">${pctN(n)}%</span>`:''}
+          </div>
+        </div>
+      </div>`;
     el.innerHTML=`
-      <div class="stat-c"><div class="stat-n">${d.total_sent}</div><div class="stat-l">Sent</div></div>
-      <div class="stat-c"><div class="stat-n">${d.delivered}</div><div class="stat-l">Delivered<br><small style="font-weight:400;color:var(--g400)">${pct(d.delivered)}</small></div></div>
-      <div class="stat-c"><div class="stat-n">${d.read}</div><div class="stat-l">Read<br><small style="font-weight:400;color:var(--g400)">${pct(d.read)}</small></div></div>
-      <div class="stat-c" style="color:var(--orange)"><div class="stat-n">${d.responded}</div><div class="stat-l">Responded<br><small style="font-weight:400;color:var(--g400)">${pct(d.responded)}</small></div></div>
-      <div class="stat-c" style="color:#ef4444"><div class="stat-n">${d.failed}</div><div class="stat-l">Failed<br><small style="font-weight:400;color:var(--g400)">${pct(d.failed)}</small></div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">
+        <div class="stat-c"><div class="stat-n">${total.toLocaleString()}</div><div class="stat-l">Total Sent</div></div>
+        <div class="stat-c"><div class="stat-n" style="color:#3b82f6">${d.delivered.toLocaleString()}</div><div class="stat-l">Delivered</div></div>
+        <div class="stat-c"><div class="stat-n" style="color:#8b5cf6">${d.read.toLocaleString()}</div><div class="stat-l">Read</div></div>
+        <div class="stat-c"><div class="stat-n" style="color:var(--orange)">${d.responded.toLocaleString()}</div><div class="stat-l">Responded</div></div>
+        <div class="stat-c"><div class="stat-n" style="color:#ef4444">${d.failed.toLocaleString()}</div><div class="stat-l">Failed</div></div>
+      </div>
+      <p style="font-size:11px;font-weight:700;color:var(--g500);letter-spacing:.06em;margin:0 0 10px;text-transform:uppercase">Funnel — as % of total sent</p>
+      ${fBar('📬 Delivered',d.delivered,'#3b82f6',`of ${total.toLocaleString()} sent`)}
+      ${fBar('👁 Read',d.read,'#8b5cf6','of delivered')}
+      ${fBar('💬 Responded',d.responded,'var(--orange)','sent a reply')}
+      ${fBar('❌ Failed',d.failed,'#ef4444','not delivered')}
     `;
-  }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load overview</p>';}
+  }catch(e){const el2=document.getElementById('bcOverviewFunnel');if(el2)el2.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load overview</p>';}
 }
 
 async function loadBCCampaigns(){
@@ -3875,33 +3910,38 @@ async function loadBCCampaigns(){
     const r=await fetch(`/admin/analytics/broadcast-campaigns?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const data=await r.json();
-    if(!data.length){el.innerHTML='<p style="color:var(--g400);font-size:13px">No broadcast campaigns yet</p>';return;}
+    if(!data.length){
+      el.innerHTML=`<div style="text-align:center;padding:24px 0;color:var(--g400)">
+        <div style="font-size:28px;margin-bottom:8px">📭</div>
+        <p style="font-size:13px;margin:0">No campaigns yet</p>
+        <p style="font-size:12px;margin:6px 0 0;color:var(--g300)">Each bulk broadcast will appear here with its sent / delivered / responded counts</p>
+      </div>`;
+      return;
+    }
     el.innerHTML=`<table class="agt-table">
       <thead><tr>
         <th>Date</th><th>Template</th><th>By</th>
-        <th style="text-align:center">Sent</th>
-        <th style="text-align:center">Delivered</th>
-        <th style="text-align:center">Read</th>
-        <th style="text-align:center">Responded</th>
-        <th style="text-align:center">Failed</th>
-        <th style="text-align:center">Status</th>
+        <th style="text-align:right">Sent</th>
+        <th style="text-align:right">Dlvd</th>
+        <th style="text-align:right">Read</th>
+        <th style="text-align:right">Replied</th>
+        <th style="text-align:right">Failed</th>
       </tr></thead>
       <tbody>${data.map(c=>{
-        const d=c.created_at?c.created_at.slice(0,10):'—';
-        const pct=n=>c.sent?Math.round(n/c.sent*100)+'%':'—';
-        const statusBadge=c.status==='done'
-          ?'<span style="color:#10b981;font-weight:700">Done</span>'
-          :'<span style="color:var(--orange);font-weight:700">Running</span>';
+        const dt=c.created_at?c.created_at.slice(0,10):'—';
+        const p=n=>c.sent?Math.round(n/c.sent*100)+'%':'—';
+        const badge=c.status==='done'
+          ?'<span style="font-size:10px;padding:2px 6px;background:#d1fae5;color:#065f46;border-radius:99px;font-weight:700">Done</span>'
+          :'<span style="font-size:10px;padding:2px 6px;background:#fef3c7;color:#92400e;border-radius:99px;font-weight:700">Live</span>';
         return`<tr>
-          <td style="white-space:nowrap">${d}</td>
-          <td><code style="font-size:11px">${esc(c.template_name)}</code></td>
-          <td style="color:var(--g500);font-size:12px">${esc(c.created_by||'—')}</td>
-          <td style="text-align:center">${c.sent}</td>
-          <td style="text-align:center">${c.delivered} <small style="color:var(--g400)">(${pct(c.delivered)})</small></td>
-          <td style="text-align:center">${c.read} <small style="color:var(--g400)">(${pct(c.read)})</small></td>
-          <td style="text-align:center;font-weight:700;color:var(--orange)">${c.responded} <small style="color:var(--g400)">(${pct(c.responded)})</small></td>
-          <td style="text-align:center;color:#ef4444">${c.failed}</td>
-          <td style="text-align:center">${statusBadge}</td>
+          <td style="white-space:nowrap;font-size:12px">${dt} ${badge}</td>
+          <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code style="font-size:11px">${esc(c.template_name)}</code></td>
+          <td style="color:var(--g400);font-size:11px">${esc(c.created_by||'—')}</td>
+          <td style="text-align:right;font-weight:700">${c.sent}</td>
+          <td style="text-align:right;color:#3b82f6">${c.delivered}<br><small style="color:var(--g300);font-size:10px">${p(c.delivered)}</small></td>
+          <td style="text-align:right;color:#8b5cf6">${c.read}<br><small style="color:var(--g300);font-size:10px">${p(c.read)}</small></td>
+          <td style="text-align:right;color:var(--orange);font-weight:700">${c.responded}<br><small style="color:var(--g300);font-size:10px;font-weight:400">${p(c.responded)}</small></td>
+          <td style="text-align:right;color:#ef4444">${c.failed}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
@@ -3909,35 +3949,35 @@ async function loadBCCampaigns(){
 }
 
 async function loadBCTemplates(){
-  const el=document.getElementById('bcTemplateTable');
+  const el=document.getElementById('bcTemplateChart');
   if(!el)return;
   try{
     const r=await fetch(`/admin/analytics/broadcast-by-template?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const data=await r.json();
-    if(!data.length){el.innerHTML='<p style="color:var(--g400);font-size:13px">No template data yet</p>';return;}
-    el.innerHTML=`<table class="agt-table">
-      <thead><tr>
-        <th>Template</th>
-        <th style="text-align:center">Campaigns</th>
-        <th style="text-align:center">Total Sent</th>
-        <th style="text-align:center">Delivered</th>
-        <th style="text-align:center">Read</th>
-        <th style="text-align:center">Responded</th>
-        <th style="text-align:center">Response Rate</th>
-        <th style="text-align:center">Delivery Rate</th>
-      </tr></thead>
-      <tbody>${data.map(t=>`<tr>
-        <td><code style="font-size:11px">${esc(t.template)}</code></td>
-        <td style="text-align:center">${t.campaigns}</td>
-        <td style="text-align:center">${t.total_sent}</td>
-        <td style="text-align:center">${t.delivered}</td>
-        <td style="text-align:center">${t.read}</td>
-        <td style="text-align:center;font-weight:700;color:var(--orange)">${t.responded}</td>
-        <td style="text-align:center;font-weight:700;color:${t.response_rate>=20?'#10b981':t.response_rate>=10?'var(--orange)':'#ef4444'}">${t.response_rate}%</td>
-        <td style="text-align:center">${t.delivery_rate}%</td>
-      </tr>`).join('')}</tbody>
-    </table>`;
+    if(!data.length){
+      el.innerHTML=`<div style="text-align:center;padding:24px 0;color:var(--g400)">
+        <div style="font-size:28px;margin-bottom:8px">📊</div>
+        <p style="font-size:13px;margin:0">No template data yet</p>
+        <p style="font-size:12px;margin:6px 0 0;color:var(--g300)">Once you run broadcasts, this shows which templates get the best response rates</p>
+      </div>`;
+      return;
+    }
+    const maxRate=Math.max(...data.map(t=>t.response_rate),1);
+    el.innerHTML=data.map(t=>{
+      const clr=t.response_rate>=20?'#10b981':t.response_rate>=10?'var(--orange)':'#ef4444';
+      const barW=maxRate>0?Math.round(t.response_rate/maxRate*100):0;
+      return`<div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+          <span style="font-size:12px;font-weight:700;color:var(--g800);max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.template)}</span>
+          <span style="font-size:14px;font-weight:800;color:${clr}">${t.response_rate}% <span style="font-size:10px;font-weight:400;color:var(--g400)">responded</span></span>
+        </div>
+        <div style="height:10px;background:var(--g100);border-radius:99px;overflow:hidden;margin-bottom:5px">
+          <div style="height:100%;width:${barW}%;background:${clr};border-radius:99px;transition:width .5s ease;min-width:${t.response_rate>0?'3px':'0'}"></div>
+        </div>
+        <div style="font-size:11px;color:var(--g400)">${t.total_sent} sent &middot; ${t.delivered} delivered &middot; ${t.responded} replied &middot; ${t.delivery_rate}% delivery rate &middot; ${t.campaigns} campaign${t.campaigns!==1?'s':''}</div>
+      </div>`;
+    }).join('');
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
 }
 // ── End Broadcast Analytics ──────────────────────────────────────────────────
