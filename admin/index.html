@@ -414,6 +414,18 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .agt-table th.sortable.sort-active .sort-arrow{opacity:1;color:var(--orange)}
 .ct-name-link{cursor:pointer;color:var(--orange-d);text-decoration:none}
 .ct-name-link:hover{text-decoration:underline}
+/* ── Broadcast step flow ── */
+.bb-steps{display:flex;gap:0;margin-bottom:24px;border-bottom:2px solid var(--g100)}
+.bb-step-pill{flex:1;text-align:center;padding:10px 6px 12px;font-size:12px;font-weight:700;color:var(--g300);border-bottom:2px solid transparent;margin-bottom:-2px}
+.bb-step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--g100);color:var(--g400);font-size:11px;margin-right:6px}
+.bb-step-pill.active{color:var(--orange);border-color:var(--orange)}
+.bb-step-pill.active .bb-step-num{background:var(--orange);color:#fff}
+.bb-step-pill.bb-done{color:var(--green)}
+.bb-step-pill.bb-done .bb-step-num{background:var(--green);color:#fff}
+.bb-preview-box{background:var(--g50);border:1px solid var(--g200);border-radius:10px;padding:14px 16px;font-size:13px;color:var(--g700);white-space:pre-wrap;line-height:1.5;min-height:20px}
+.bb-review-stat{text-align:center;flex:1}
+.bb-review-stat .n{font-size:22px;font-weight:800;color:var(--g900)}
+.bb-review-stat .l{font-size:11px;color:var(--g400);margin-top:2px}
 .ct-bulk-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--orange-s);border:1px solid var(--orange-b);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:600;color:var(--orange-d)}
 .stage-sel{font-size:11px;font-weight:700;padding:3px 6px;border-radius:6px;border:1.5px solid transparent;font-family:inherit;cursor:pointer;outline:none}
 .stage-sel.not_contacted{background:var(--g100);color:var(--g500)}
@@ -1145,12 +1157,131 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="bulk-tab" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
     </div>
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:10px">
-        <div>
-          <h3 style="margin-bottom:4px">Broadcast</h3>
-          <p style="font-size:12px;color:var(--g400)">Send an approved WhatsApp template to a list of numbers or an entire tag. Delivery and read counts show live as it sends.</p>
+      <div style="margin-bottom:8px">
+        <h3 style="margin-bottom:4px">Broadcast</h3>
+        <p style="font-size:12px;color:var(--g400)">Send an approved WhatsApp template to a list of numbers or an entire tag.</p>
+      </div>
+
+      <div class="bb-steps">
+        <div class="bb-step-pill" id="bbPill1"><span class="bb-step-num">1</span>Audience</div>
+        <div class="bb-step-pill" id="bbPill2"><span class="bb-step-num">2</span>Message</div>
+        <div class="bb-step-pill" id="bbPill3"><span class="bb-step-num">3</span>Review &amp; Send</div>
+        <div class="bb-step-pill" id="bbPill4"><span class="bb-step-num">4</span>Sending</div>
+      </div>
+
+      <!-- Step 1: Audience -->
+      <div id="bbStepAudience">
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;max-width:420px">
+          <button id="bbModePhone" onclick="setBBMode('phone')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--orange);color:#fff;border:none;cursor:pointer">📋 Phone List</button>
+          <button id="bbModeContacts" onclick="setBBMode('contacts')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--surface);color:var(--g600);border:none;cursor:pointer;border-left:1px solid var(--border)">👥 From Contacts</button>
         </div>
-        <button class="btn-primary" style="background:var(--g600)" onclick="openBulkBroadcastModal()">📤 New Broadcast</button>
+
+        <div id="bbPhonePanel" style="max-width:500px">
+          <div class="modal-field">
+            <label>Phone Numbers</label>
+            <textarea id="bbPhones" rows="6" placeholder="Paste numbers here — one per line&#10;+2348012345678&#10;08012345678" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);resize:vertical;font-family:monospace" oninput="onBBPhonesInput()"></textarea>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+              <label style="font-size:12px;color:var(--g400);cursor:pointer;text-decoration:underline">
+                📎 Or upload CSV
+                <input type="file" id="bbCsvFile" accept=".csv,.txt" style="display:none" onchange="onBBCsvUpload(event)">
+              </label>
+              <span id="bbPhoneCount" style="font-size:12px;color:var(--g500);margin-left:auto"></span>
+            </div>
+          </div>
+        </div>
+
+        <div id="bbContactPanel" style="display:none;max-width:500px">
+          <div class="modal-field">
+            <label>Filter by Tag</label>
+            <select id="bbTagSelect" onchange="onBBTagSelect()" style="width:100%">
+              <option value="">— select a tag —</option>
+            </select>
+          </div>
+          <div id="bbContactPreview" style="font-size:12px;color:var(--g500);margin-bottom:8px;min-height:20px"></div>
+        </div>
+
+        <div id="bbAudErr" style="display:none;color:#e53e3e;font-size:13px;margin-top:8px"></div>
+        <div class="modal-actions">
+          <button class="btn-primary" onclick="goBBStep(2)">Next: Message →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Message -->
+      <div id="bbStepMessage" style="display:none">
+        <div class="modal-field" style="max-width:500px">
+          <label>Template</label>
+          <select id="bbTmplSelect" onchange="onBBTmplSelect()" style="width:100%">
+            <option value="">— select a template —</option>
+          </select>
+        </div>
+
+        <div id="bbVarsWrap" class="hidden" style="max-width:500px">
+          <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Template Variables <span style="font-weight:400;color:var(--g400);font-size:11px">(same for all recipients)</span></label>
+          <div id="bbVarInputs" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <div id="bbVarMapWrap" style="display:none;max-width:500px">
+          <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Map Variables to Contact Fields</label>
+          <div id="bbVarMapInputs" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
+        <div id="bbPreviewWrap" class="hidden" style="max-width:500px;margin-top:16px">
+          <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Live Preview</label>
+          <div class="bb-preview-box" id="bbPreviewBox"></div>
+        </div>
+
+        <div id="bbErr" style="display:none;color:#e53e3e;font-size:13px;margin-top:8px"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="goBBStep(1)">← Back</button>
+          <button class="btn-primary" onclick="goBBStep(3)">Next: Review →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Review & Send -->
+      <div id="bbStepReview" style="display:none">
+        <div style="display:flex;gap:16px;background:var(--g50);border-radius:10px;padding:16px;margin-bottom:18px;max-width:500px">
+          <div class="bb-review-stat"><div class="n" id="bbReviewCount">0</div><div class="l">Recipients</div></div>
+          <div class="bb-review-stat"><div class="n" id="bbReviewTime">—</div><div class="l">Est. time</div></div>
+          <div class="bb-review-stat"><div class="n" id="bbReviewTmpl" style="font-size:12px">—</div><div class="l">Template</div></div>
+        </div>
+        <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Message Preview</label>
+        <div class="bb-preview-box" id="bbReviewPreviewBox" style="max-width:500px;margin-bottom:20px"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="goBBStep(2)">← Back</button>
+          <button class="btn-primary" id="bbSendBtn" onclick="startBulkBroadcast()">🚀 Send Broadcast</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Sending -->
+      <div id="bbStepSending" style="display:none;max-width:500px">
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+            <span id="bbProgressLabel">Sending…</span>
+            <span id="bbProgressPct" style="color:var(--g500)">0%</span>
+          </div>
+          <div style="background:var(--border);border-radius:999px;height:10px;overflow:hidden">
+            <div id="bbProgressBar" style="height:100%;width:0%;background:#22c55e;border-radius:999px;transition:width .3s"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:24px;margin-bottom:16px">
+          <div style="text-align:center">
+            <div id="bbStatSent" style="font-size:28px;font-weight:700;color:#22c55e">0</div>
+            <div style="font-size:11px;color:var(--g400)">Sent</div>
+          </div>
+          <div style="text-align:center">
+            <div id="bbStatFailed" style="font-size:28px;font-weight:700;color:#e53e3e">0</div>
+            <div style="font-size:11px;color:var(--g400)">Failed</div>
+          </div>
+          <div style="text-align:center">
+            <div id="bbStatTotal" style="font-size:28px;font-weight:700;color:var(--g500)">0</div>
+            <div style="font-size:11px;color:var(--g400)">Total</div>
+          </div>
+        </div>
+        <div id="bbFailedList" style="display:none;max-height:140px;overflow-y:auto;background:var(--surface-2,var(--surface));border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:monospace;color:#e53e3e"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="bbDoneBtn" style="display:none" onclick="resetBroadcastFlow()">Start New Broadcast</button>
+          <button class="btn-primary" id="bbDownloadBtn" style="display:none" onclick="downloadBBFailed()">⬇ Download Failed</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1247,12 +1378,15 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
         <!-- AI Instructions panel -->
         <div id="aiInstPanel" class="card" style="padding:20px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px">
             <div>
               <h3 style="margin:0">AI Instructions</h3>
               <p style="font-size:12px;color:var(--g400);margin:4px 0 0">The system prompt — tells the bot who it is, how to behave, and what to say.</p>
             </div>
-            <span id="aiInstStatus" class="ai-status-badge live">LIVE</span>
+            <div style="text-align:right">
+              <span id="aiInstStatus" class="ai-status-badge live">LIVE</span>
+              <div id="aiInstStatusSub" style="font-size:11px;color:var(--g400);margin-top:5px;line-height:1.5"></div>
+            </div>
           </div>
           <textarea id="aiInstEditor" class="ai-editor" placeholder="Loading…" oninput="onInstEdit()"></textarea>
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -1449,108 +1583,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeCreateTmplModal()">Cancel</button>
       <button class="btn-primary" id="createTmplBtn2" onclick="submitCreateTemplate()">Submit for Approval</button>
-    </div>
-  </div>
-</div>
-
-<!-- Bulk Broadcast modal -->
-<div class="modal-overlay hidden" id="bulkBroadcastModal" onclick="if(event.target===this)closeBulkBroadcastModal()">
-  <div class="modal" style="max-width:560px">
-    <h3>📤 Bulk Broadcast</h3>
-    <p style="font-size:12px;color:var(--g400);margin-bottom:16px">Send an approved WhatsApp template to multiple contacts at once. Max 1,000 numbers per batch.</p>
-
-    <!-- Step 1 -->
-    <div id="bbStep1">
-      <!-- Source toggle -->
-      <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
-        <button id="bbModePhone" onclick="setBBMode('phone')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--orange);color:#fff;border:none;cursor:pointer">📋 Phone List</button>
-        <button id="bbModeContacts" onclick="setBBMode('contacts')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--surface);color:var(--g600);border:none;cursor:pointer;border-left:1px solid var(--border)">👥 From Contacts</button>
-      </div>
-
-      <!-- Phone list panel -->
-      <div id="bbPhonePanel">
-        <div class="modal-field">
-          <label>Phone Numbers</label>
-          <textarea id="bbPhones" rows="5" placeholder="Paste numbers here — one per line&#10;+2348012345678&#10;08012345678" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);resize:vertical;font-family:monospace" oninput="onBBPhonesInput()"></textarea>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-            <label style="font-size:12px;color:var(--g400);cursor:pointer;text-decoration:underline">
-              📎 Or upload CSV
-              <input type="file" id="bbCsvFile" accept=".csv,.txt" style="display:none" onchange="onBBCsvUpload(event)">
-            </label>
-            <span id="bbPhoneCount" style="font-size:12px;color:var(--g500);margin-left:auto"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Contact list panel -->
-      <div id="bbContactPanel" style="display:none">
-        <div class="modal-field">
-          <label>Filter by Tag</label>
-          <select id="bbTagSelect" onchange="onBBTagSelect()" style="width:100%">
-            <option value="">— select a tag —</option>
-          </select>
-        </div>
-        <div id="bbContactPreview" style="font-size:12px;color:var(--g500);margin-bottom:8px;min-height:20px"></div>
-      </div>
-
-      <!-- Template (shared by both modes) -->
-      <div class="modal-field">
-        <label>Template</label>
-        <select id="bbTmplSelect" onchange="onBBTmplSelect()" style="width:100%">
-          <option value="">— loading templates… —</option>
-        </select>
-      </div>
-
-      <!-- Variable inputs (phone list mode) -->
-      <div id="bbVarsWrap" class="hidden">
-        <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Template Variables <span style="font-weight:400;color:var(--g400);font-size:11px">(same for all recipients)</span></label>
-        <div id="bbVarInputs" style="display:flex;flex-direction:column;gap:6px"></div>
-      </div>
-
-      <!-- Variable field mapping (contact mode) -->
-      <div id="bbVarMapWrap" style="display:none">
-        <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Map Variables to Contact Fields</label>
-        <div id="bbVarMapInputs" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-
-      <div id="bbErr" style="display:none;color:#e53e3e;font-size:13px;margin-top:8px"></div>
-
-      <div class="modal-actions" style="margin-top:20px">
-        <button class="btn-cancel" onclick="closeBulkBroadcastModal()">Cancel</button>
-        <button class="btn-primary" id="bbSendBtn" onclick="startBulkBroadcast()">Send to All</button>
-      </div>
-    </div>
-
-    <!-- Step 2: progress -->
-    <div id="bbStep2" style="display:none">
-      <div style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
-          <span id="bbProgressLabel">Sending…</span>
-          <span id="bbProgressPct" style="color:var(--g500)">0%</span>
-        </div>
-        <div style="background:var(--border);border-radius:999px;height:10px;overflow:hidden">
-          <div id="bbProgressBar" style="height:100%;width:0%;background:#22c55e;border-radius:999px;transition:width .3s"></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:24px;margin-bottom:16px">
-        <div style="text-align:center">
-          <div id="bbStatSent" style="font-size:28px;font-weight:700;color:#22c55e">0</div>
-          <div style="font-size:11px;color:var(--g400)">Sent</div>
-        </div>
-        <div style="text-align:center">
-          <div id="bbStatFailed" style="font-size:28px;font-weight:700;color:#e53e3e">0</div>
-          <div style="font-size:11px;color:var(--g400)">Failed</div>
-        </div>
-        <div style="text-align:center">
-          <div id="bbStatTotal" style="font-size:28px;font-weight:700;color:var(--g500)">0</div>
-          <div style="font-size:11px;color:var(--g400)">Total</div>
-        </div>
-      </div>
-      <div id="bbFailedList" style="display:none;max-height:140px;overflow-y:auto;background:var(--surface-2,var(--surface));border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:monospace;color:#e53e3e"></div>
-      <div class="modal-actions" style="margin-top:16px">
-        <button class="btn-cancel" id="bbDoneBtn" style="display:none" onclick="closeBulkBroadcastModal()">Done</button>
-        <button class="btn-primary" id="bbDownloadBtn" style="display:none" onclick="downloadBBFailed()">⬇ Download Failed</button>
-      </div>
     </div>
   </div>
 </div>
@@ -2168,6 +2200,7 @@ function switchTab(t){
   document.getElementById(HTABS[t])?.classList.add('active');
   if(t!=='leads'){restoreChatPanel();document.getElementById('leadsTab').classList.remove('split');}
   if(t==='templates')loadTemplates();
+  if(t==='broadcast')initBroadcastFlow();
   if(t==='canned')loadCanned();
   if(t==='leads')loadLeads();
   if(t==='contacts')loadContacts();
@@ -3515,7 +3548,18 @@ async function saveRolePermissions(){
 }
 
 // ── AI Settings ────────────────────────────────────────────────────────
-let _aiInstOriginal='', _testHistory=[], _hasInstDraft=false, _hasKBPending=false;
+let _aiInstOriginal='', _testHistory=[], _hasInstDraft=false, _hasKBPending=false, _aiLiveInfo=null;
+
+function renderAiInstStatusSub(live,draft){
+  const el=document.getElementById('aiInstStatusSub');
+  if(live)_aiLiveInfo=live;
+  const fmt=iso=>iso?new Date(iso+'Z').toLocaleDateString([],{day:'numeric',month:'short',year:'numeric'}):'—';
+  const liveLine=_aiLiveInfo
+    ?`🟢 Live: v${_aiLiveInfo.version} · published ${fmt(_aiLiveInfo.created_at)} by ${esc(_aiLiveInfo.created_by||'—')}`
+    :'⚪ Nothing published yet';
+  const draftLine=draft?`<br>📝 Draft: v${draft.version} · not yet published`:'';
+  el.innerHTML=liveLine+draftLine;
+}
 
 function switchAISubTab(tab){
   document.getElementById('aiInstPanel').classList.toggle('hidden', tab!=='inst');
@@ -3545,6 +3589,7 @@ async function loadInstructions(){
     const badge=document.getElementById('aiInstStatus');
     if(d.draft){badge.textContent='DRAFT';badge.className='ai-status-badge draft';}
     else{badge.textContent='LIVE';badge.className='ai-status-badge live';}
+    renderAiInstStatusSub(d.live,d.draft);
     renderInstHistory(d.history||[]);
     _hasInstDraft=d.has_draft||false;
     refreshGoLiveBanner();
@@ -3567,11 +3612,13 @@ async function saveDraftInstruction(){
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})
     });
     if(!r.ok){alert((await r.json().catch(()=>({}))).detail||'Save failed');return;}
+    const draft=await r.json();
     _aiInstOriginal=content;
     onInstEdit();
     document.getElementById('aiInstSavedMsg').style.display='inline';
     const badge=document.getElementById('aiInstStatus');
     badge.textContent='DRAFT';badge.className='ai-status-badge draft';
+    renderAiInstStatusSub(null,draft);
     _hasInstDraft=true;
     refreshGoLiveBanner();
   }catch(e){console.error(e);}
@@ -4084,11 +4131,13 @@ async function saveReengConfig(){
   }
 }
 
-// ── Bulk Broadcast ──────────────────────────────────────────────────────────
+// ── Broadcast (4-step inline flow) ────────────────────────────────────────────
 let _bbJobId=null, _bbPollTimer=null, _bbFailedPhones=[];
 let _bbMode='phone';          // 'phone' | 'contacts'
 let _bbContacts=[];           // loaded when tag is chosen
 let _bbVarCount=0;            // number of {{n}} vars in selected template
+let _bbTmplBody='';           // raw BODY text of selected template, for preview
+let _bbStep=1;
 
 const BB_FIELDS=[
   {value:'name',label:'Name'},
@@ -4098,6 +4147,86 @@ const BB_FIELDS=[
   {value:'payment_plan',label:'Repayment Plan'},
   {value:'address',label:'Address'},
 ];
+
+const BB_STEP_IDS={1:'bbStepAudience',2:'bbStepMessage',3:'bbStepReview',4:'bbStepSending'};
+
+function goBBStep(n){
+  if(n===2){
+    const errEl=document.getElementById('bbAudErr');
+    errEl.style.display='none';
+    const audienceOk=_bbMode==='phone'?parseBBPhones(document.getElementById('bbPhones').value).length>0:_bbContacts.length>0;
+    if(!audienceOk){errEl.textContent=_bbMode==='phone'?'Add at least one phone number.':'Pick a tag with at least one contact.';errEl.style.display='block';return;}
+  }
+  if(n===3){
+    const errEl=document.getElementById('bbErr');
+    errEl.style.display='none';
+    if(!document.getElementById('bbTmplSelect').value){errEl.textContent='Please select a template.';errEl.style.display='block';return;}
+    renderBBReview();
+  }
+  _bbStep=n;
+  Object.entries(BB_STEP_IDS).forEach(([k,id])=>{
+    document.getElementById(id).style.display=Number(k)===n?'block':'none';
+  });
+  for(let i=1;i<=4;i++){
+    const pill=document.getElementById('bbPill'+i);
+    pill.classList.toggle('active',i===n);
+    pill.classList.toggle('bb-done',i<n);
+  }
+}
+
+function resetBroadcastFlow(){
+  clearInterval(_bbPollTimer);
+  _bbJobId=null; _bbFailedPhones=[];_bbContacts=[];_bbVarCount=0;_bbTmplBody='';
+  document.getElementById('bbPhones').value='';
+  document.getElementById('bbPhoneCount').textContent='';
+  document.getElementById('bbTagSelect').value='';
+  document.getElementById('bbContactPreview').textContent='';
+  document.getElementById('bbTmplSelect').value='';
+  document.getElementById('bbVarsWrap').classList.add('hidden');
+  document.getElementById('bbVarMapWrap').style.display='none';
+  document.getElementById('bbPreviewWrap').classList.add('hidden');
+  document.getElementById('bbFailedList').style.display='none';
+  document.getElementById('bbDoneBtn').style.display='none';
+  document.getElementById('bbDownloadBtn').style.display='none';
+  document.getElementById('bbSendBtn').disabled=false;
+  document.getElementById('bbSendBtn').textContent='🚀 Send Broadcast';
+  setBBMode('phone');
+  goBBStep(1);
+}
+
+async function initBroadcastFlow(){
+  goBBStep(1);
+  // Load tags for contact mode
+  const tagSel=document.getElementById('bbTagSelect');
+  tagSel.innerHTML='<option value="">— select a tag —</option>';
+  try{
+    const r=await fetch(`/admin/tags?key=${encodeURIComponent(adminKey)}`);
+    if(r.ok){
+      const tags=await r.json();
+      tags.forEach(t=>{
+        const o=document.createElement('option');
+        o.value=t.id; o.textContent=t.name;
+        tagSel.appendChild(o);
+      });
+    }
+  }catch(e){}
+
+  // Populate template dropdown
+  const sel=document.getElementById('bbTmplSelect');
+  sel.innerHTML='<option value="">— select a template —</option>';
+  try{
+    const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`);
+    const data=await r.json();
+    const approved=(data.data||[]).filter(t=>t.status==='APPROVED');
+    approved.forEach(t=>{
+      const o=document.createElement('option');
+      o.value=t.name; o.textContent=`${t.name} (${t.language})`;
+      o.dataset.components=JSON.stringify(t.components||[]);
+      sel.appendChild(o);
+    });
+    if(!approved.length)sel.innerHTML='<option value="">No approved templates yet — create one in Settings → Templates</option>';
+  }catch(e){sel.innerHTML='<option value="">Failed to load templates</option>';}
+}
 
 function setBBMode(mode){
   _bbMode=mode;
@@ -4141,61 +4270,13 @@ function onBBCsvUpload(e){
   reader.readAsText(file);
 }
 
-async function openBulkBroadcastModal(){
-  _bbJobId=null; _bbFailedPhones=[];_bbContacts=[];_bbVarCount=0;
-  document.getElementById('bbPhones').value='';
-  document.getElementById('bbPhoneCount').textContent='';
-  document.getElementById('bbErr').style.display='none';
-  document.getElementById('bbStep1').style.display='block';
-  document.getElementById('bbStep2').style.display='none';
-  document.getElementById('bbVarsWrap').classList.add('hidden');
-  document.getElementById('bbVarMapWrap').style.display='none';
-  document.getElementById('bulkBroadcastModal').classList.remove('hidden');
-  setBBMode('phone');
-
-  // Load tags for contact mode
-  const tagSel=document.getElementById('bbTagSelect');
-  tagSel.innerHTML='<option value="">— select a tag —</option>';
-  try{
-    const r=await fetch(`/admin/tags?key=${encodeURIComponent(adminKey)}`);
-    if(r.ok){
-      const tags=await r.json();
-      tags.forEach(t=>{
-        const o=document.createElement('option');
-        o.value=t.id; o.textContent=t.name;
-        tagSel.appendChild(o);
-      });
-    }
-  }catch(e){}
-
-  // Populate template dropdown
-  const sel=document.getElementById('bbTmplSelect');
-  sel.innerHTML='<option value="">— select a template —</option>';
-  try{
-    const r=await fetch(`/admin/templates?key=${encodeURIComponent(adminKey)}`);
-    const data=await r.json();
-    const approved=(data.data||[]).filter(t=>t.status==='APPROVED');
-    approved.forEach(t=>{
-      const o=document.createElement('option');
-      o.value=t.name; o.textContent=`${t.name} (${t.language})`;
-      o.dataset.components=JSON.stringify(t.components||[]);
-      sel.appendChild(o);
-    });
-    if(!approved.length)sel.innerHTML='<option value="">No approved templates yet</option>';
-  }catch(e){sel.innerHTML='<option value="">Failed to load templates</option>';}
-}
-
-function closeBulkBroadcastModal(){
-  clearInterval(_bbPollTimer);
-  document.getElementById('bulkBroadcastModal').classList.add('hidden');
-}
-
 function onBBTmplSelect(){
   const sel=document.getElementById('bbTmplSelect');
   const opt=sel.options[sel.selectedIndex];
-  if(!opt||!opt.dataset.components){_bbVarCount=0;renderBBVarSection();return;}
+  if(!opt||!opt.dataset.components){_bbVarCount=0;_bbTmplBody='';renderBBVarSection();return;}
   const comps=JSON.parse(opt.dataset.components||'[]');
   const body=comps.find(c=>c.type==='BODY');
+  _bbTmplBody=body?body.text||'':'';
   const vars=body?[...new Set((body.text||'').match(/\{\{\d+\}\}/g)||[])].sort():[];
   _bbVarCount=vars.length;
   renderBBVarSection();
@@ -4207,24 +4288,24 @@ function renderBBVarSection(){
     const wrap=document.getElementById('bbVarsWrap');
     const inputs=document.getElementById('bbVarInputs');
     document.getElementById('bbVarMapWrap').style.display='none';
-    if(!vars.length){wrap.classList.add('hidden');inputs.innerHTML='';return;}
+    if(!vars.length){wrap.classList.add('hidden');inputs.innerHTML='';renderBBPreview();return;}
     wrap.classList.remove('hidden');
     inputs.innerHTML=vars.map((v,i)=>
-      `<input type="text" placeholder="${v} — same value for all recipients" data-idx="${i}"
+      `<input type="text" placeholder="${v} — same value for all recipients" data-idx="${i}" oninput="renderBBPreview()"
         style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:100%;box-sizing:border-box">`
     ).join('');
   } else {
     document.getElementById('bbVarsWrap').classList.add('hidden');
     const mapWrap=document.getElementById('bbVarMapWrap');
     const mapInputs=document.getElementById('bbVarMapInputs');
-    if(!vars.length){mapWrap.style.display='none';mapInputs.innerHTML='';return;}
+    if(!vars.length){mapWrap.style.display='none';mapInputs.innerHTML='';renderBBPreview();return;}
     mapWrap.style.display='block';
     const fieldOpts=BB_FIELDS.map(f=>`<option value="${f.value}">${f.label}</option>`).join('');
     mapInputs.innerHTML=vars.map((v,i)=>`
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:13px;font-weight:700;color:var(--g700);width:40px">${v}</span>
         <span style="font-size:13px;color:var(--g400)">→</span>
-        <select data-var-idx="${i}" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text)">
+        <select data-var-idx="${i}" onchange="renderBBPreview()" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text)">
           ${fieldOpts}
         </select>
       </div>`).join('');
@@ -4233,33 +4314,71 @@ function renderBBVarSection(){
     const defaults=['name','product_interest','amount','payment_plan','address','phone'];
     sels.forEach((s,i)=>{if(defaults[i])s.value=defaults[i];});
   }
+  renderBBPreview();
+}
+
+function renderBBPreview(){
+  const wrap=document.getElementById('bbPreviewWrap');
+  const box=document.getElementById('bbPreviewBox');
+  if(!_bbTmplBody){wrap.classList.add('hidden');return;}
+  let text=_bbTmplBody;
+  if(_bbMode==='phone'){
+    const inputs=[...document.querySelectorAll('#bbVarInputs input')];
+    inputs.forEach((inp,i)=>{
+      const val=inp.value.trim()||`[{{${i+1}}}]`;
+      text=text.replace(new RegExp(`\\{\\{${i+1}\\}\\}`,'g'),val);
+    });
+  } else {
+    const sels=[...document.querySelectorAll('#bbVarMapInputs select')];
+    const sample=_bbContacts[0]||{};
+    sels.forEach((s,i)=>{
+      const val=sample[s.value]||`[${BB_FIELDS.find(f=>f.value===s.value)?.label||s.value}]`;
+      text=text.replace(new RegExp(`\\{\\{${i+1}\\}\\}`,'g'),val);
+    });
+  }
+  box.textContent=text;
+  wrap.classList.remove('hidden');
+}
+
+function formatBBDuration(seconds){
+  if(seconds<60)return `~${Math.max(1,Math.round(seconds))}s`;
+  const m=Math.floor(seconds/60), s=Math.round(seconds%60);
+  return s?`~${m}m ${s}s`:`~${m}m`;
+}
+
+function renderBBReview(){
+  const count=_bbMode==='contacts'?_bbContacts.length:parseBBPhones(document.getElementById('bbPhones').value).length;
+  document.getElementById('bbReviewCount').textContent=count;
+  document.getElementById('bbReviewTime').textContent=formatBBDuration(count*1.2);
+  const tmplSel=document.getElementById('bbTmplSelect');
+  document.getElementById('bbReviewTmpl').textContent=tmplSel.options[tmplSel.selectedIndex]?.textContent||'—';
+  document.getElementById('bbReviewPreviewBox').textContent=document.getElementById('bbPreviewBox').textContent||_bbTmplBody;
 }
 
 async function onBBTagSelect(){
   const tagId=document.getElementById('bbTagSelect').value;
   const preview=document.getElementById('bbContactPreview');
-  if(!tagId){preview.textContent='';_bbContacts=[];return;}
+  if(!tagId){preview.textContent='';_bbContacts=[];renderBBPreview();return;}
   preview.textContent='Loading contacts…';
   try{
     const r=await fetch(`/admin/leads/by-tag/${tagId}?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok){preview.textContent='Failed to load contacts';return;}
     _bbContacts=await r.json();
-    if(!_bbContacts.length){preview.textContent='No contacts with this tag';return;}
+    if(!_bbContacts.length){preview.textContent='No contacts with this tag';renderBBPreview();return;}
     const names=_bbContacts.slice(0,3).map(c=>c.name||c.phone).join(', ');
     preview.innerHTML=`<span style="color:#22c55e;font-weight:700">${_bbContacts.length} contact${_bbContacts.length!==1?'s':''}</span> — ${esc(names)}${_bbContacts.length>3?', …':''}`;
+    renderBBPreview();
   }catch(e){preview.textContent='Error loading contacts';}
 }
 
 async function startBulkBroadcast(){
   const tmpl=document.getElementById('bbTmplSelect').value;
-  const errEl=document.getElementById('bbErr');
-  errEl.style.display='none';
-  if(!tmpl){errEl.textContent='Please select a template.';errEl.style.display='block';return;}
+  if(!tmpl)return;
 
   let payload={template_name:tmpl,language:'en'};
 
   if(_bbMode==='contacts'){
-    if(!_bbContacts.length){errEl.textContent='No contacts loaded. Pick a tag first.';errEl.style.display='block';return;}
+    if(!_bbContacts.length)return;
     // Resolve per-recipient variables from field mapping
     const mapSels=[...document.querySelectorAll('#bbVarMapInputs select')];
     const fieldMap=mapSels.map(s=>s.value); // ['name','product_interest',…]
@@ -4269,7 +4388,7 @@ async function startBulkBroadcast(){
     }));
   } else {
     const phones=parseBBPhones(document.getElementById('bbPhones').value);
-    if(!phones.length){errEl.textContent='No valid phone numbers found.';errEl.style.display='block';return;}
+    if(!phones.length)return;
     const varInputs=[...document.querySelectorAll('#bbVarInputs input')];
     payload.phones=phones;
     payload.variables=varInputs.map(i=>i.value.trim());
@@ -4288,15 +4407,14 @@ async function startBulkBroadcast(){
     _bbJobId=data.job_id;
     document.getElementById('bbStatTotal').textContent=data.total;
 
-    // Switch to progress view
-    document.getElementById('bbStep1').style.display='none';
-    document.getElementById('bbStep2').style.display='block';
+    // Switch to sending view
+    goBBStep(4);
     _bbPollTimer=setInterval(pollBBProgress,1500);
     pollBBProgress();
   }catch(e){
-    errEl.textContent=e.message;errEl.style.display='block';
+    alert(e.message);
     document.getElementById('bbSendBtn').disabled=false;
-    document.getElementById('bbSendBtn').textContent='Send to All';
+    document.getElementById('bbSendBtn').textContent='🚀 Send Broadcast';
   }
 }
 
