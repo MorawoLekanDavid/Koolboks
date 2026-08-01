@@ -408,6 +408,19 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .agt-table th{text-align:left;padding:6px 8px;font-size:11px;color:var(--g400);font-weight:700;text-transform:uppercase;border-bottom:2px solid var(--g200)}
 .agt-table td{padding:9px 8px;border-bottom:1px solid var(--g100);color:var(--g700)}
 .agt-table tr:last-child td{border:none}
+.agt-table th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+.agt-table th.sortable:hover{color:var(--g600)}
+.agt-table th.sortable .sort-arrow{display:inline-block;width:10px;opacity:.5}
+.agt-table th.sortable.sort-active .sort-arrow{opacity:1;color:var(--orange)}
+.ct-name-link{cursor:pointer;color:var(--orange-d);text-decoration:none}
+.ct-name-link:hover{text-decoration:underline}
+.ct-bulk-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--orange-s);border:1px solid var(--orange-b);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:600;color:var(--orange-d)}
+.stage-sel{font-size:11px;font-weight:700;padding:3px 6px;border-radius:6px;border:1.5px solid transparent;font-family:inherit;cursor:pointer;outline:none}
+.stage-sel.not_contacted{background:var(--g100);color:var(--g500)}
+.stage-sel.contacted{background:#dbeafe;color:#1d4ed8}
+.stage-sel.responded{background:#fef3c7;color:#92400e}
+.stage-sel.converted{background:var(--green-s);color:#15803d}
+.stage-sel.dead{background:var(--red-s);color:#b91c1c}
 .role-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
 .role-badge.super_admin{background:#fef3c7;color:#92400e}
 .role-badge.admin{background:var(--orange-s);color:var(--orange)}
@@ -967,6 +980,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <p style="font-size:12px;color:var(--g400)">Outreach contacts — added manually or imported from CSV</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-dl" onclick="exportContactsCsv()">⬇ Export CSV</button>
           <button class="btn-dl" onclick="openImportCsvModal()">⬆ Import CSV</button>
           <button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
         </div>
@@ -980,12 +994,43 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <select id="ctTagFilter" onchange="filterContacts()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
           <option value="">All tags</option>
         </select>
+        <select id="ctStageFilter" onchange="filterContacts()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+          <option value="">All stages</option>
+          <option value="not_contacted">Not contacted</option>
+          <option value="contacted">Contacted</option>
+          <option value="responded">Responded</option>
+          <option value="converted">Converted</option>
+          <option value="dead">Dead</option>
+        </select>
         <input type="text" id="ctSearch" placeholder="Search name or phone…" oninput="filterContacts()" style="flex:1;min-width:180px;max-width:300px;font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+      </div>
+      <div id="ctBulkBar" class="ct-bulk-bar hidden">
+        <span id="ctBulkCount">0 selected</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="ctBulkTagSel" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+            <option value="">Add tag…</option>
+          </select>
+          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="bulkTagContacts()">🏷 Tag Selected</button>
+          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="exportContactsCsv(true)">⬇ Export Selected</button>
+          <button class="btn-danger" style="padding:5px 12px;font-size:12px" onclick="bulkDeleteContacts()">Delete Selected</button>
+          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="clearContactSelection()">Cancel</button>
+        </div>
       </div>
       <div id="contactsTableWrap" style="overflow-x:auto">
         <p style="color:var(--g400);font-size:13px">Loading…</p>
       </div>
+      <div class="pg-row" id="ctPagination" style="margin-top:14px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
     </div>
+  </div>
+
+  <!-- Contact detail drawer -->
+  <div class="fd-backdrop" id="ctDrawerBackdrop" onclick="closeContactDetail()"></div>
+  <div class="fd-drawer" id="ctDrawer" style="width:380px">
+    <div class="fd-hdr">
+      <span class="fd-hdr-title" id="ctDetailName">Contact</span>
+      <button class="fd-close-btn" onclick="closeContactDetail()">✕</button>
+    </div>
+    <div class="fd-scroll" id="ctDetailBody" style="padding:16px"></div>
   </div>
 
   <!-- Analytics tab -->
@@ -2115,6 +2160,7 @@ let _lastSettingsTab='team';
 function switchTab(t){
   if(MESSAGING_TABS.includes(t))_lastMessagingTab=t;
   if(SETTINGS_TABS.includes(t))_lastSettingsTab=t;
+  if(t!=='contacts')closeContactDetail();
   Object.keys(TABS).forEach(k=>{
     const el=document.getElementById(TABS[k]);if(el)el.classList.toggle('hidden',k!==t);
   });
@@ -4474,6 +4520,12 @@ async function runCsvImport(){
 // ── Contacts tab ──────────────────────────────────────────────────────────────
 let _allContacts=[];
 let _ctMap={};
+let _ctFiltered=[];
+let _ctSelected=new Set();
+let _ctSort={field:'created_at',dir:'desc'};
+let _ctPage=1;
+const CT_PAGE_SIZE=25;
+const STAGE_LABELS={not_contacted:'Not contacted',contacted:'Contacted',responded:'Responded',converted:'Converted',dead:'Dead'};
 
 async function loadContacts(){
   const wrap=document.getElementById('contactsTableWrap');
@@ -4482,6 +4534,7 @@ async function loadContacts(){
     const r=await fetch(`/admin/contacts?key=${encodeURIComponent(adminKey)}`);
     if(r.status===403){logout();return;}
     _allContacts=await r.json();
+    _ctSelected.clear();
     // Stats
     document.getElementById('ctTotal').textContent=_allContacts.length;
     document.getElementById('ctManual').textContent=_allContacts.filter(c=>c.source==='manual').length;
@@ -4494,6 +4547,10 @@ async function loadContacts(){
     sel.innerHTML='<option value="">All tags</option>'+
       [...tagMap.values()].map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
     if(prev)sel.value=prev;
+    // Populate bulk-tag select from the global tag list
+    const bulkSel=document.getElementById('ctBulkTagSel');
+    if(bulkSel)bulkSel.innerHTML='<option value="">Add tag…</option>'+_allTags.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    _ctPage=1;
     filterContacts();
   }catch(e){
     wrap.innerHTML='<p style="color:#e53e3e;font-size:13px">Failed to load contacts. Please refresh.</p>';
@@ -4502,46 +4559,221 @@ async function loadContacts(){
 
 function filterContacts(){
   const tagId=document.getElementById('ctTagFilter').value;
+  const stage=document.getElementById('ctStageFilter').value;
   const search=document.getElementById('ctSearch').value.toLowerCase().trim();
   let data=_allContacts;
   if(tagId)data=data.filter(c=>(c.tags||[]).some(t=>String(t.id)===tagId));
+  if(stage)data=data.filter(c=>(c.outreach_stage||'not_contacted')===stage);
   if(search)data=data.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.phone||'').includes(search));
-  renderContactsTable(data);
+  _ctFiltered=data;
+  _ctPage=1;
+  renderContactsTable();
 }
 
-function renderContactsTable(data){
+function sortContactsBy(field){
+  if(_ctSort.field===field)_ctSort.dir=_ctSort.dir==='asc'?'desc':'asc';
+  else _ctSort={field,dir:'asc'};
+  renderContactsTable();
+}
+
+function _ctSortedData(){
+  const {field,dir}=_ctSort;
+  const mul=dir==='asc'?1:-1;
+  return [..._ctFiltered].sort((a,b)=>{
+    let av,bv;
+    if(field==='tags'){av=(a.tags||[]).map(t=>t.name).join(',').toLowerCase();bv=(b.tags||[]).map(t=>t.name).join(',').toLowerCase();}
+    else if(field==='created_at'){av=a.created_at||'';bv=b.created_at||'';}
+    else{av=String(a[field]||'').toLowerCase();bv=String(b[field]||'').toLowerCase();}
+    if(av<bv)return -1*mul;
+    if(av>bv)return 1*mul;
+    return 0;
+  });
+}
+
+function renderContactsTable(){
   const wrap=document.getElementById('contactsTableWrap');
+  const data=_ctSortedData();
   _ctMap={};
   data.forEach(c=>{_ctMap[c.phone]=c;});
   if(!data.length){
     wrap.innerHTML=_allContacts.length
-      ?emptyState('🔍','No contacts match','Try a different tag filter or search term.')
+      ?emptyState('🔍','No contacts match','Try a different tag, stage filter, or search term.')
       :emptyState('📋','No contacts yet','Add people manually or import a CSV to start building your outreach list.',
         '<button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>');
+    document.getElementById('ctPagination').innerHTML='';
     return;
   }
-  const rows=data.map(c=>{
+  const totalPages=Math.ceil(data.length/CT_PAGE_SIZE);
+  if(_ctPage>totalPages)_ctPage=totalPages;
+  if(_ctPage<1)_ctPage=1;
+  const start=(_ctPage-1)*CT_PAGE_SIZE;
+  const pageData=data.slice(start,start+CT_PAGE_SIZE);
+  const pageAllChecked=pageData.length>0&&pageData.every(c=>_ctSelected.has(c.phone));
+  const cols=[['name','Name'],['phone','Phone'],['product_interest','Product'],['outreach_stage','Stage'],['tags','Tags'],['source','Source'],['created_at','Added']];
+  const thead=`<tr>
+    <th style="width:28px"><input type="checkbox" ${pageAllChecked?'checked':''} onchange="toggleSelectAllContacts(this.checked)"></th>
+    ${cols.map(([f,label])=>`<th class="sortable ${_ctSort.field===f?'sort-active':''}" onclick="sortContactsBy('${f}')">${label} <span class="sort-arrow">${_ctSort.field===f?(_ctSort.dir==='asc'?'▲':'▼'):'⇅'}</span></th>`).join('')}
+    <th>Actions</th>
+  </tr>`;
+  const rows=pageData.map(c=>{
     const tags=(c.tags||[]).map(t=>`<span style="display:inline-block;background:${t.color||'#6366f1'}22;color:${t.color||'#6366f1'};border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${esc(t.name)}</span>`).join(' ');
     const src=c.source==='import'?'<span style="font-size:11px;color:var(--g400)">📥 import</span>':'<span style="font-size:11px;color:var(--g400)">✏️ manual</span>';
     const added=c.created_at?c.created_at.slice(0,10):'—';
     const ph=JSON.stringify(c.phone);
+    const stage=c.outreach_stage||'not_contacted';
+    const stageSel=`<select class="stage-sel ${stage}" onchange='updateContactStage(${ph},this.value)' onclick="event.stopPropagation()">
+      ${Object.entries(STAGE_LABELS).map(([v,l])=>`<option value="${v}" ${v===stage?'selected':''}>${l}</option>`).join('')}
+    </select>`;
     return `<tr>
-      <td style="font-weight:600">${esc(c.name||'—')}</td>
+      <td><input type="checkbox" ${_ctSelected.has(c.phone)?'checked':''} onchange='toggleContactSelect(${ph},this.checked)'></td>
+      <td style="font-weight:600"><a class="ct-name-link" onclick='openContactDetail(${ph})'>${esc(c.name||c.phone)}</a></td>
       <td style="font-family:monospace;font-size:12px">${esc(c.phone)}</td>
       <td>${esc(c.product_interest||'—')}</td>
+      <td>${stageSel}</td>
       <td>${tags||'<span style="color:var(--g300)">—</span>'}</td>
       <td>${src}</td>
       <td>${added}</td>
       <td style="white-space:nowrap">
-        <button onclick="openEditContactModal(_ctMap[${ph}])" style="font-size:12px;padding:3px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer;margin-right:4px">Edit</button>
-        <button onclick="deleteContact(${ph})" style="font-size:12px;padding:3px 10px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;border-radius:6px;cursor:pointer">Delete</button>
+        <button onclick='openEditContactModal(_ctMap[${ph}])' style="font-size:12px;padding:3px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer;margin-right:4px">Edit</button>
+        <button onclick='deleteContact(${ph})' style="font-size:12px;padding:3px 10px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;border-radius:6px;cursor:pointer">Delete</button>
       </td>
     </tr>`;
   }).join('');
   wrap.innerHTML=`<table class="agt-table" style="width:100%">
-    <thead><tr><th>Name</th><th>Phone</th><th>Product Interest</th><th>Tags</th><th>Source</th><th>Added</th><th>Actions</th></tr></thead>
+    <thead>${thead}</thead>
     <tbody>${rows}</tbody>
   </table>`;
+  renderCtPagination(totalPages);
+  updateBulkBar();
+}
+
+function renderCtPagination(totalPages){
+  const pg=document.getElementById('ctPagination');
+  if(totalPages<=1){pg.innerHTML='';return;}
+  let html=`<button class="pg-btn" onclick="goCtPage(${_ctPage-1})" ${_ctPage===1?'disabled':''}>‹ Prev</button>`;
+  for(let i=1;i<=totalPages;i++){
+    if(totalPages>7&&i>2&&i<totalPages-1&&Math.abs(i-_ctPage)>1){if(i===3||i===totalPages-2)html+='<span class="pg-info">…</span>';continue;}
+    html+=`<button class="pg-btn ${i===_ctPage?'active':''}" onclick="goCtPage(${i})">${i}</button>`;
+  }
+  html+=`<button class="pg-btn" onclick="goCtPage(${_ctPage+1})" ${_ctPage===totalPages?'disabled':''}>Next ›</button>`;
+  pg.innerHTML=html;
+}
+function goCtPage(n){_ctPage=n;renderContactsTable();document.getElementById('contactsTableWrap').scrollIntoView({behavior:'smooth',block:'start'});}
+
+function toggleContactSelect(phone,checked){
+  if(checked)_ctSelected.add(phone);else _ctSelected.delete(phone);
+  updateBulkBar();
+}
+function toggleSelectAllContacts(checked){
+  const start=(_ctPage-1)*CT_PAGE_SIZE;
+  const pageData=_ctSortedData().slice(start,start+CT_PAGE_SIZE);
+  pageData.forEach(c=>{if(checked)_ctSelected.add(c.phone);else _ctSelected.delete(c.phone);});
+  renderContactsTable();
+}
+function clearContactSelection(){_ctSelected.clear();renderContactsTable();}
+function updateBulkBar(){
+  const bar=document.getElementById('ctBulkBar');
+  const n=_ctSelected.size;
+  bar.classList.toggle('hidden',n===0);
+  document.getElementById('ctBulkCount').textContent=`${n} selected`;
+}
+
+async function updateContactStage(phone,stage){
+  try{
+    const r=await fetch(`/admin/contacts/${encodeURIComponent(phone)}/stage?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage})
+    });
+    if(!r.ok)throw new Error();
+    const c=_ctMap[phone];if(c)c.outreach_stage=stage;
+    const src=_allContacts.find(x=>x.phone===phone);if(src)src.outreach_stage=stage;
+    showToast?.('Stage updated');
+  }catch(e){alert('Failed to update stage');loadContacts();}
+}
+
+async function bulkTagContacts(){
+  const tagId=document.getElementById('ctBulkTagSel').value;
+  if(!tagId){alert('Pick a tag first');return;}
+  if(!_ctSelected.size)return;
+  const phones=[..._ctSelected];
+  await Promise.all(phones.map(p=>fetch(`/admin/conversations/${encodeURIComponent(p)}/tags/${tagId}?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>{})));
+  showToast?.(`Tagged ${phones.length} contact${phones.length!==1?'s':''}`);
+  loadContacts();
+}
+
+async function bulkDeleteContacts(){
+  if(!_ctSelected.size)return;
+  const phones=[..._ctSelected];
+  if(!confirm(`Delete ${phones.length} contact${phones.length!==1?'s':''}?\nThis cannot be undone.`))return;
+  try{
+    const r=await fetch(`/admin/contacts/bulk-delete?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phones})
+    });
+    if(!r.ok)throw new Error();
+    showToast?.('Contacts deleted');
+    loadContacts();
+  }catch(e){alert('Failed to delete contacts');}
+}
+
+function exportContactsCsv(selectedOnly=false){
+  const data=selectedOnly?_ctFiltered.filter(c=>_ctSelected.has(c.phone)):_ctFiltered;
+  if(!data.length){alert('No contacts to export');return;}
+  const headers=['Name','Phone','Product Interest','Stage','Tags','Source','Added'];
+  const rows=data.map(c=>[
+    c.name||'',c.phone||'',c.product_interest||'',STAGE_LABELS[c.outreach_stage||'not_contacted'],
+    (c.tags||[]).map(t=>t.name).join('; '),c.source||'',c.created_at?c.created_at.slice(0,10):''
+  ]);
+  const esc2=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const csv=[headers,...rows].map(r=>r.map(esc2).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`contacts_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function openContactDetail(phone){
+  const c=_ctMap[phone];if(!c)return;
+  document.getElementById('ctDetailName').textContent=c.name||c.phone;
+  const body=document.getElementById('ctDetailBody');
+  const tags=(c.tags||[]).map(t=>`<span style="display:inline-block;background:${t.color||'#6366f1'}22;color:${t.color||'#6366f1'};border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600">${esc(t.name)}</span>`).join(' ')||'<span style="color:var(--g300);font-size:12px">No tags</span>';
+  const fields=[['Phone',c.phone],['Product interest',c.product_interest||'—'],['Amount',c.amount||'—'],['Payment plan',c.payment_plan||'—'],['Address',c.address||'—'],['Source',c.source==='import'?'Imported':'Manual'],['Added',c.created_at?c.created_at.slice(0,10):'—']];
+  body.innerHTML=`
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn-primary" style="flex:1;padding:8px;font-size:13px" onclick='closeContactDetail();openEditContactModal(_ctMap[${JSON.stringify(phone)}])'>Edit</button>
+      <button class="btn-dl" style="flex:1;padding:8px;font-size:13px" onclick='closeContactDetail();switchTab("conv");setTimeout(()=>selectConv(${JSON.stringify(phone)},${JSON.stringify(c.name||c.phone)},"bot",""),50)'>💬 Open Chat</button>
+    </div>
+    <div style="margin-bottom:16px">${tags}</div>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:20px">
+      ${fields.map(([l,v])=>`<tr><td style="padding:5px 0;color:var(--g400);width:110px;vertical-align:top">${l}</td><td style="padding:5px 0;color:var(--g700);font-weight:600">${esc(String(v))}</td></tr>`).join('')}
+    </table>
+    <div style="font-size:11px;font-weight:700;color:var(--g400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Message History</div>
+    <div id="ctHistoryBody"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+  `;
+  document.getElementById('ctDrawer').classList.add('open');
+  document.getElementById('ctDrawerBackdrop').classList.add('open');
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}?key=${encodeURIComponent(adminKey)}`);
+    const msgs=r.ok?await r.json():[];
+    const hist=document.getElementById('ctHistoryBody');
+    if(!hist)return; // drawer closed before fetch resolved
+    if(!msgs.length){hist.innerHTML=emptyState('💬','No messages yet','This contact hasn\'t messaged your WhatsApp number.');return;}
+    hist.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">${msgs.slice(-30).map(m=>{
+      const who=m.direction==='inbound'?esc(m.name||'Customer'):(m.name&&m.name!=='KoolBot'?`👤 ${esc(m.name)}`:'🤖 KoolBot');
+      const t=formatTime(m.timestamp);
+      return `<div style="background:${m.direction==='inbound'?'var(--g50)':'var(--orange-s)'};border-radius:8px;padding:8px 10px;font-size:12px">
+        <div style="font-weight:700;color:var(--g500);font-size:10px;margin-bottom:2px">${who} · ${t}</div>
+        <div style="color:var(--g700)">${esc(m.content.length>200?m.content.slice(0,200)+'…':m.content)}</div>
+      </div>`;
+    }).join('')}</div>`;
+  }catch(e){
+    const hist=document.getElementById('ctHistoryBody');
+    if(hist)hist.innerHTML='<p style="color:#e53e3e;font-size:13px">Failed to load message history</p>';
+  }
+}
+function closeContactDetail(){
+  document.getElementById('ctDrawer').classList.remove('open');
+  document.getElementById('ctDrawerBackdrop').classList.remove('open');
 }
 
 async function openEditContactModal(c){

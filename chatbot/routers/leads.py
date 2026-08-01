@@ -423,6 +423,7 @@ async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
                     "address": l.address or "",
                     "status": l.status or "new",
                     "source": l.source or "manual",
+                    "outreach_stage": l.outreach_stage or "not_contacted",
                     "created_at": l.created_at.isoformat() if l.created_at else None,
                     "tags": phone_tags.get(l.phone, []),
                 }
@@ -431,6 +432,64 @@ async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
+
+
+OUTREACH_STAGES = {"not_contacted", "contacted", "responded", "converted", "dead"}
+
+
+class ContactStageIn(BaseModel):
+    stage: str
+
+
+@contacts_router.patch("/{phone}/stage")
+async def update_contact_stage(phone: str, body: ContactStageIn, ctx: dict = Depends(get_admin_ctx)):
+    if body.stage not in OUTREACH_STAGES:
+        raise HTTPException(400, f"Invalid stage. Must be one of: {', '.join(sorted(OUTREACH_STAGES))}")
+
+    def _update():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if not lead:
+                raise HTTPException(404, "Contact not found")
+            if lead.source not in ("manual", "import"):
+                raise HTTPException(400, "Cannot edit bot-qualified leads from the Contacts tab")
+            lead.outreach_stage = body.stage
+            db.commit()
+            return {"ok": True, "outreach_stage": lead.outreach_stage}
+        finally:
+            db.close()
+    return await run_in_threadpool(_update)
+
+
+class BulkDeleteIn(BaseModel):
+    phones: List[str]
+
+
+@contacts_router.post("/bulk-delete")
+async def bulk_delete_contacts(body: BulkDeleteIn, ctx: dict = Depends(get_admin_ctx)):
+    def _delete():
+        db = get_db()
+        try:
+            norm_phones = [normalize_phone(p) for p in body.phones]
+            leads_list = (
+                db.query(Lead)
+                .filter(Lead.phone.in_(norm_phones), Lead.source.in_(["manual", "import"]))
+                .all()
+            )
+            deleted_phones = [l.phone for l in leads_list]
+            if deleted_phones:
+                db.query(ConversationTag).filter(ConversationTag.phone.in_(deleted_phones)).delete(
+                    synchronize_session=False
+                )
+                for l in leads_list:
+                    db.delete(l)
+                db.commit()
+            return {"ok": True, "deleted": len(deleted_phones)}
+        finally:
+            db.close()
+    return await run_in_threadpool(_delete)
 
 
 @contacts_router.patch("/{phone}")
