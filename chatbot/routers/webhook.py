@@ -5,12 +5,13 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import and_, func, select
 
-from chatbot.config import HANDOFF_AUTO_RESET_HOURS, WHATSAPP_VERIFY_TOKEN, log
+from chatbot.config import HANDOFF_AUTO_RESET_HOURS, LEAD_TTL, WHATSAPP_VERIFY_TOKEN, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import BroadcastRecipient, Message
+from chatbot.services.lead_service import save_lead
 from chatbot.services.whatsapp_service import mark_whatsapp_read, save_message_db
-from chatbot.utils.phone import normalize_phone
+from chatbot.utils.phone import extract_valid_phone, normalize_phone
 from chatbot.workers.bot_response import delayed_bot_response
 
 router = APIRouter(tags=["webhook"])
@@ -132,6 +133,26 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                             history.append({"role": "user", "content": text,
                                             "ts": datetime.now().isoformat()})
                             await redis_client.save_history(session_id, history)
+
+                            # Bot stays silent, but a lead is still a lead — capture
+                            # a phone number even when a human agent is doing the
+                            # asking, instead of only ever qualifying via the bot.
+                            try:
+                                phone_redis = await redis_client.client.get(
+                                    f"koolbuy:phone:{session_id}") if redis_client.client else None
+                                already_captured = bool(phone_redis) or any(
+                                    "[VALID phone captured" in m.get("content", "") for m in history
+                                )
+                                if not already_captured:
+                                    phone = extract_valid_phone(text)
+                                    if phone:
+                                        background_tasks.add_task(save_lead, name, phone, history, session_id)
+                                        if redis_client.client:
+                                            await redis_client.client.set(
+                                                f"koolbuy:phone:{session_id}", phone, ex=LEAD_TTL)
+                            except Exception as _e:
+                                log.warning(f"Handoff lead-capture check failed: {_e}")
+
                             continue
 
                     # Check session state and reset completed sessions

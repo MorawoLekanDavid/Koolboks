@@ -1,7 +1,7 @@
 import re
 from typing import Optional
 
-PHONE_RE = re.compile(r'(?<!\d)(0[789]\d{9}|[789]\d{9}|\+234[789]\d{9})(?!\d)')
+PHONE_RE = re.compile(r'(?<!\d)(0[789]\d{9}|[789]\d{9}|\+234[789]\d{9}|\+2340[789]\d{9})(?!\d)')
 SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_\-\+]{8,120}$')
 
 
@@ -26,6 +26,10 @@ def extract_valid_phone(text: str) -> Optional[str]:
     if not m:
         return None
     number = m.group()
+    # Repair the common "+234" + redundant leading "0" mistake some lead-gen
+    # forms produce (e.g. +23408125474609) instead of rejecting a fixable number.
+    if number.startswith('+2340'):
+        number = '+234' + number[5:]
     if len(number) == 10 and not number.startswith('0') and not number.startswith('+'):
         number = '0' + number
     return number

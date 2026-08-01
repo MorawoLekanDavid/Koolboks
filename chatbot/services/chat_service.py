@@ -317,8 +317,12 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     elif looks_like_phone and not already_captured:
         messages[-1]["content"] = (
             f"{request.message}\n\n"
-            f"[INVALID phone. Ask for valid Nigerian number — 11 digits starting "
-            f"070, 080, 081, 090, 091 or 10 digits starting 7, 8, or 9.]"
+            f"[INVALID phone. If this message also contains OTHER details "
+            f"(name, location, product, plan, etc.), briefly acknowledge those "
+            f"first in one short clause — don't just ignore them. Then ask for "
+            f"a valid Nigerian number — 11 digits starting 070, 080, 081, 090, "
+            f"091 or 10 digits starting 7, 8, or 9. Keep the whole reply to 2 "
+            f"sentences.]"
         )
 
     raw = await call_groq(messages)
