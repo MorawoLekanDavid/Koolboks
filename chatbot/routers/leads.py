@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy import case, func, select
 
 from chatbot.database import get_db
-from chatbot.dependencies import get_admin_ctx
-from chatbot.models import ConversationTag, Lead, LeadNote, Message, Tag
+from chatbot.dependencies import get_admin_ctx, require_admin
+from chatbot.models import ContactStage, ConversationTag, Lead, LeadNote, Message, Tag
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/leads", tags=["leads"])
@@ -163,6 +163,7 @@ async def create_lead(body: LeadCreateIn, ctx: dict = Depends(get_admin_ctx)):
                 address=body.address or None,
                 status=body.status,
                 source="manual",
+                created_by=ctx.get("name") or ctx.get("email") or "Agent",
             )
             db.add(lead)
             db.flush()
@@ -214,6 +215,7 @@ async def import_leads(body: LeadImportIn, ctx: dict = Depends(get_admin_ctx)):
                         address=item.address or None,
                         status=body.status,
                         source="import",
+                        created_by=agent_name,
                     )
                     db.add(lead)
                     db.flush()
@@ -389,6 +391,10 @@ class ContactUpdateIn(BaseModel):
     address: Optional[str] = None
 
 
+def _actor(ctx: dict) -> str:
+    return ctx.get("name") or ctx.get("email") or "Agent"
+
+
 @contacts_router.get("")
 async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
     def _fetch():
@@ -412,8 +418,34 @@ async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
                 phone_tags.setdefault(ct.phone, []).append(
                     {"id": tag.id, "name": tag.name, "color": tag.color}
                 )
-            return [
-                {
+
+            # Batched response-tracking: last outbound send time + whether
+            # a later inbound message came in (i.e. the contact responded).
+            outbound_map, inbound_map = {}, {}
+            if phones:
+                outbound_map = {
+                    r.phone: r.last_at
+                    for r in db.execute(
+                        select(Message.phone, func.max(Message.created_at).label("last_at"))
+                        .where(Message.phone.in_(phones), Message.direction == "outbound")
+                        .group_by(Message.phone)
+                    ).all()
+                }
+                inbound_map = {
+                    r.phone: r.last_at
+                    for r in db.execute(
+                        select(Message.phone, func.max(Message.created_at).label("last_at"))
+                        .where(Message.phone.in_(phones), Message.direction == "inbound")
+                        .group_by(Message.phone)
+                    ).all()
+                }
+
+            result = []
+            for l in leads_list:
+                last_out = outbound_map.get(l.phone)
+                last_in = inbound_map.get(l.phone)
+                responded_at = last_in if (last_out and last_in and last_in > last_out) else None
+                result.append({
                     "id": l.id,
                     "name": l.name or "",
                     "phone": l.phone,
@@ -424,17 +456,143 @@ async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
                     "status": l.status or "new",
                     "source": l.source or "manual",
                     "outreach_stage": l.outreach_stage or "not_contacted",
+                    "owner": l.assigned_to,
                     "created_at": l.created_at.isoformat() if l.created_at else None,
+                    "created_by": l.created_by,
+                    "updated_at": l.updated_at.isoformat() if l.updated_at else None,
+                    "updated_by": l.updated_by,
+                    "last_outbound_at": last_out.isoformat() if last_out else None,
+                    "responded_at": responded_at.isoformat() if responded_at else None,
                     "tags": phone_tags.get(l.phone, []),
-                }
-                for l in leads_list
-            ]
+                })
+            return result
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
 
 
-OUTREACH_STAGES = {"not_contacted", "contacted", "responded", "converted", "dead"}
+# ── Customizable outreach stages ───────────────────────────────────────────────
+
+def _default_stage_seed(db):
+    """Seed the original 5 stages the first time this table is queried empty."""
+    if db.query(ContactStage).count() > 0:
+        return
+    defaults = [
+        ("not_contacted", "#94A3B8", 0),
+        ("contacted", "#3B82F6", 1),
+        ("responded", "#F59E0B", 2),
+        ("converted", "#22C55E", 3),
+        ("dead", "#EF4444", 4),
+    ]
+    for name, color, order in defaults:
+        db.add(ContactStage(name=name, color=color, sort_order=order))
+    db.commit()
+
+
+@contacts_router.get("/stages")
+async def list_contact_stages(ctx: dict = Depends(get_admin_ctx)):
+    def _fetch():
+        db = get_db()
+        try:
+            _default_stage_seed(db)
+            rows = db.query(ContactStage).order_by(ContactStage.sort_order, ContactStage.id).all()
+            return [{"id": s.id, "name": s.name, "color": s.color, "sort_order": s.sort_order} for s in rows]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+class StageCreateIn(BaseModel):
+    name: str
+    color: str = "#6366f1"
+
+
+@contacts_router.post("/stages")
+async def create_contact_stage(body: StageCreateIn, ctx: dict = Depends(require_admin)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Stage name is required")
+
+    def _create():
+        db = get_db()
+        try:
+            _default_stage_seed(db)
+            existing = db.query(ContactStage).filter(ContactStage.name == name).first()
+            if existing:
+                raise HTTPException(409, "A stage with this name already exists")
+            max_order = db.query(func.max(ContactStage.sort_order)).scalar() or 0
+            stage = ContactStage(name=name, color=body.color or "#6366f1", sort_order=max_order + 1)
+            db.add(stage)
+            db.commit()
+            db.refresh(stage)
+            return {"id": stage.id, "name": stage.name, "color": stage.color, "sort_order": stage.sort_order}
+        finally:
+            db.close()
+    return await run_in_threadpool(_create)
+
+
+class StageUpdateIn(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+@contacts_router.patch("/stages/{stage_id}")
+async def update_contact_stage_def(stage_id: int, body: StageUpdateIn, ctx: dict = Depends(require_admin)):
+    def _update():
+        db = get_db()
+        try:
+            stage = db.query(ContactStage).filter(ContactStage.id == stage_id).first()
+            if not stage:
+                raise HTTPException(404, "Stage not found")
+            old_name = stage.name
+            if body.name is not None:
+                new_name = body.name.strip()
+                if not new_name:
+                    raise HTTPException(400, "Stage name cannot be empty")
+                if new_name != old_name:
+                    clash = db.query(ContactStage).filter(ContactStage.name == new_name).first()
+                    if clash:
+                        raise HTTPException(409, "A stage with this name already exists")
+                    # Cascade the rename onto every contact currently in this stage
+                    db.query(Lead).filter(Lead.outreach_stage == old_name).update(
+                        {"outreach_stage": new_name}, synchronize_session=False
+                    )
+                    stage.name = new_name
+            if body.color is not None:
+                stage.color = body.color
+            if body.sort_order is not None:
+                stage.sort_order = body.sort_order
+            db.commit()
+            return {"id": stage.id, "name": stage.name, "color": stage.color, "sort_order": stage.sort_order}
+        finally:
+            db.close()
+    return await run_in_threadpool(_update)
+
+
+@contacts_router.delete("/stages/{stage_id}")
+async def delete_contact_stage(stage_id: int, ctx: dict = Depends(require_admin)):
+    def _delete():
+        db = get_db()
+        try:
+            stage = db.query(ContactStage).filter(ContactStage.id == stage_id).first()
+            if not stage:
+                raise HTTPException(404, "Stage not found")
+            in_use = (
+                db.query(Lead)
+                .filter(Lead.outreach_stage == stage.name, Lead.source.in_(["manual", "import"]))
+                .count()
+            )
+            if in_use:
+                raise HTTPException(400, f"{in_use} contact(s) are in this stage — move them first")
+            if db.query(ContactStage).count() <= 1:
+                raise HTTPException(400, "At least one stage must remain")
+            db.delete(stage)
+            db.commit()
+            return {"ok": True}
+        finally:
+            db.close()
+    return await run_in_threadpool(_delete)
 
 
 class ContactStageIn(BaseModel):
@@ -443,12 +601,13 @@ class ContactStageIn(BaseModel):
 
 @contacts_router.patch("/{phone}/stage")
 async def update_contact_stage(phone: str, body: ContactStageIn, ctx: dict = Depends(get_admin_ctx)):
-    if body.stage not in OUTREACH_STAGES:
-        raise HTTPException(400, f"Invalid stage. Must be one of: {', '.join(sorted(OUTREACH_STAGES))}")
-
     def _update():
         db = get_db()
         try:
+            _default_stage_seed(db)
+            valid_names = {s.name for s in db.query(ContactStage.name).all()}
+            if body.stage not in valid_names:
+                raise HTTPException(400, f"Invalid stage. Must be one of: {', '.join(sorted(valid_names))}")
             norm = normalize_phone(phone)
             lead = db.query(Lead).filter(Lead.phone == norm).first()
             if not lead:
@@ -456,6 +615,7 @@ async def update_contact_stage(phone: str, body: ContactStageIn, ctx: dict = Dep
             if lead.source not in ("manual", "import"):
                 raise HTTPException(400, "Cannot edit bot-qualified leads from the Contacts tab")
             lead.outreach_stage = body.stage
+            lead.updated_by = _actor(ctx)
             db.commit()
             return {"ok": True, "outreach_stage": lead.outreach_stage}
         finally:
@@ -508,8 +668,33 @@ async def update_contact(phone: str, body: ContactUpdateIn, ctx: dict = Depends(
             lead.amount = body.amount or None
             lead.payment_plan = body.payment_plan or None
             lead.address = body.address or None
+            lead.updated_by = _actor(ctx)
             db.commit()
             return {"ok": True}
+        finally:
+            db.close()
+    return await run_in_threadpool(_update)
+
+
+class ContactOwnerIn(BaseModel):
+    owner: Optional[str] = None  # None = unassign
+
+
+@contacts_router.patch("/{phone}/owner")
+async def update_contact_owner(phone: str, body: ContactOwnerIn, ctx: dict = Depends(get_admin_ctx)):
+    def _update():
+        db = get_db()
+        try:
+            norm = normalize_phone(phone)
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if not lead:
+                raise HTTPException(404, "Contact not found")
+            if lead.source not in ("manual", "import"):
+                raise HTTPException(400, "Cannot edit bot-qualified leads from the Contacts tab")
+            lead.assigned_to = body.owner or None
+            lead.updated_by = _actor(ctx)
+            db.commit()
+            return {"ok": True, "owner": lead.assigned_to}
         finally:
             db.close()
     return await run_in_threadpool(_update)

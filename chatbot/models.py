@@ -39,8 +39,10 @@ class Lead(Base):
     active_duration = Column(String(50), nullable=True)
     status = Column(String(50), default="new", index=True)  # new, interested, follow_up, drop_off, converted
     source = Column(String(20), default="bot", index=True)  # bot | manual | import
-    outreach_stage = Column(String(20), default="not_contacted")  # contacts-only: not_contacted, contacted, responded, converted, dead
-    assigned_to = Column(String(255), nullable=True)
+    outreach_stage = Column(String(50), default="not_contacted")  # contacts-only: name of a ContactStage row
+    assigned_to = Column(String(255), nullable=True)  # contact "owner" — agent responsible for outreach
+    created_by = Column(String(255), nullable=True)
+    updated_by = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow,
                         onupdate=datetime.utcnow)
@@ -229,6 +231,17 @@ class RolePermission(Base):
     allowed = Column(Boolean, default=True)
 
     __table_args__ = (UniqueConstraint("role", "tab", name="uq_role_tab"),)
+
+
+class ContactStage(Base):
+    """Customizable outreach pipeline stage for the Contacts tab"""
+    __tablename__ = "contact_stages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, nullable=False)
+    color = Column(String(20), default="#6366f1")
+    sort_order = Column(Integer, default=0, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db(database_url: str):
