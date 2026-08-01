@@ -70,7 +70,7 @@ class Agent(Base):
     name = Column(String(255))
     email = Column(String(255), unique=True, index=True)
     password_hash = Column(String(255), nullable=True)
-    role = Column(String(20), default="agent")  # "agent" | "super_admin"
+    role = Column(String(50), default="agent")  # agent | customer_success_agent | telesales_agent | sales_agent | admin | super_admin
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
