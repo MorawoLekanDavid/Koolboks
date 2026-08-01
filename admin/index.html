@@ -111,8 +111,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .conv-item{padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--g100);transition:background .1s;position:relative}
 .conv-item:hover{background:var(--g50)}
 .conv-item.active{background:var(--orange-s);border-left:3px solid var(--orange);padding-left:11px}
+.c-av-wrap{position:relative;flex-shrink:0}
 .c-av{width:40px;height:40px;border-radius:50%;background:var(--orange);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .c-av.ag{background:var(--g700)}
+.urgency-dot{position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;border:2px solid #fff}
+.urgency-dot.u-red{background:var(--red)}
+.urgency-dot.u-amber{background:#F59E0B}
 .c-info{flex:1;min-width:0}
 .c-name{font-size:13px;font-weight:600;color:var(--g900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .c-phone{font-size:11px;color:var(--g400);margin-top:1px}
@@ -2219,8 +2223,12 @@ function renderConversations(){
     const avLetter=c.name?c.name[0].toUpperCase():'#';
     const tagPills=(c.tags||[]).map(t=>`<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${t.color}22;border:1px solid ${t.color};color:${t.color};font-weight:600;white-space:nowrap">${esc(t.name)}</span>`).join('');
     const ownerChip=c.owner&&c.owner.name?`<span class="owner-chip">👤 ${esc(c.owner.name)}</span>`:'';
+    const urgency=unread>0?(c.mode==='agent'?'u-red':'u-amber'):'';
     return `<div class="conv-item ${selectedPhone===c.phone?'active':''}" onclick="selectConv('${c.phone}','${rn}','${c.mode}','${c.agent||''}')">
-      <div class="c-av ${c.mode==='agent'?'ag':''}">${avLetter}</div>
+      <div class="c-av-wrap">
+        <div class="c-av ${c.mode==='agent'?'ag':''}">${avLetter}</div>
+        ${urgency?`<span class="urgency-dot ${urgency}" title="${urgency==='u-red'?'Needs a human — handed off with unread messages':'Bot is handling — unread messages'}"></span>`:''}
+      </div>
       <div class="c-info">
         <div class="c-name">${esc(displayName)}</div>
         ${c.name?`<div class="c-phone">${c.phone}</div>`:''}
