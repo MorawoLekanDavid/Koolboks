@@ -5035,11 +5035,16 @@ async function updateContactStage(phone,stage){
     const r=await fetch(`/admin/contacts/${encodeURIComponent(phone)}/stage?key=${encodeURIComponent(adminKey)}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage})
     });
-    if(!r.ok)throw new Error();
+    if(!r.ok){
+      const data=await r.json().catch(()=>({}));
+      // Stage list may be stale (e.g. someone renamed a stage elsewhere) — refresh and let the user retry with current names
+      await loadContactStages();
+      throw new Error(data.detail||'Failed to update stage');
+    }
     const c=_ctMap[phone];if(c)c.outreach_stage=stage;
     const src=_allContacts.find(x=>x.phone===phone);if(src)src.outreach_stage=stage;
     showToast?.('Stage updated');
-  }catch(e){alert('Failed to update stage');loadContacts();}
+  }catch(e){alert(e.message||'Failed to update stage');loadContacts();}
 }
 
 async function updateContactOwner(phone,owner){
@@ -5047,11 +5052,11 @@ async function updateContactOwner(phone,owner){
     const r=await fetch(`/admin/contacts/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({owner:owner||null})
     });
-    if(!r.ok)throw new Error();
+    if(!r.ok){const data=await r.json().catch(()=>({}));throw new Error(data.detail||'Failed to update owner');}
     const c=_ctMap[phone];if(c)c.owner=owner||null;
     const src=_allContacts.find(x=>x.phone===phone);if(src)src.owner=owner||null;
     showToast?.('Owner updated');
-  }catch(e){alert('Failed to update owner');loadContacts();}
+  }catch(e){alert(e.message||'Failed to update owner');loadContacts();}
 }
 
 async function bulkTagContacts(){
