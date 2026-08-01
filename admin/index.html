@@ -125,6 +125,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .no-conv{padding:32px 14px;text-align:center;color:var(--g400);font-size:13px}
 .load-more-row{padding:10px 14px;text-align:center}.load-more-row button{background:none;border:1px solid var(--g300);border-radius:8px;padding:6px 18px;font-size:12px;cursor:pointer;color:var(--g500)}.load-more-row button:hover{background:var(--g100)}
 
+/* ── Shared empty-state pattern ── */
+.ui-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 20px;text-align:center;grid-column:1/-1}
+.ui-empty-icon{width:48px;height:48px;background:var(--g100);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.ui-empty-title{font-size:14px;font-weight:700;color:var(--g600)}
+.ui-empty-sub{font-size:12px;color:var(--g400);max-width:320px;line-height:1.5}
+.ui-empty .btn-primary{margin-top:6px;padding:7px 18px;font-size:13px}
+
 /* Chat panel */
 .chat-panel{flex:1;display:flex;flex-direction:column;background:var(--g50);overflow:hidden;min-width:0}
 .empty-chat{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--g400)}
@@ -1072,7 +1079,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <!-- Template list -->
       <div id="tmplLoading" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">Loading templates…</div>
       <div class="tmpl-grid hidden" id="tmplGrid"></div>
-      <div id="tmplEmpty" class="hidden" style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No templates yet. Create one above.</div>
+      <div id="tmplEmpty" class="hidden">
+        <div class="ui-empty">
+          <div class="ui-empty-icon">📨</div>
+          <div class="ui-empty-title">No templates yet</div>
+          <div class="ui-empty-sub">Create one above and Meta will need to approve it before it can be sent.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2192,8 +2205,11 @@ function renderConversations(){
   }
   const list=document.getElementById('convList');
   if(!filtered.length){
-    const msg=isSearch?`No results for "<b>${esc(rawQ)}</b>"`:'No conversations found';
-    list.innerHTML=`<div class="no-conv">${msg}</div>`+(convHasMore&&!isSearch?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
+    let body;
+    if(isSearch)body=emptyState('🔍','No results',`Nothing matches "${rawQ}"`);
+    else if(!allConversations.length)body=emptyState('💬','No conversations yet','They\'ll show up here as soon as a customer messages your WhatsApp number.');
+    else body=emptyState('🗂️','No conversations match this filter','Try a different view or clear the active filters.');
+    list.innerHTML=body+(convHasMore&&!isSearch?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
     return;
   }
   list.innerHTML=filtered.map(c=>{
@@ -2604,7 +2620,8 @@ function renderCannedList(){
   const el=document.getElementById('cannedList');
   if(!el)return;
   if(!cannedData.length){
-    el.innerHTML='<div style="text-align:center;padding:32px;color:var(--g400);font-size:13px">No canned responses yet. Create one above.</div>';
+    el.innerHTML=emptyState('💾','No canned responses yet','Save a message here once and send it with one click during any conversation.',
+      '<button class="btn-primary" onclick="openCannedModal()">+ New Response</button>');
     return;
   }
   el.innerHTML=cannedData.map(c=>`<div class="canned-row"><div class="canned-row-body"><div class="canned-row-title">${esc(c.title)}</div><div class="canned-row-content">${esc(c.content)}</div></div><div style="display:flex;gap:6px;flex-shrink:0;margin-top:2px"><button class="canned-row-edit" onclick="openCannedModal(${c.id})">Edit</button><button class="canned-row-del" onclick="deleteCanned(${c.id})">Delete</button></div></div>`).join('');
@@ -3017,7 +3034,12 @@ function showLeadGroup(g){
   document.getElementById('leadsListTitle').textContent=title;
   document.getElementById('leadsListCount').textContent=`${list.length} people`;
   const dlBtn=document.getElementById('downloadBtn');if(list.length){dlBtn.classList.remove('hidden');}else{dlBtn.classList.add('hidden');}
-  if(!list.length){document.getElementById('leadsListBody').innerHTML='<div class="empty-leads">None yet</div>';return;}
+  if(!list.length){
+    document.getElementById('leadsListBody').innerHTML=isInt
+      ?emptyState('🎯','No interested leads yet','Once a customer gives their number to the bot, they\'ll land here.')
+      :emptyState('👋','No drop-offs yet','Customers who chat but never share a number will show up here.');
+    return;
+  }
   document.getElementById('leadsListBody').innerHTML=list.map(l=>{
     const name=l.name||l.phone;
     const init=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -3707,7 +3729,7 @@ async function loadProducts(){
 
 function renderProducts(){
   const grid=document.getElementById('productsGrid');
-  if(!allProducts.length){grid.innerHTML='<p style="color:var(--g400);font-size:13px">No products yet.</p>';renderPagination();return;}
+  if(!allProducts.length){grid.innerHTML=emptyState('📦','No products yet','Add your first product above so the bot can recommend it to customers.');renderPagination();return;}
   const start=(productPage-1)*PAGE_SIZE, slice=allProducts.slice(start,start+PAGE_SIZE);
   grid.innerHTML=slice.map(p=>`
     <div class="product-card">
@@ -4484,7 +4506,10 @@ function renderContactsTable(data){
   _ctMap={};
   data.forEach(c=>{_ctMap[c.phone]=c;});
   if(!data.length){
-    wrap.innerHTML='<p style="color:var(--g400);font-size:13px;padding:20px 0">No contacts found. Use "+ Add Contact" or "⬆ Import CSV" to get started.</p>';
+    wrap.innerHTML=_allContacts.length
+      ?emptyState('🔍','No contacts match','Try a different tag filter or search term.')
+      :emptyState('📋','No contacts yet','Add people manually or import a CSV to start building your outreach list.',
+        '<button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>');
     return;
   }
   const rows=data.map(c=>{
@@ -4834,6 +4859,9 @@ async function submitSendTemplate(){
 
 // ── Helpers ────────────────────────────────────────────────────────────
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function emptyState(icon,title,sub,actionHtml){
+  return `<div class="ui-empty"><div class="ui-empty-icon">${icon}</div><div class="ui-empty-title">${esc(title)}</div>${sub?`<div class="ui-empty-sub">${esc(sub)}</div>`:''}${actionHtml||''}</div>`;
+}
 function timeAgo(iso){if(!iso)return'';const d=(Date.now()-new Date(iso+'Z').getTime())/1000;if(d<60)return'just now';if(d<3600)return`${Math.floor(d/60)}m ago`;if(d<86400)return`${Math.floor(d/3600)}h ago`;return`${Math.floor(d/86400)}d ago`;}
 function formatTime(iso){if(!iso)return'';return new Date(iso+'Z').toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 </script>
