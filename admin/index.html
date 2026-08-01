@@ -428,11 +428,33 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .bb-review-stat .l{font-size:11px;color:var(--g400);margin-top:2px}
 .ct-bulk-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--orange-s);border:1px solid var(--orange-b);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:600;color:var(--orange-d)}
 .stage-sel{font-size:11px;font-weight:700;padding:3px 6px;border-radius:6px;border:1.5px solid transparent;font-family:inherit;cursor:pointer;outline:none}
-.stage-sel.not_contacted{background:var(--g100);color:var(--g500)}
-.stage-sel.contacted{background:#dbeafe;color:#1d4ed8}
-.stage-sel.responded{background:#fef3c7;color:#92400e}
-.stage-sel.converted{background:var(--green-s);color:#15803d}
-.stage-sel.dead{background:var(--red-s);color:#b91c1c}
+.ct-view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ct-view-toggle button{padding:6px 14px;font-size:12px;font-weight:600;background:var(--surface);color:var(--g600);border:none;cursor:pointer;font-family:inherit}
+.ct-view-toggle button.active{background:var(--orange);color:#fff}
+.ct-view-toggle button:not(:last-child){border-right:1px solid var(--border)}
+.ct-meta-cell{font-size:11px;line-height:1.5}
+.ct-meta-cell .by{color:var(--g400)}
+.ct-outreach-badge{font-size:11px;padding:2px 7px;border-radius:8px;font-weight:600;display:inline-block}
+.ct-outreach-badge.responded{background:var(--green-s);color:#15803d}
+.ct-outreach-badge.waiting{background:#fef3c7;color:#92400e}
+.ct-outreach-badge.none{background:var(--g100);color:var(--g400)}
+/* ── Pipeline (kanban) view ── */
+.ct-pipeline{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+.ct-pipe-col{flex:0 0 260px;background:var(--g50);border-radius:10px;padding:10px;min-height:80px}
+.ct-pipe-col.drag-over{background:var(--orange-s);outline:2px dashed var(--orange)}
+.ct-pipe-col-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px}
+.ct-pipe-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ct-pipe-title{font-size:12px;font-weight:700;color:var(--g700);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct-pipe-count{font-size:11px;color:var(--g400);font-weight:600}
+.ct-pipe-card{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--sh);cursor:grab;border:1px solid var(--g100)}
+.ct-pipe-card:active{cursor:grabbing}
+.ct-pipe-card.dragging{opacity:.4}
+.ct-pipe-card-name{font-size:13px;font-weight:600;color:var(--g900);margin-bottom:2px}
+.ct-pipe-card-meta{font-size:11px;color:var(--g400)}
+.ct-pipe-empty{font-size:12px;color:var(--g300);text-align:center;padding:14px 0}
+.stage-mgmt-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--g100)}
+.stage-mgmt-row input[type=color]{width:28px;height:28px;border:none;border-radius:6px;cursor:pointer;padding:0;background:none}
+.stage-mgmt-row input[type=text]{flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text)}
 .role-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
 .role-badge.super_admin{background:#fef3c7;color:#92400e}
 .role-badge.admin{background:var(--orange-s);color:var(--orange)}
@@ -992,15 +1014,20 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <p style="font-size:12px;color:var(--g400)">Outreach contacts — added manually or imported from CSV</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-dl" onclick="openStageManageModal()">⚙ Manage Stages</button>
           <button class="btn-dl" onclick="exportContactsCsv()">⬇ Export CSV</button>
           <button class="btn-dl" onclick="openImportCsvModal()">⬆ Import CSV</button>
           <button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
         </div>
       </div>
-      <div style="display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
         <span style="font-size:13px;color:var(--g500)">Total: <strong id="ctTotal" style="color:var(--text)">—</strong></span>
         <span style="font-size:13px;color:var(--g500)">Manual: <strong id="ctManual" style="color:var(--text)">—</strong></span>
         <span style="font-size:13px;color:var(--g500)">Imported: <strong id="ctImport" style="color:var(--text)">—</strong></span>
+        <div class="ct-view-toggle" style="margin-left:auto">
+          <button id="ctViewTableBtn" class="active" onclick="setContactsView('table')">☰ Table</button>
+          <button id="ctViewPipelineBtn" onclick="setContactsView('pipeline')">📊 Pipeline</button>
+        </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
         <select id="ctTagFilter" onchange="filterContacts()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
@@ -1008,11 +1035,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         </select>
         <select id="ctStageFilter" onchange="filterContacts()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
           <option value="">All stages</option>
-          <option value="not_contacted">Not contacted</option>
-          <option value="contacted">Contacted</option>
-          <option value="responded">Responded</option>
-          <option value="converted">Converted</option>
-          <option value="dead">Dead</option>
+        </select>
+        <select id="ctOwnerFilter" onchange="filterContacts()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+          <option value="">All owners</option>
+          <option value="__unassigned__">Unassigned</option>
         </select>
         <input type="text" id="ctSearch" placeholder="Search name or phone…" oninput="filterContacts()" style="flex:1;min-width:180px;max-width:300px;font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
       </div>
@@ -1032,6 +1058,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <p style="color:var(--g400);font-size:13px">Loading…</p>
       </div>
       <div class="pg-row" id="ctPagination" style="margin-top:14px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
+      <div id="contactsPipelineWrap" class="hidden">
+        <div class="ct-pipeline" id="ctPipeline"></div>
+      </div>
     </div>
   </div>
 
@@ -1043,6 +1072,24 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="fd-close-btn" onclick="closeContactDetail()">✕</button>
     </div>
     <div class="fd-scroll" id="ctDetailBody" style="padding:16px"></div>
+  </div>
+
+  <!-- Stage management modal -->
+  <div class="modal-overlay hidden" id="stageMgmtModal" onclick="if(event.target===this)closeStageManageModal()">
+    <div class="modal" style="max-width:440px">
+      <h3>⚙ Manage Stages</h3>
+      <p style="font-size:12px;color:var(--g400);margin-bottom:14px">These are the outreach pipeline stages contacts move through. Renaming a stage updates every contact already in it.</p>
+      <div id="stageMgmtList"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+        <input type="color" id="newStageColor" value="#6366f1">
+        <input type="text" id="newStageName" placeholder="New stage name" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text)">
+        <button class="btn-primary" style="flex-shrink:0;padding:8px 14px;font-size:13px" onclick="createStage()">+ Add</button>
+      </div>
+      <div id="stageMgmtErr" style="display:none;color:#e53e3e;font-size:12px;margin-top:8px"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeStageManageModal()">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Analytics tab -->
@@ -4642,14 +4689,47 @@ let _ctFiltered=[];
 let _ctSelected=new Set();
 let _ctSort={field:'created_at',dir:'desc'};
 let _ctPage=1;
+let _ctView='table';
+let _contactStages=[];
 const CT_PAGE_SIZE=25;
-const STAGE_LABELS={not_contacted:'Not contacted',contacted:'Contacted',responded:'Responded',converted:'Converted',dead:'Dead'};
+
+function ctFmtDateTime(iso){
+  if(!iso)return'—';
+  const d=new Date(iso+'Z');
+  return d.toLocaleDateString([],{day:'numeric',month:'short',year:'numeric'})+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+function stageByName(name){
+  return _contactStages.find(s=>s.name===name)||{id:null,name:name||'—',color:'#94A3B8'};
+}
+function ctMetaCell(iso,by){
+  return `<div class="ct-meta-cell">${ctFmtDateTime(iso)}${by?`<br><span class="by">by ${esc(by)}</span>`:''}</div>`;
+}
+function ctOutreachBadge(c){
+  if(c.responded_at)return `<span class="ct-outreach-badge responded">✓ Responded ${timeAgo(c.responded_at)}</span>`;
+  if(c.last_outbound_at)return `<span class="ct-outreach-badge waiting">Sent ${timeAgo(c.last_outbound_at)}, no reply</span>`;
+  return `<span class="ct-outreach-badge none">Not messaged</span>`;
+}
+
+async function loadContactStages(){
+  try{
+    const r=await fetch(`/admin/contacts/stages?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    _contactStages=await r.json();
+    const sel=document.getElementById('ctStageFilter');
+    const prev=sel.value;
+    sel.innerHTML='<option value="">All stages</option>'+_contactStages.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+    if(prev)sel.value=prev;
+  }catch(e){}
+}
 
 async function loadContacts(){
   const wrap=document.getElementById('contactsTableWrap');
   wrap.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
   try{
-    const r=await fetch(`/admin/contacts?key=${encodeURIComponent(adminKey)}`);
+    const [r]=await Promise.all([
+      fetch(`/admin/contacts?key=${encodeURIComponent(adminKey)}`),
+      loadContactStages(),
+    ]);
     if(r.status===403){logout();return;}
     _allContacts=await r.json();
     _ctSelected.clear();
@@ -4665,6 +4745,13 @@ async function loadContacts(){
     sel.innerHTML='<option value="">All tags</option>'+
       [...tagMap.values()].map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
     if(prev)sel.value=prev;
+    // Populate owner filter from owners actually present on contacts
+    const ownerSel=document.getElementById('ctOwnerFilter');
+    const prevOwner=ownerSel.value;
+    const owners=[...new Set(_allContacts.map(c=>c.owner).filter(Boolean))].sort();
+    ownerSel.innerHTML='<option value="">All owners</option><option value="__unassigned__">Unassigned</option>'+
+      owners.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
+    if(prevOwner)ownerSel.value=prevOwner;
     // Populate bulk-tag select from the global tag list
     const bulkSel=document.getElementById('ctBulkTagSel');
     if(bulkSel)bulkSel.innerHTML='<option value="">Add tag…</option>'+_allTags.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
@@ -4678,14 +4765,154 @@ async function loadContacts(){
 function filterContacts(){
   const tagId=document.getElementById('ctTagFilter').value;
   const stage=document.getElementById('ctStageFilter').value;
+  const owner=document.getElementById('ctOwnerFilter').value;
   const search=document.getElementById('ctSearch').value.toLowerCase().trim();
   let data=_allContacts;
   if(tagId)data=data.filter(c=>(c.tags||[]).some(t=>String(t.id)===tagId));
-  if(stage)data=data.filter(c=>(c.outreach_stage||'not_contacted')===stage);
+  if(stage)data=data.filter(c=>(c.outreach_stage||'')===stage);
+  if(owner)data=data.filter(c=>owner==='__unassigned__'?!c.owner:c.owner===owner);
   if(search)data=data.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.phone||'').includes(search));
   _ctFiltered=data;
   _ctPage=1;
   renderContactsTable();
+  if(_ctView==='pipeline')renderContactsPipeline();
+}
+
+function setContactsView(view){
+  _ctView=view;
+  document.getElementById('ctViewTableBtn').classList.toggle('active',view==='table');
+  document.getElementById('ctViewPipelineBtn').classList.toggle('active',view==='pipeline');
+  document.getElementById('contactsTableWrap').classList.toggle('hidden',view!=='table');
+  document.getElementById('ctPagination').classList.toggle('hidden',view!=='table');
+  document.getElementById('contactsPipelineWrap').classList.toggle('hidden',view!=='pipeline');
+  if(view==='pipeline')renderContactsPipeline();
+}
+
+function renderContactsPipeline(){
+  const wrap=document.getElementById('ctPipeline');
+  if(!_contactStages.length){wrap.innerHTML='<p style="color:var(--g400);font-size:13px">No stages defined yet.</p>';return;}
+  const data=_ctFiltered;
+  wrap.innerHTML=_contactStages.map(s=>{
+    const items=data.filter(c=>(c.outreach_stage||'')===s.name);
+    const cards=items.map(c=>{
+      const ph=JSON.stringify(c.phone);
+      return `<div class="ct-pipe-card" draggable="true" ondragstart='onPipeDragStart(event,${ph})' onclick='openContactDetail(${ph})'>
+        <div class="ct-pipe-card-name">${esc(c.name||c.phone)}</div>
+        <div class="ct-pipe-card-meta">${esc(c.phone)}${c.owner?' · 👤 '+esc(c.owner):''}</div>
+      </div>`;
+    }).join('')||'<div class="ct-pipe-empty">No contacts</div>';
+    return `<div class="ct-pipe-col" ondragover="onPipeDragOver(event)" ondragleave="onPipeDragLeave(event)" ondrop="onPipeDrop(event,${s.id})">
+      <div class="ct-pipe-col-hdr">
+        <span class="ct-pipe-dot" style="background:${s.color}"></span>
+        <span class="ct-pipe-title">${esc(s.name)}</span>
+        <span class="ct-pipe-count">${items.length}</span>
+      </div>
+      ${cards}
+    </div>`;
+  }).join('');
+}
+
+let _pipeDragPhone=null;
+function onPipeDragStart(e,phone){
+  _pipeDragPhone=phone;
+  e.dataTransfer.effectAllowed='move';
+  e.target.classList.add('dragging');
+}
+function onPipeDragOver(e){
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+function onPipeDragLeave(e){
+  e.currentTarget.classList.remove('drag-over');
+}
+async function onPipeDrop(e,stageId){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  document.querySelectorAll('.ct-pipe-card.dragging').forEach(el=>el.classList.remove('dragging'));
+  const phone=_pipeDragPhone;_pipeDragPhone=null;
+  const stage=_contactStages.find(s=>s.id===stageId);
+  if(!phone||!stage)return;
+  const c=_ctMap[phone]||_allContacts.find(x=>x.phone===phone);
+  if(c&&c.outreach_stage===stage.name)return;
+  await updateContactStage(phone,stage.name);
+  renderContactsPipeline();
+}
+
+// ── Stage management ─────────────────────────────────────────────────────────
+async function openStageManageModal(){
+  await loadContactStages();
+  renderStageMgmtList();
+  document.getElementById('newStageName').value='';
+  document.getElementById('newStageColor').value='#6366f1';
+  document.getElementById('stageMgmtErr').style.display='none';
+  document.getElementById('stageMgmtModal').classList.remove('hidden');
+}
+function closeStageManageModal(){
+  document.getElementById('stageMgmtModal').classList.add('hidden');
+}
+function renderStageMgmtList(){
+  const wrap=document.getElementById('stageMgmtList');
+  wrap.innerHTML=_contactStages.map(s=>`
+    <div class="stage-mgmt-row">
+      <input type="color" value="${s.color}" onchange="updateStageColor(${s.id},this.value)">
+      <input type="text" value="${esc(s.name)}" onblur="renameStageIfChanged(${s.id},this)">
+      <button class="btn-danger" style="padding:4px 10px;font-size:12px;flex-shrink:0" onclick="deleteStage(${s.id})">Delete</button>
+    </div>
+  `).join('');
+}
+async function createStage(){
+  const name=document.getElementById('newStageName').value.trim();
+  const color=document.getElementById('newStageColor').value;
+  const errEl=document.getElementById('stageMgmtErr');
+  errEl.style.display='none';
+  if(!name){errEl.textContent='Stage name is required';errEl.style.display='block';return;}
+  try{
+    const r=await fetch(`/admin/contacts/stages?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,color})
+    });
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.detail||'Failed to create stage');
+    document.getElementById('newStageName').value='';
+    await loadContactStages();
+    renderStageMgmtList();
+    filterContacts();
+  }catch(e){errEl.textContent=e.message;errEl.style.display='block';}
+}
+async function renameStageIfChanged(id,input){
+  const stage=_contactStages.find(s=>s.id===id);
+  const newName=input.value.trim();
+  if(!stage)return;
+  if(!newName||newName===stage.name){input.value=stage.name;return;}
+  try{
+    const r=await fetch(`/admin/contacts/stages/${id}?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newName})
+    });
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.detail||'Rename failed');
+    await loadContactStages();
+    await loadContacts();
+  }catch(e){alert(e.message);input.value=stage.name;}
+}
+async function updateStageColor(id,color){
+  try{
+    const r=await fetch(`/admin/contacts/stages/${id}?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({color})
+    });
+    if(!r.ok)throw new Error();
+    await loadContactStages();
+    filterContacts();
+  }catch(e){alert('Failed to update color');}
+}
+async function deleteStage(id){
+  if(!confirm('Delete this stage? Contacts must be moved off it first.'))return;
+  try{
+    const r=await fetch(`/admin/contacts/stages/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data.detail||'Failed to delete stage');
+    await loadContactStages();
+    renderStageMgmtList();
+    filterContacts();
+  }catch(e){alert(e.message);}
 }
 
 function sortContactsBy(field){
@@ -4727,7 +4954,7 @@ function renderContactsTable(){
   const start=(_ctPage-1)*CT_PAGE_SIZE;
   const pageData=data.slice(start,start+CT_PAGE_SIZE);
   const pageAllChecked=pageData.length>0&&pageData.every(c=>_ctSelected.has(c.phone));
-  const cols=[['name','Name'],['phone','Phone'],['product_interest','Product'],['outreach_stage','Stage'],['tags','Tags'],['source','Source'],['created_at','Added']];
+  const cols=[['name','Name'],['phone','Phone'],['product_interest','Product'],['outreach_stage','Stage'],['owner','Owner'],['tags','Tags'],['source','Source'],['last_outbound_at','Outreach'],['created_at','Created'],['updated_at','Modified']];
   const thead=`<tr>
     <th style="width:28px"><input type="checkbox" ${pageAllChecked?'checked':''} onchange="toggleSelectAllContacts(this.checked)"></th>
     ${cols.map(([f,label])=>`<th class="sortable ${_ctSort.field===f?'sort-active':''}" onclick="sortContactsBy('${f}')">${label} <span class="sort-arrow">${_ctSort.field===f?(_ctSort.dir==='asc'?'▲':'▼'):'⇅'}</span></th>`).join('')}
@@ -4736,11 +4963,15 @@ function renderContactsTable(){
   const rows=pageData.map(c=>{
     const tags=(c.tags||[]).map(t=>`<span style="display:inline-block;background:${t.color||'#6366f1'}22;color:${t.color||'#6366f1'};border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${esc(t.name)}</span>`).join(' ');
     const src=c.source==='import'?'<span style="font-size:11px;color:var(--g400)">📥 import</span>':'<span style="font-size:11px;color:var(--g400)">✏️ manual</span>';
-    const added=c.created_at?c.created_at.slice(0,10):'—';
     const ph=JSON.stringify(c.phone);
-    const stage=c.outreach_stage||'not_contacted';
-    const stageSel=`<select class="stage-sel ${stage}" onchange='updateContactStage(${ph},this.value)' onclick="event.stopPropagation()">
-      ${Object.entries(STAGE_LABELS).map(([v,l])=>`<option value="${v}" ${v===stage?'selected':''}>${l}</option>`).join('')}
+    const stage=c.outreach_stage||'';
+    const stageObj=stageByName(stage);
+    const stageSel=`<select class="stage-sel" style="background:${stageObj.color}22;color:${stageObj.color}" onchange='updateContactStage(${ph},this.value)' onclick="event.stopPropagation()">
+      ${_contactStages.map(s=>`<option value="${esc(s.name)}" ${s.name===stage?'selected':''}>${esc(s.name)}</option>`).join('')}
+    </select>`;
+    const ownerSel=`<select class="stage-sel" style="background:var(--g100);color:var(--g600)" onchange='updateContactOwner(${ph},this.value)' onclick="event.stopPropagation()">
+      <option value="">— Unassigned —</option>
+      ${allAgents.map(a=>`<option value="${esc(a.name)}" ${a.name===c.owner?'selected':''}>${esc(a.name)}</option>`).join('')}
     </select>`;
     return `<tr>
       <td><input type="checkbox" ${_ctSelected.has(c.phone)?'checked':''} onchange='toggleContactSelect(${ph},this.checked)'></td>
@@ -4748,9 +4979,12 @@ function renderContactsTable(){
       <td style="font-family:monospace;font-size:12px">${esc(c.phone)}</td>
       <td>${esc(c.product_interest||'—')}</td>
       <td>${stageSel}</td>
+      <td>${ownerSel}</td>
       <td>${tags||'<span style="color:var(--g300)">—</span>'}</td>
       <td>${src}</td>
-      <td>${added}</td>
+      <td>${ctOutreachBadge(c)}</td>
+      <td>${ctMetaCell(c.created_at,c.created_by)}</td>
+      <td>${ctMetaCell(c.updated_at,c.updated_by)}</td>
       <td style="white-space:nowrap">
         <button onclick='openEditContactModal(_ctMap[${ph}])' style="font-size:12px;padding:3px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer;margin-right:4px">Edit</button>
         <button onclick='deleteContact(${ph})' style="font-size:12px;padding:3px 10px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;border-radius:6px;cursor:pointer">Delete</button>
@@ -4808,6 +5042,18 @@ async function updateContactStage(phone,stage){
   }catch(e){alert('Failed to update stage');loadContacts();}
 }
 
+async function updateContactOwner(phone,owner){
+  try{
+    const r=await fetch(`/admin/contacts/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({owner:owner||null})
+    });
+    if(!r.ok)throw new Error();
+    const c=_ctMap[phone];if(c)c.owner=owner||null;
+    const src=_allContacts.find(x=>x.phone===phone);if(src)src.owner=owner||null;
+    showToast?.('Owner updated');
+  }catch(e){alert('Failed to update owner');loadContacts();}
+}
+
 async function bulkTagContacts(){
   const tagId=document.getElementById('ctBulkTagSel').value;
   if(!tagId){alert('Pick a tag first');return;}
@@ -4835,10 +5081,13 @@ async function bulkDeleteContacts(){
 function exportContactsCsv(selectedOnly=false){
   const data=selectedOnly?_ctFiltered.filter(c=>_ctSelected.has(c.phone)):_ctFiltered;
   if(!data.length){alert('No contacts to export');return;}
-  const headers=['Name','Phone','Product Interest','Stage','Tags','Source','Added'];
+  const headers=['Name','Phone','Product Interest','Stage','Owner','Tags','Source','Outreach','Created At','Created By','Modified At','Modified By'];
   const rows=data.map(c=>[
-    c.name||'',c.phone||'',c.product_interest||'',STAGE_LABELS[c.outreach_stage||'not_contacted'],
-    (c.tags||[]).map(t=>t.name).join('; '),c.source||'',c.created_at?c.created_at.slice(0,10):''
+    c.name||'',c.phone||'',c.product_interest||'',c.outreach_stage||'',c.owner||'',
+    (c.tags||[]).map(t=>t.name).join('; '),c.source||'',
+    c.responded_at?'Responded':(c.last_outbound_at?'Sent, no reply':'Not messaged'),
+    c.created_at?ctFmtDateTime(c.created_at):'',c.created_by||'',
+    c.updated_at?ctFmtDateTime(c.updated_at):'',c.updated_by||''
   ]);
   const esc2=v=>`"${String(v).replace(/"/g,'""')}"`;
   const csv=[headers,...rows].map(r=>r.map(esc2).join(',')).join('\n');
@@ -4855,7 +5104,15 @@ async function openContactDetail(phone){
   document.getElementById('ctDetailName').textContent=c.name||c.phone;
   const body=document.getElementById('ctDetailBody');
   const tags=(c.tags||[]).map(t=>`<span style="display:inline-block;background:${t.color||'#6366f1'}22;color:${t.color||'#6366f1'};border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600">${esc(t.name)}</span>`).join(' ')||'<span style="color:var(--g300);font-size:12px">No tags</span>';
-  const fields=[['Phone',c.phone],['Product interest',c.product_interest||'—'],['Amount',c.amount||'—'],['Payment plan',c.payment_plan||'—'],['Address',c.address||'—'],['Source',c.source==='import'?'Imported':'Manual'],['Added',c.created_at?c.created_at.slice(0,10):'—']];
+  const fields=[
+    ['Phone',c.phone],['Product interest',c.product_interest||'—'],['Amount',c.amount||'—'],
+    ['Payment plan',c.payment_plan||'—'],['Address',c.address||'—'],
+    ['Stage',c.outreach_stage||'—'],['Owner',c.owner||'Unassigned'],
+    ['Source',c.source==='import'?'Imported':'Manual'],
+    ['Outreach',c.responded_at?`Responded ${timeAgo(c.responded_at)}`:(c.last_outbound_at?`Sent ${timeAgo(c.last_outbound_at)}, no reply yet`:'Not messaged yet')],
+    ['Created',`${ctFmtDateTime(c.created_at)}${c.created_by?' by '+c.created_by:''}`],
+    ['Modified',`${ctFmtDateTime(c.updated_at)}${c.updated_by?' by '+c.updated_by:''}`],
+  ];
   body.innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:16px">
       <button class="btn-primary" style="flex:1;padding:8px;font-size:13px" onclick='closeContactDetail();openEditContactModal(_ctMap[${JSON.stringify(phone)}])'>Edit</button>
