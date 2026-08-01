@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
@@ -15,6 +16,14 @@ from chatbot.utils.phone import extract_valid_phone, normalize_phone
 from chatbot.workers.bot_response import delayed_bot_response
 
 router = APIRouter(tags=["webhook"])
+
+# A bare "okay"/"thanks" after a completed conversation is just an acknowledgment,
+# not a new inquiry — don't wipe the session and force the script back to Step 1 for it.
+FILLER_ACK_RE = re.compile(
+    r'^\s*(ok(ay)?|alright(y)?|cool|nice|great|good|fine|sure|noted|got ?it|'
+    r'thanks?( you)?|thank ?u|tanks?|👍+|🙏+|❤️+|😊+)\s*[!.]*\s*$',
+    re.IGNORECASE,
+)
 
 
 def _update_broadcast_delivery(wamid: str, status: str):
@@ -162,7 +171,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         history_text = raw_history if raw_history else ""
                         is_complete = "[VALID phone captured" in history_text and "[DELIVERY confirmed" in history_text
 
-                        if is_complete:
+                        if is_complete and FILLER_ACK_RE.match(text):
+                            log.info(f"Session {session_id} complete but '{text}' looks like a filler "
+                                     f"acknowledgment — not restarting the script")
+                        elif is_complete:
                             await redis_client.client.delete(history_key)
                             await redis_client.client.delete(f"koolbuy:phone:{session_id}")
                             await redis_client.client.delete(f"koolbuy:delivery:{session_id}")

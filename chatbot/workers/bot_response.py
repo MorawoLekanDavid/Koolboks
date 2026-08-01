@@ -29,17 +29,29 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         log.error(f"[delay] chat_handler failed for {session_id}: {e}")
         return
 
-    reply_text = chat_resp.response
-    image_url = None
-    if chat_resp.products:
-        product = chat_resp.products[0]
-        reply_text += f"\n\n🛒 *{product.name}*\n💰 N{float(product.price):,.0f}"
-        image_url = product.original_image_url  # raw S3/CDN URL — WhatsApp fetches directly
-        if image_url:
-            log.info(f"[bot] sending product image to {wa_from}: {image_url}")
+    def _blurb(p):
+        return f"🛒 *{p.name}*\n💰 N{float(p.price):,.0f}"
 
-    save_message_db(session_id, wa_from, "KoolBot", "outbound", reply_text)
-    await send_whatsapp_message(wa_from, reply_text, image_url)
+    # Keep the admin transcript readable as one combined message, even though
+    # multiple products get sent as separate WhatsApp messages below.
+    transcript_text = chat_resp.response + "".join(f"\n\n{_blurb(p)}" for p in chat_resp.products)
+    save_message_db(session_id, wa_from, "KoolBot", "outbound", transcript_text)
+
+    if chat_resp.products:
+        first = chat_resp.products[0]
+        await send_whatsapp_message(
+            wa_from, chat_resp.response,
+            first.original_image_url,  # raw S3/CDN URL — WhatsApp fetches directly
+            image_caption=_blurb(first),
+        )
+        # Every recommended product gets its own image + caption, not just the first —
+        # a customer comparing several options should see all of them, not just one.
+        for product in chat_resp.products[1:]:
+            await send_whatsapp_message(
+                wa_from, "", product.original_image_url, image_caption=_blurb(product)
+            )
+    else:
+        await send_whatsapp_message(wa_from, chat_resp.response)
 
     # Run background tasks queued by chat_handler (save_lead, update_lead_address, etc.)
     for task in bg.tasks:

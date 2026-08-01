@@ -25,7 +25,9 @@ async def mark_whatsapp_read(message_id: str):
         log.warning(f"Failed to mark message as read: {e}")
 
 
-async def send_whatsapp_message(to: str, body: str, image_url: str = None) -> Optional[str]:
+async def send_whatsapp_message(
+    to: str, body: str, image_url: str = None, image_caption: str = None
+) -> Optional[str]:
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         log.warning("WhatsApp credentials not configured")
         return None
@@ -35,19 +37,25 @@ async def send_whatsapp_message(to: str, body: str, image_url: str = None) -> Op
     try:
         async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
             if image_url:
-                img_payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": {"link": image_url}}
+                img_payload = {"messaging_product": "whatsapp", "to": to, "type": "image",
+                                "image": {"link": image_url}}
+                if image_caption:
+                    img_payload["image"]["caption"] = image_caption
                 img_resp = await client.post(url, json=img_payload, headers=headers)
                 if img_resp.is_success:
                     log.info(f"Product image sent to {to}")
                 else:
                     log.warning(f"Product image send failed ({img_resp.status_code}): {img_resp.text}")
-            text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}}
-            resp = await client.post(url, json=text_payload, headers=headers)
-        log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
-        try:
-            wamid = resp.json()["messages"][0]["id"]
-        except Exception:
-            pass
+            resp = None
+            if body:
+                text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}}
+                resp = await client.post(url, json=text_payload, headers=headers)
+        if resp is not None:
+            log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
+            try:
+                wamid = resp.json()["messages"][0]["id"]
+            except Exception:
+                pass
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
     return wamid
