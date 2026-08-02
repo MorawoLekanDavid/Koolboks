@@ -1174,16 +1174,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
       <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
-        <div>
-          <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Most Common Issues</p>
-          <div id="cqIssueBars"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-        </div>
-        <div>
-          <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Score Trend</p>
-          <div id="cqTrendBars"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-        </div>
-      </div>
+      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Score Trend</p>
+      <div id="cqTrendBars" style="overflow-x:auto;padding-bottom:2px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Most Common Issues</p>
+      <div id="cqIssueBars" style="max-width:480px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
 
       <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
 
@@ -2059,6 +2056,7 @@ const FILTER_DEF={
   time: {label:'Last Activity',    icon:'🕐', ops:['Within'],            valType:'enum', vals:[['today','Today'],['7d','Last 7 days'],['30d','Last 30 days']]},
   read: {label:'Read Status',      icon:'👁', ops:['Is'],                valType:'enum', vals:[['unread','Unread only'],['read','Read only']]},
   lead: {label:'Lead Status',      icon:'📋', ops:[],                    valType:'enum', vals:[['has','Has lead'],['no','No lead']]},
+  risk: {label:'AI Response Quality', icon:'⚠', ops:[],                 valType:'enum', vals:[['at_risk','⚠ Flagged at risk only']]},
 };
 // _filterSels: {tag:{op:'Include',vals:['1','3']}, agent:{op:'Is',vals:['John']}, ...}
 let _filterSels={};
@@ -2219,6 +2217,7 @@ function _passesFilters(c){
       }
       case 'read':{const u=c.unread||0;return vals.some(v=>v==='unread'?u>0:u===0);}
       case 'lead':return vals.some(v=>v==='has'?!!c.has_lead:!c.has_lead);
+      case 'risk':return !!(c.score&&c.score.likely_lost_customer);
       default:return true;
     }
   });
@@ -5447,10 +5446,12 @@ async function loadConversationQuality(){
     if(!d.trend||!d.trend.length){
       trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
     } else {
-      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px">${d.trend.map(t=>{
+      // Fixed-width bars (not flex:1) so a long date range scrolls horizontally
+      // within its own container instead of squeezing every bar unreadably thin.
+      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
         const h=Math.max(4,Math.round((t.avg_score/10)*100));
         const c=t.avg_score>=7?'var(--green)':t.avg_score>=5?'var(--orange)':'#ef4444';
-        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.avg_score}/10 (${t.count} scored)">
+        return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.avg_score}/10 (${t.count} scored)">
           <div style="width:100%;height:${h}px;background:${c};border-radius:3px 3px 0 0"></div>
           <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
         </div>`;
