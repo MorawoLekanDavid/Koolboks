@@ -125,7 +125,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .c-badges{display:flex;gap:4px;align-items:center}
 .badge-bot{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--green-s);color:#15803d}
 .badge-agent{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--orange-s);color:var(--orange-d)}
-.badge-risk{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--red-s);color:#b91c1c;cursor:help}
+.badge-score{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;cursor:help}
+.badge-score.sc-good{background:var(--green-s);color:#15803d}
+.badge-score.sc-ok{background:#fef3c7;color:#92400e}
+.badge-score.sc-bad{background:var(--red-s);color:#b91c1c}
 .unread-pill{background:var(--green);color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
 .no-conv{padding:32px 14px;text-align:center;color:var(--g400);font-size:13px}
 .load-more-row{padding:10px 14px;text-align:center}.load-more-row button{background:none;border:1px solid var(--g300);border-radius:8px;padding:6px 18px;font-size:12px;cursor:pointer;color:var(--g500)}.load-more-row button:hover{background:var(--g100)}
@@ -213,8 +216,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .img-attach-badge{display:none;align-items:center;gap:6px;padding:5px 14px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px;color:#92400e;font-weight:600}
 .img-attach-badge button{background:none;border:none;cursor:pointer;font-size:13px;color:#92400e;padding:0 2px;line-height:1}
 
-/* Detail panel */
-.detail-panel{width:300px;background:#fff;border-left:1px solid var(--g200);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+/* Detail panel — hidden until the "Details" button is clicked, at any screen width */
+.detail-panel{width:300px;background:#fff;border-left:1px solid var(--g200);display:none;flex-direction:column;flex-shrink:0;overflow:hidden}
+.detail-panel.force-show{display:flex}
 .empty-detail{flex:1;display:flex;align-items:center;justify-content:center;color:var(--g400);font-size:13px;padding:20px;text-align:center}
 .dtabs{display:flex;border-bottom:1px solid var(--g200);flex-shrink:0}
 .dtab{flex:1;padding:12px 8px;border:none;background:none;font-size:13px;font-weight:600;color:var(--g400);cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
@@ -614,11 +618,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .btn-danger{padding:5px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
 .btn-danger:hover{background:#fecaca}
 
-/* Responsive */
+/* Responsive — below 1200px, the detail panel slides over the chat as an
+   overlay when shown instead of taking a permanent column */
 @media(max-width:1200px){
-  .detail-panel{display:none}
   .detail-panel.force-show{
-    display:flex!important;
     position:fixed;top:0;right:0;bottom:0;
     width:300px;max-width:90vw;
     z-index:30;
@@ -637,7 +640,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   .sb-user-info,.sb-logout{display:none}
   .sb-user{justify-content:center;padding:8px 4px}
   .sb-notif{justify-content:center}
-  .detail-panel{display:none}
   .conv-panel{width:100%;border-right:none}
   .chat-panel{display:none;position:fixed;inset:0 0 0 56px;z-index:20;background:var(--g50)}
   .chat-panel.mobile-open{display:flex}
@@ -1158,6 +1160,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <div>
           <h3 style="margin:0 0 2px">🤖 AI Response Quality</h3>
           <p style="font-size:12px;color:var(--g400);margin:0">How well the bot/agent handled customers — separate from lead qualification. Scored automatically once a conversation goes idle.</p>
+          <p style="font-size:11px;color:var(--g300);margin:4px 0 0" title="An LLM reads each conversation and rates it 1-10 against these checks: did it repeat an already-answered question, ignore something the customer asked, accept a vague reply as an answer, recommend something irrelevant, reply unclearly, respond too slowly, or cause visible frustration? Any conversation flagged as likely losing the customer is automatically capped at 4/10.">ⓘ How this is scored — hover for details</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <input type="date" id="cqFromDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
@@ -2400,7 +2403,15 @@ function renderConversations(){
       <div class="c-right">
         <div class="c-time">${timeAgo(c.last_message)}</div>
         <div class="c-badges">
-          ${c.score&&c.score.likely_lost_customer?`<span class="badge-risk" title="AI flagged this conversation as at risk — ${esc((c.score.issues||[]).join(', ')||'poor response quality')}">⚠ At risk</span>`:''}
+          ${c.score?(()=>{
+            const qs=c.score.quality_score;
+            const atRisk=c.score.likely_lost_customer;
+            const tier=qs>=7?'sc-good':qs>=5?'sc-ok':'sc-bad';
+            const issueTxt=esc((c.score.issues||[]).join(', ')||'AI response quality score');
+            return atRisk
+              ?`<span class="badge-score sc-bad" title="AI flagged this conversation as at risk — ${issueTxt}">⚠ ${qs}/10</span>`
+              :`<span class="badge-score ${tier}" title="AI response quality — ${issueTxt}">${qs}/10</span>`;
+          })():''}
           <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}">${c.mode==='bot'?'🤖 Bot':`👤 ${esc(c.agent||'Agent')}`}</span>
           ${unread>0?`<span class="unread-pill">${unread}</span>`:''}
         </div>

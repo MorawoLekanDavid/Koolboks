@@ -56,7 +56,9 @@ async def score_conversation(messages: List[Message]) -> Optional[dict]:
         '{"quality_score": 0, "likely_lost_customer": false, "issues": [], "reasoning": ""}\n\n'
         "Rules:\n"
         "- quality_score: integer 1-10. 10 = handled perfectly, warm, relevant, and helpful. "
-        "1 = actively drove the customer away.\n"
+        "1 = actively drove the customer away. If likely_lost_customer is true, quality_score "
+        "MUST be 4 or lower — losing the customer is the outcome that matters most, regardless "
+        "of how well earlier turns went.\n"
         "- likely_lost_customer: true only if the customer seems to have disengaged, gone quiet "
         "right after a poor reply, or expressed frustration BECAUSE of how they were handled — "
         "not simply because the excerpt ends before they replied again.\n"
@@ -96,10 +98,17 @@ async def score_conversation(messages: List[Message]) -> Optional[dict]:
         return None
 
     issues = [t for t in (data.get("issues") or []) if t in _LLM_SELECTABLE_TAGS]
+    likely_lost_customer = bool(data.get("likely_lost_customer", False))
+
+    # Hard constraint, not just a prompt request: losing the customer IS the
+    # quality failure that matters most, regardless of how smoothly earlier
+    # turns went. Never let a "likely lost" conversation carry a decent score.
+    if likely_lost_customer and score > 4:
+        score = 4
 
     return {
         "quality_score": score,
-        "likely_lost_customer": bool(data.get("likely_lost_customer", False)),
+        "likely_lost_customer": likely_lost_customer,
         "issues": issues,
         "reasoning": str(data.get("reasoning", ""))[:500],
         "responder_type": _responder_type(messages),

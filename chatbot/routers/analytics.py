@@ -268,12 +268,16 @@ async def conversation_quality(
     def _fetch():
         db = get_db()
         try:
+            # Filter by scored_through (when the underlying conversation actually
+            # happened), not created_at (when the scoring job ran) — otherwise a
+            # backfill run today makes every date filter show "today" regardless
+            # of how old the real conversation is.
             q = db.query(ConversationScore)
             if date_from:
-                q = q.filter(ConversationScore.created_at >= datetime.fromisoformat(date_from))
+                q = q.filter(ConversationScore.scored_through >= datetime.fromisoformat(date_from))
             if date_to:
-                q = q.filter(ConversationScore.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
-            rows = q.order_by(ConversationScore.created_at.desc()).all()
+                q = q.filter(ConversationScore.scored_through <= datetime.fromisoformat(date_to + "T23:59:59"))
+            rows = q.order_by(ConversationScore.scored_through.desc()).all()
 
             if not rows:
                 return {"avg_score": None, "total_scored": 0, "lost_count": 0,
@@ -291,7 +295,7 @@ async def conversation_quality(
 
             trend_map: dict = {}
             for r in rows:
-                day = r.created_at.date().isoformat()
+                day = r.scored_through.date().isoformat()
                 trend_map.setdefault(day, []).append(r.quality_score)
             trend = [
                 {"date": d, "avg_score": round(sum(v) / len(v), 2), "count": len(v)}
