@@ -712,6 +712,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="htab sb-nav-item hidden" id="htabAnalytics"  onclick="switchTab('analytics')"><span class="sb-icon">📊</span><span class="sb-label">Analytics</span></button>
       <button class="htab sb-nav-item hidden" id="htabMessaging"  onclick="switchTab(_lastMessagingTab)"><span class="sb-icon">📢</span><span class="sb-label">Messaging</span></button>
       <div class="sb-nav-divider"></div>
+      <button class="htab sb-nav-item hidden" id="htabUsage"      onclick="switchTab('usage')"><span class="sb-icon">💰</span><span class="sb-label">Usage &amp; Cost</span></button>
       <button class="htab sb-nav-item hidden" id="htabSettings"   onclick="switchTab(_lastSettingsTab)"><span class="sb-icon">⚙️</span><span class="sb-label">Settings</span></button>
     </nav>
     <!-- Zero-size placeholders JS references by id -->
@@ -1556,6 +1557,50 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     </div>
   </div>
 
+  <!-- Usage & Cost tab -->
+  <div id="usageTab" class="tab-full hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin:0 0 2px">💰 Groq Usage &amp; Cost</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">Token usage and estimated spend across every AI call — chat replies, lead extraction, conversation scoring, follow-ups, auto-tagging, and test chat.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="date" id="usFromDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+          <span style="font-size:12px;color:var(--g400)">to</span>
+          <input type="date" id="usToDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+          <button onclick="loadUsage()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
+        </div>
+      </div>
+
+      <div class="stat-cards-row" id="usGroqStats"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Daily Cost Trend</p>
+      <div id="usGroqTrend" style="overflow-x:auto;padding-bottom:2px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Cost by Purpose</p>
+      <div id="usGroqByPurpose" style="max-width:520px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <div style="margin-bottom:20px">
+        <h3 style="margin:0 0 2px">📱 WhatsApp Message Volume</h3>
+        <p style="font-size:12px;color:var(--g400);margin:0">Message counts only — the WhatsApp Cloud API doesn't return per-message cost, and per-conversation pricing depends on category and country rates this account hasn't supplied. Add real rates later to turn this into a cost estimate too.</p>
+      </div>
+
+      <div class="stat-cards-row" id="usWaStats"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Daily Volume</p>
+      <div id="usWaTrend" style="overflow-x:auto;padding-bottom:2px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+    </div>
+  </div>
+
   <!-- Products tab -->
   <div id="productsTab" class="tab-full hidden">
     <div class="products-toolbar">
@@ -2269,8 +2314,8 @@ async function headerAssignOwner(ownerName){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings'};
+const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage'};
 const MESSAGING_TABS=['broadcast','canned'];
 const SETTINGS_TABS=['team','rolePerm','templates','aiSettings'];
 let _lastMessagingTab='broadcast';
@@ -2295,6 +2340,7 @@ function switchTab(t){
   if(t==='rolePerm')loadRolePermissions();
   if(t==='products')loadProducts();
   if(t==='aiSettings')loadAISettings();
+  if(t==='usage')loadUsage();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
@@ -3541,7 +3587,7 @@ let _permMatrix={};
 
 const PERM_TAB_LABELS={
   leads:'Leads',contacts:'Contacts',products:'Products',canned:'Canned Replies',
-  analytics:'Analytics',team:'Team',templates:'Templates',aiSettings:'AI Settings'
+  analytics:'Analytics',team:'Team',templates:'Templates',aiSettings:'AI Settings',usage:'Usage & Cost'
 };
 const PERM_ROLE_LABELS={
   super_admin:'Super Admin',admin:'Admin',
@@ -3555,6 +3601,7 @@ function _applyPerms(perms){
     conv:['htabConv'],
     leads:['htabLeads'],contacts:['htabContacts'],products:['htabProducts'],
     analytics:['htabAnalytics','inavAnalytics'],
+    usage:['htabUsage'],
   };
   Object.entries(directMap).forEach(([tab,ids])=>{
     const show=perms[tab]!==false;
@@ -3582,11 +3629,11 @@ async function applyNavPermissions(role){
   }catch(e){
     // Fallback defaults if API unreachable
     if(role==='super_admin'||role==='admin'){
-      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:true,team:true,templates:true,aiSettings:true});
+      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:true,team:true,templates:true,aiSettings:true,usage:true});
     } else if(role==='telesales_agent'||role==='sales_agent'){
-      _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:false,team:false,templates:true,aiSettings:false});
+      _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:false,team:false,templates:true,aiSettings:false,usage:false});
     } else {
-      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:false,team:false,templates:false,aiSettings:false});
+      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:false,team:false,templates:false,aiSettings:false,usage:false});
     }
   }
 }
@@ -5481,6 +5528,128 @@ async function loadConversationQuality(){
   }catch(e){console.error(e);}
 }
 // ── End AI Response Quality ────────────────────────────────────────────────
+
+// ── Usage & Cost ───────────────────────────────────────────────────────────
+const US_PURPOSE_LABELS={
+  chat_reply:'Chat Replies',
+  lead_extraction:'Lead Extraction',
+  conversation_scoring:'Conversation Scoring',
+  follow_up:'Follow-up Messages',
+  auto_tag:'Auto-Tagging',
+  test_chat:'Test Chat (AI Settings)',
+};
+
+async function loadUsage(){
+  await Promise.all([loadGroqUsage(), loadWhatsAppUsage()]);
+}
+
+async function loadGroqUsage(){
+  const from=document.getElementById('usFromDate')?.value||'';
+  const to=document.getElementById('usToDate')?.value||'';
+  const statsEl=document.getElementById('usGroqStats');
+  const trendEl=document.getElementById('usGroqTrend');
+  const byPurposeEl=document.getElementById('usGroqByPurpose');
+  if(!statsEl)return;
+  try{
+    const qs=new URLSearchParams({key:adminKey});
+    if(from)qs.set('date_from',from);
+    if(to)qs.set('date_to',to);
+    const r=await fetch(`/admin/usage/groq?${qs}`);
+    if(!r.ok){
+      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';
+      trendEl.innerHTML='';byPurposeEl.innerHTML='';
+      return;
+    }
+    const d=await r.json();
+    if(!d.total_requests){
+      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">No AI usage recorded yet.</p>';
+      trendEl.innerHTML='';byPurposeEl.innerHTML='';
+      return;
+    }
+
+    statsEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n" style="color:var(--orange)">$${d.total_cost_usd.toFixed(2)}</div><div class="stat-l">Estimated Cost</div></div>
+      <div class="stat-c"><div class="stat-n">${d.total_tokens.toLocaleString()}</div><div class="stat-l">Total Tokens</div></div>
+      <div class="stat-c"><div class="stat-n">${d.total_requests.toLocaleString()}</div><div class="stat-l">AI Requests</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--g500)">${d.total_prompt_tokens.toLocaleString()}</div><div class="stat-l">Prompt Tokens</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--g500)">${d.total_completion_tokens.toLocaleString()}</div><div class="stat-l">Completion Tokens</div></div>
+    `;
+
+    if(!d.trend||!d.trend.length){
+      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
+    } else {
+      const maxCost=Math.max(...d.trend.map(t=>t.cost_usd),0.0001);
+      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
+        const h=Math.max(4,Math.round((t.cost_usd/maxCost)*100));
+        return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: $${t.cost_usd.toFixed(4)} · ${t.tokens.toLocaleString()} tokens · ${t.requests} requests">
+          <div style="width:100%;height:${h}px;background:var(--orange);border-radius:3px 3px 0 0"></div>
+          <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    if(!d.by_purpose||!d.by_purpose.length){
+      byPurposeEl.innerHTML='<p style="color:var(--g400);font-size:13px">No data</p>';
+    } else {
+      const maxCost2=Math.max(...d.by_purpose.map(p=>p.cost_usd),0.0001);
+      byPurposeEl.innerHTML=d.by_purpose.map(p=>{
+        const pct=Math.round((p.cost_usd/maxCost2)*100);
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span style="color:var(--g600)">${esc(US_PURPOSE_LABELS[p.purpose]||p.purpose)}</span>
+            <span style="font-weight:700;color:var(--g700)">$${p.cost_usd.toFixed(3)} <span style="font-weight:400;color:var(--g400)">(${p.requests} req)</span></span>
+          </div>
+          <div style="height:8px;background:var(--g100);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:var(--orange);border-radius:4px"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }catch(e){console.error(e);}
+}
+
+async function loadWhatsAppUsage(){
+  const from=document.getElementById('usFromDate')?.value||'';
+  const to=document.getElementById('usToDate')?.value||'';
+  const statsEl=document.getElementById('usWaStats');
+  const trendEl=document.getElementById('usWaTrend');
+  if(!statsEl)return;
+  try{
+    const qs=new URLSearchParams({key:adminKey});
+    if(from)qs.set('date_from',from);
+    if(to)qs.set('date_to',to);
+    const r=await fetch(`/admin/usage/whatsapp?${qs}`);
+    if(!r.ok){statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';trendEl.innerHTML='';return;}
+    const d=await r.json();
+    if(!d.total_sent&&!d.total_received){
+      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">No messages recorded yet.</p>';
+      trendEl.innerHTML='';
+      return;
+    }
+
+    statsEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n" style="color:#22c55e">${d.total_sent.toLocaleString()}</div><div class="stat-l">Messages Sent</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:#3b82f6">${d.total_received.toLocaleString()}</div><div class="stat-l">Messages Received</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--orange)">${d.sent_by_bot.toLocaleString()}</div><div class="stat-l">Sent by Bot</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--g500)">${d.sent_by_agent.toLocaleString()}</div><div class="stat-l">Sent by Agent</div></div>
+    `;
+
+    if(!d.trend||!d.trend.length){
+      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
+    } else {
+      const maxTotal=Math.max(...d.trend.map(t=>t.sent+t.received),1);
+      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
+        const total=t.sent+t.received;
+        const h=Math.max(4,Math.round((total/maxTotal)*100));
+        return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.sent} sent, ${t.received} received">
+          <div style="width:100%;height:${h}px;background:#22c55e;border-radius:3px 3px 0 0"></div>
+          <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
+        </div>`;
+      }).join('')}</div>`;
+    }
+  }catch(e){console.error(e);}
+}
+// ── End Usage & Cost ──────────────────────────────────────────────────────
 
 function closeCreateTmplModal(){
   document.getElementById('createTmplModal').classList.add('hidden');

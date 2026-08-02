@@ -11,7 +11,7 @@ from chatbot.models import RolePermission
 router = APIRouter(prefix="/admin/role-permissions", tags=["permissions"])
 
 # Tabs that can be toggled per role (conv is always visible — not in this list)
-ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings"]
+ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings", "usage"]
 
 # Roles whose permissions are configurable via the Team tab UI
 CONFIGURABLE_ROLES = [
@@ -23,27 +23,27 @@ CONFIGURABLE_ROLES = [
 DEFAULTS: Dict[str, Dict[str, bool]] = {
     "super_admin": {
         "leads": True, "contacts": True, "products": True, "canned": True,
-        "analytics": True, "team": True, "templates": True, "aiSettings": True,
+        "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True,
     },
     "admin": {
         "leads": True, "contacts": True, "products": True, "canned": True,
-        "analytics": True, "team": True, "templates": True, "aiSettings": True,
+        "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True,
     },
     "agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
-        "analytics": False, "team": False, "templates": False, "aiSettings": False,
+        "analytics": False, "team": False, "templates": False, "aiSettings": False, "usage": False,
     },
     "customer_success_agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
-        "analytics": False, "team": False, "templates": False, "aiSettings": False,
+        "analytics": False, "team": False, "templates": False, "aiSettings": False, "usage": False,
     },
     "telesales_agent": {
         "leads": False, "contacts": False, "products": False, "canned": False,
-        "analytics": False, "team": False, "templates": True, "aiSettings": False,
+        "analytics": False, "team": False, "templates": True, "aiSettings": False, "usage": False,
     },
     "sales_agent": {
         "leads": False, "contacts": False, "products": False, "canned": False,
-        "analytics": False, "team": False, "templates": True, "aiSettings": False,
+        "analytics": False, "team": False, "templates": True, "aiSettings": False, "usage": False,
     },
 }
 

@@ -20,6 +20,7 @@ from chatbot.routers import (
     products,
     tags,
     templates,
+    usage,
     webhook,
 )
 from chatbot.workers.conversation_scorer import conversation_scoring_worker
@@ -67,3 +68,4 @@ app.include_router(analytics.router)
 app.include_router(followup.router)
 app.include_router(tags.router)
 app.include_router(ai_settings.router)
+app.include_router(usage.router)

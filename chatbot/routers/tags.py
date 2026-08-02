@@ -13,6 +13,7 @@ from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
 from chatbot.models import ConversationTag, Message, Tag
 from chatbot.services.groq_service import groq_client
+from chatbot.services.usage_tracking import log_groq_usage
 
 router = APIRouter(prefix="/admin", tags=["tags"])
 
@@ -217,6 +218,7 @@ async def auto_tag_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
             max_tokens=80,
             temperature=0.1,
         )
+        log_groq_usage(completion, "auto_tag", GROQ_MODEL)
         raw = completion.choices[0].message.content.strip()
         match = re.search(r"\[.*?\]", raw, re.DOTALL)
         suggested: List[str] = json.loads(match.group()) if match else []

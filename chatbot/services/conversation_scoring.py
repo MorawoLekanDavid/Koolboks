@@ -4,6 +4,7 @@ from typing import List, Optional
 from chatbot.config import GROQ_MODEL, log
 from chatbot.models import Message
 from chatbot.services.groq_service import groq_client
+from chatbot.services.usage_tracking import log_groq_usage
 
 # Fixed vocabulary so issue tags are consistent and filterable in analytics.
 # "no_response_at_all" is assigned deterministically by the worker, never by the LLM.
@@ -80,6 +81,7 @@ async def score_conversation(messages: List[Message]) -> Optional[dict]:
             max_tokens=250,
             temperature=0,
         )
+        log_groq_usage(completion, "conversation_scoring", GROQ_MODEL)
         raw = (completion.choices[0].message.content or "").strip()
         raw = raw.strip("`").strip()
         if raw.lower().startswith("json"):

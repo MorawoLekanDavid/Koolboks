@@ -9,6 +9,7 @@ from chatbot.config import GROQ_MODEL, IDLE_THRESHOLD, ZAPIER_WEBHOOK, log
 from chatbot.database import get_db
 from chatbot.models import Lead
 from chatbot.services.groq_service import groq_client
+from chatbot.services.usage_tracking import log_groq_usage
 from chatbot.utils.phone import normalize_phone
 from chatbot.utils.text import clean_name
 
@@ -93,6 +94,7 @@ async def save_lead(user_name: str, phone: str, history: list, session_id: str =
             max_tokens=300,
             temperature=0,
         )
+        log_groq_usage(completion, "lead_extraction", GROQ_MODEL)
         raw = (completion.choices[0].message.content or "").strip()
         raw = re.sub(r'^```[a-z]*\n?', '', raw).strip()
         raw = re.sub(r'\n?```$', '', raw).strip()

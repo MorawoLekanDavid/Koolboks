@@ -262,6 +262,21 @@ class ConversationScore(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class ApiUsageLog(Base):
+    """Per-call token usage for every Groq request, so cost can be tracked and
+    broken down by what the call was for."""
+    __tablename__ = "api_usage_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    purpose = Column(String(50), nullable=False, index=True)  # chat_reply | lead_extraction | conversation_scoring | follow_up | auto_tag | test_chat
+    model = Column(String(100), nullable=False)
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    estimated_cost_usd = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)

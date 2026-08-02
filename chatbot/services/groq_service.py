@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from groq import AsyncGroq
 
 from chatbot.config import GROQ_API_KEY, GROQ_MODEL, log
+from chatbot.services.usage_tracking import log_groq_usage
 from chatbot.utils.text import strip_internal_notes
 
 groq_client = AsyncGroq(
@@ -21,6 +22,7 @@ async def call_groq(messages: list, max_tokens: int = 600) -> str:
             model=GROQ_MODEL, messages=messages,
             max_tokens=max_tokens, temperature=0.7,
         )
+        log_groq_usage(completion, "chat_reply", GROQ_MODEL)
         text = (completion.choices[0].message.content or "").strip()
         if not text:
             raise ValueError("Empty response")

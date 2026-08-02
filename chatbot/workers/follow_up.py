@@ -16,6 +16,7 @@ from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Lead, Message
 from chatbot.services.groq_service import groq_client
+from chatbot.services.usage_tracking import log_groq_usage
 from chatbot.services.whatsapp_service import send_whatsapp_message
 
 
@@ -81,6 +82,7 @@ async def run_follow_ups():
                     max_tokens=180,
                     temperature=0.75,
                 )
+                log_groq_usage(completion, "follow_up", GROQ_MODEL)
                 follow_up_text = (completion.choices[0].message.content or "").strip()
             except Exception as e:
                 log.warning(f"Groq follow-up generation failed for {phone}: {e}")

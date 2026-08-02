@@ -10,6 +10,7 @@ from chatbot.dependencies import require_admin, require_super_admin
 from chatbot.models import AIInstruction, KBDocument
 from chatbot.services.ai_settings_service import get_draft_content, invalidate_cache
 from chatbot.services.groq_service import groq_client
+from chatbot.services.usage_tracking import log_groq_usage
 from chatbot.utils.file_parser import extract_text
 
 router = APIRouter(prefix="/admin/ai-settings", tags=["ai-settings"])
@@ -356,6 +357,7 @@ async def test_chat(body: TestChatMessage, ctx: dict = Depends(require_admin)):
             max_tokens=500,
             temperature=0.4,
         )
+        log_groq_usage(completion, "test_chat", GROQ_MODEL)
         reply = completion.choices[0].message.content or "No response"
         return {"reply": reply}
     except Exception as e:
