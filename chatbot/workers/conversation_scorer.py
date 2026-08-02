@@ -8,10 +8,16 @@ from chatbot.database import get_db
 from chatbot.models import ConversationScore, Message
 from chatbot.services.conversation_scoring import score_conversation
 
+# Cap per run so a large historical backlog (e.g. first deploy of this feature)
+# gets scored gradually across several 10-minute cycles instead of firing
+# hundreds of sequential LLM calls in one go.
+MAX_SCORED_PER_RUN = 30
+
 
 async def run_conversation_scoring():
-    """Score every conversation that has new messages since its last-scored point
-    and has gone idle (no message in CONVERSATION_SCORE_IDLE_MINUTES)."""
+    """Score conversations that have new messages since their last-scored point
+    and have gone idle (no message in CONVERSATION_SCORE_IDLE_MINUTES). Most
+    recently active conversations are scored first, capped at MAX_SCORED_PER_RUN."""
     cutoff = datetime.utcnow() - timedelta(minutes=CONVERSATION_SCORE_IDLE_MINUTES)
     db = get_db()
     try:
@@ -28,10 +34,13 @@ async def run_conversation_scoring():
             select(Message.phone, func.max(Message.created_at).label("last_msg"))
             .group_by(Message.phone)
             .having(func.max(Message.created_at) < cutoff)
+            .order_by(func.max(Message.created_at).desc())
         ).all()
 
         scored = 0
         for row in idle_phones:
+            if scored >= MAX_SCORED_PER_RUN:
+                break
             phone = row.phone
             since = last_score_map.get(phone)
             q = select(Message).where(Message.phone == phone)
