@@ -6,7 +6,8 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from chatbot.database import get_db
-from chatbot.dependencies import get_admin_ctx, require_admin
+from chatbot.dependencies import get_admin_ctx
+from chatbot.routers.permissions import require_tab_permission
 from chatbot.models import Product
 
 router = APIRouter(prefix="/admin/products", tags=["products"])
@@ -41,7 +42,7 @@ async def list_products(ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.post("")
-async def create_product(body: ProductIn, ctx: dict = Depends(require_admin)):
+async def create_product(body: ProductIn, ctx: dict = Depends(require_tab_permission("products"))):
     def _create():
         db = get_db()
         try:
@@ -61,7 +62,7 @@ async def create_product(body: ProductIn, ctx: dict = Depends(require_admin)):
 
 
 @router.patch("/{product_id}")
-async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(require_admin)):
+async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(require_tab_permission("products"))):
     def _update():
         db = get_db()
         try:
@@ -83,7 +84,7 @@ async def update_product(product_id: int, body: ProductIn, ctx: dict = Depends(r
 
 
 @router.delete("/{product_id}")
-async def delete_product(product_id: int, ctx: dict = Depends(require_admin)):
+async def delete_product(product_id: int, ctx: dict = Depends(require_tab_permission("products"))):
     def _delete():
         db = get_db()
         try:
@@ -103,7 +104,7 @@ class ProductBulkIn(BaseModel):
 
 
 @router.post("/bulk")
-async def bulk_upsert_products(body: ProductBulkIn, ctx: dict = Depends(require_admin)):
+async def bulk_upsert_products(body: ProductBulkIn, ctx: dict = Depends(require_tab_permission("products"))):
     if not body.products:
         raise HTTPException(400, "No products provided")
     def _bulk():

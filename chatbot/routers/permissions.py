@@ -58,6 +58,28 @@ def _build_role_perms(db, role: str) -> Dict[str, bool]:
     return perms
 
 
+def require_tab_permission(tab: str):
+    """Dependency factory for enforcing the configurable Role Permissions matrix
+    on actual API endpoints, not just frontend nav visibility. admin/super_admin
+    always pass; every other role must have `tab` enabled in the matrix."""
+    async def _check(ctx: dict = Depends(get_admin_ctx)) -> dict:
+        role = ctx.get("role")
+        if role in ("admin", "super_admin"):
+            return ctx
+
+        def _fetch():
+            db = get_db()
+            try:
+                return _build_role_perms(db, role)
+            finally:
+                db.close()
+        perms = await run_in_threadpool(_fetch)
+        if not perms.get(tab, False):
+            raise HTTPException(403, f"Your role does not have access to {tab}")
+        return ctx
+    return _check
+
+
 @router.get("")
 async def get_all_permissions(ctx: dict = Depends(require_admin)):
     """Full matrix for all configurable roles — used to render the Team tab matrix."""

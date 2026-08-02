@@ -6,7 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, func, select, text
 
 from chatbot.database import get_db
-from chatbot.dependencies import require_admin
+from chatbot.routers.permissions import require_tab_permission
 from chatbot.models import HandoffEvent, Lead, Message
 from chatbot.utils.phone import normalize_phone
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/admin/analytics", tags=["analytics"])
 async def conversations_handled(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_admin),
+    ctx: dict = Depends(require_tab_permission("analytics")),
 ):
     def _fetch():
         db = get_db()
@@ -52,7 +52,7 @@ async def conversations_handled(
 async def agent_handoffs(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_admin),
+    ctx: dict = Depends(require_tab_permission("analytics")),
 ):
     def _fetch():
         db = get_db()
@@ -79,7 +79,7 @@ async def agent_handoffs(
 
 
 @router.get("/product-recommendations")
-async def product_recommendations(ctx: dict = Depends(require_admin)):
+async def product_recommendations(ctx: dict = Depends(require_tab_permission("analytics"))):
     def _fetch():
         db = get_db()
         try:
@@ -105,7 +105,7 @@ async def product_recommendations(ctx: dict = Depends(require_admin)):
 async def broadcast_overview(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_admin),
+    ctx: dict = Depends(require_tab_permission("analytics")),
 ):
     def _fetch():
         db = get_db()
@@ -148,7 +148,7 @@ async def broadcast_overview(
 
 
 @router.get("/broadcast-campaigns")
-async def broadcast_campaigns_list(ctx: dict = Depends(require_admin)):
+async def broadcast_campaigns_list(ctx: dict = Depends(require_tab_permission("analytics"))):
     def _fetch():
         db = get_db()
         try:
@@ -191,7 +191,7 @@ async def broadcast_campaigns_list(ctx: dict = Depends(require_admin)):
 
 
 @router.get("/broadcast-by-template")
-async def broadcast_by_template(ctx: dict = Depends(require_admin)):
+async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("analytics"))):
     def _fetch():
         db = get_db()
         try:
@@ -229,7 +229,7 @@ async def broadcast_by_template(ctx: dict = Depends(require_admin)):
 
 
 @router.get("/lead-funnel")
-async def lead_funnel(ctx: dict = Depends(require_admin)):
+async def lead_funnel(ctx: dict = Depends(require_tab_permission("analytics"))):
     def _fetch():
         db = get_db()
         try:
