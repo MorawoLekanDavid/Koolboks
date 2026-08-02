@@ -125,6 +125,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .c-badges{display:flex;gap:4px;align-items:center}
 .badge-bot{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--green-s);color:#15803d}
 .badge-agent{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--orange-s);color:var(--orange-d)}
+.badge-risk{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--red-s);color:#b91c1c;cursor:help}
 .unread-pill{background:var(--green);color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
 .no-conv{padding:32px 14px;text-align:center;color:var(--g400);font-size:13px}
 .load-more-row{padding:10px 14px;text-align:center}.load-more-row button{background:none;border:1px solid var(--g300);border-radius:8px;padding:6px 18px;font-size:12px;cursor:pointer;color:var(--g500)}.load-more-row button:hover{background:var(--g100)}
@@ -1149,6 +1150,42 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <div id="bcTemplateChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
         </div>
       </div>
+    </div>
+
+    <!-- AI Response Quality -->
+    <div class="card" style="margin-top:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin:0 0 2px">🤖 AI Response Quality</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">How well the bot/agent handled customers — separate from lead qualification. Scored automatically once a conversation goes idle.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="date" id="cqFromDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+          <span style="font-size:12px;color:var(--g400)">to</span>
+          <input type="date" id="cqToDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+          <button onclick="loadConversationQuality()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
+        </div>
+      </div>
+
+      <div class="stat-cards-row" id="cqStatCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
+        <div>
+          <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Most Common Issues</p>
+          <div id="cqIssueBars"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+        </div>
+        <div>
+          <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Score Trend</p>
+          <div id="cqTrendBars"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">⚠ Flagged — Likely Lost Customers</p>
+      <div id="cqFlaggedList" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
     </div>
   </div>
 
@@ -2363,6 +2400,7 @@ function renderConversations(){
       <div class="c-right">
         <div class="c-time">${timeAgo(c.last_message)}</div>
         <div class="c-badges">
+          ${c.score&&c.score.likely_lost_customer?`<span class="badge-risk" title="AI flagged this conversation as at risk — ${esc((c.score.issues||[]).join(', ')||'poor response quality')}">⚠ At risk</span>`:''}
           <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}">${c.mode==='bot'?'🤖 Bot':`👤 ${esc(c.agent||'Agent')}`}</span>
           ${unread>0?`<span class="unread-pill">${unread}</span>`:''}
         </div>
@@ -3322,7 +3360,7 @@ async function runAutoAssign(){
 // ── Analytics ──────────────────────────────────────────────────────────
 let _agentPerfData=[];  // last loaded rows — used by CSV download
 
-async function loadAnalytics(){await Promise.all([loadFunnel(),loadAgentStats(),loadProductRecs(),loadBroadcastAnalytics()]);}
+async function loadAnalytics(){await Promise.all([loadFunnel(),loadAgentStats(),loadProductRecs(),loadBroadcastAnalytics(),loadConversationQuality()]);}
 
 async function loadFunnel(){
   try{
@@ -5331,6 +5369,106 @@ async function loadBCTemplates(){
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
 }
 // ── End Broadcast Analytics ──────────────────────────────────────────────────
+
+// ── AI Response Quality ────────────────────────────────────────────────────
+const CQ_ISSUE_LABELS={
+  repeated_question:'Repeated an answered question',
+  ignored_customer_question:"Ignored customer's question",
+  generic_answer_accepted:'Accepted a vague answer',
+  irrelevant_recommendation:'Irrelevant recommendation',
+  unclear_or_confusing:'Unclear / confusing reply',
+  customer_frustration:'Customer showed frustration',
+  long_response_gap:'Slow to respond',
+  no_response_at_all:'Never replied',
+};
+
+async function loadConversationQuality(){
+  const from=document.getElementById('cqFromDate')?.value||'';
+  const to=document.getElementById('cqToDate')?.value||'';
+  const statsEl=document.getElementById('cqStatCards');
+  const issuesEl=document.getElementById('cqIssueBars');
+  const trendEl=document.getElementById('cqTrendBars');
+  const flaggedEl=document.getElementById('cqFlaggedList');
+  if(!statsEl)return;
+  try{
+    const qs=new URLSearchParams({key:adminKey});
+    if(from)qs.set('date_from',from);
+    if(to)qs.set('date_to',to);
+    const r=await fetch(`/admin/analytics/conversation-quality?${qs}`);
+    if(!r.ok){
+      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';
+      issuesEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
+      return;
+    }
+    const d=await r.json();
+    if(!d.total_scored){
+      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">No conversations scored yet — scoring runs automatically once a conversation goes idle.</p>';
+      issuesEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
+      return;
+    }
+
+    const scoreColor=d.avg_score>=7?'var(--green)':d.avg_score>=5?'var(--orange)':'#ef4444';
+    statsEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n" style="color:${scoreColor}">${d.avg_score}</div><div class="stat-l">Avg Quality Score /10</div></div>
+      <div class="stat-c"><div class="stat-n">${d.total_scored}</div><div class="stat-l">Conversations Scored</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:#ef4444">${d.lost_count}</div><div class="stat-l">Likely Lost Customers</div></div>
+    `;
+
+    const issueEntries=Object.entries(d.issue_counts||{}).sort((a,b)=>b[1]-a[1]);
+    if(!issueEntries.length){
+      issuesEl.innerHTML='<p style="color:var(--g400);font-size:13px">No issues flagged 🎉</p>';
+    } else {
+      const maxIssue=Math.max(...issueEntries.map(e=>e[1]));
+      issuesEl.innerHTML=issueEntries.map(([tag,count])=>{
+        const pct=Math.round((count/maxIssue)*100);
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span style="color:var(--g600)">${esc(CQ_ISSUE_LABELS[tag]||tag)}</span>
+            <span style="font-weight:700;color:var(--g700)">${count}</span>
+          </div>
+          <div style="height:8px;background:var(--g100);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:#ef4444;border-radius:4px"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    if(!d.trend||!d.trend.length){
+      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
+    } else {
+      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px">${d.trend.map(t=>{
+        const h=Math.max(4,Math.round((t.avg_score/10)*100));
+        const c=t.avg_score>=7?'var(--green)':t.avg_score>=5?'var(--orange)':'#ef4444';
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.avg_score}/10 (${t.count} scored)">
+          <div style="width:100%;height:${h}px;background:${c};border-radius:3px 3px 0 0"></div>
+          <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    if(!d.flagged||!d.flagged.length){
+      flaggedEl.innerHTML='<p style="color:var(--g400);font-size:13px">No conversations flagged as at-risk 🎉</p>';
+    } else {
+      flaggedEl.innerHTML=`<table class="agt-table" style="width:100%">
+        <thead><tr><th>Customer</th><th>Score</th><th>Issues</th><th>Reasoning</th><th>Handled by</th><th></th></tr></thead>
+        <tbody>${d.flagged.map(f=>{
+          const ph=JSON.stringify(f.phone);
+          const nm=JSON.stringify(f.name||f.phone);
+          const respIcon=f.responder_type==='bot'?'🤖 Bot':f.responder_type==='agent'?'👤 Agent':f.responder_type==='mixed'?'🤖👤 Both':'—';
+          return `<tr>
+            <td style="font-weight:600">${esc(f.name||f.phone)}</td>
+            <td><span style="font-weight:700;color:${f.quality_score>=5?'var(--orange)':'#ef4444'}">${f.quality_score}/10</span></td>
+            <td style="font-size:12px;color:var(--g500)">${esc((f.issues||[]).map(t=>CQ_ISSUE_LABELS[t]||t).join(', ')||'—')}</td>
+            <td style="font-size:12px;color:var(--g500);max-width:220px">${esc(f.reasoning||'—')}</td>
+            <td style="font-size:12px;white-space:nowrap">${respIcon}</td>
+            <td><button class="btn-dl" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick='switchTab("conv");setTimeout(()=>selectConv(${ph},${nm},"bot",""),50)'>Open Chat</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    }
+  }catch(e){console.error(e);}
+}
+// ── End AI Response Quality ────────────────────────────────────────────────
 
 function closeCreateTmplModal(){
   document.getElementById('createTmplModal').classList.add('hidden');

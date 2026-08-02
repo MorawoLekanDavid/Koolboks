@@ -3,11 +3,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, case, func, select, text
 
 from chatbot.database import get_db
 from chatbot.routers.permissions import require_tab_permission
-from chatbot.models import HandoffEvent, Lead, Message
+from chatbot.models import ConversationScore, HandoffEvent, Lead, Message
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/analytics", tags=["analytics"])
@@ -253,6 +253,83 @@ async def lead_funnel(ctx: dict = Depends(require_tab_permission("analytics"))):
                     {"stage": "Phone Captured", "count": total_leads},
                     {"stage": "Drop-off (no phone given)", "count": drop_off},
                 ]
+            }
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+@router.get("/conversation-quality")
+async def conversation_quality(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ctx: dict = Depends(require_tab_permission("analytics")),
+):
+    def _fetch():
+        db = get_db()
+        try:
+            q = db.query(ConversationScore)
+            if date_from:
+                q = q.filter(ConversationScore.created_at >= datetime.fromisoformat(date_from))
+            if date_to:
+                q = q.filter(ConversationScore.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+            rows = q.order_by(ConversationScore.created_at.desc()).all()
+
+            if not rows:
+                return {"avg_score": None, "total_scored": 0, "lost_count": 0,
+                        "issue_counts": {}, "flagged": [], "trend": []}
+
+            avg_score = sum(r.quality_score for r in rows) / len(rows)
+            lost_count = sum(1 for r in rows if r.likely_lost_customer)
+
+            issue_counts: dict = {}
+            for r in rows:
+                for tag in (r.issues or "").split(","):
+                    tag = tag.strip()
+                    if tag:
+                        issue_counts[tag] = issue_counts.get(tag, 0) + 1
+
+            trend_map: dict = {}
+            for r in rows:
+                day = r.created_at.date().isoformat()
+                trend_map.setdefault(day, []).append(r.quality_score)
+            trend = [
+                {"date": d, "avg_score": round(sum(v) / len(v), 2), "count": len(v)}
+                for d, v in sorted(trend_map.items())
+            ]
+
+            flagged_rows = [r for r in rows if r.likely_lost_customer][:50]
+            flagged_phones = [r.phone for r in flagged_rows]
+            name_map: dict = {}
+            if flagged_phones:
+                name_agg = func.max(case((Message.direction == "inbound", Message.name), else_=None))
+                name_rows = db.execute(
+                    select(Message.phone, name_agg.label("name"))
+                    .where(Message.phone.in_(flagged_phones))
+                    .group_by(Message.phone)
+                ).all()
+                name_map = {nr.phone: nr.name for nr in name_rows}
+
+            flagged = [
+                {
+                    "phone": r.phone,
+                    "name": name_map.get(r.phone),
+                    "quality_score": r.quality_score,
+                    "reasoning": r.reasoning,
+                    "issues": [t for t in (r.issues or "").split(",") if t],
+                    "responder_type": r.responder_type,
+                    "scored_through": r.scored_through.isoformat() if r.scored_through else None,
+                }
+                for r in flagged_rows
+            ]
+
+            return {
+                "avg_score": round(avg_score, 2),
+                "total_scored": len(rows),
+                "lost_count": lost_count,
+                "issue_counts": issue_counts,
+                "flagged": flagged,
+                "trend": trend,
             }
         finally:
             db.close()

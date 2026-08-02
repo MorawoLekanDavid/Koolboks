@@ -17,7 +17,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import CannedResponse, ConversationOwner, ConversationTag, HandoffEvent, Message, Tag
+from chatbot.models import CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, Tag
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -132,11 +132,35 @@ async def list_conversations(
                     ).where(ConversationOwner.phone.in_(phones))
                 ).all()
 
-            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows
+            score_rows = []
+            if phones:
+                # Ordered by phone then most-recent-first, so the first row seen per
+                # phone while iterating in Python is that phone's latest score.
+                score_rows = db.execute(
+                    select(
+                        ConversationScore.phone,
+                        ConversationScore.quality_score,
+                        ConversationScore.likely_lost_customer,
+                        ConversationScore.issues,
+                    )
+                    .where(ConversationScore.phone.in_(phones))
+                    .order_by(ConversationScore.phone, ConversationScore.created_at.desc())
+                ).all()
+
+            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows
         finally:
             db.close()
 
-    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows = await run_in_threadpool(_db_fetch)
+    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows = await run_in_threadpool(_db_fetch)
+
+    score_map: dict = {}
+    for sr in score_rows:
+        if sr.phone not in score_map:
+            score_map[sr.phone] = {
+                "quality_score": sr.quality_score,
+                "likely_lost_customer": sr.likely_lost_customer,
+                "issues": [t for t in (sr.issues or "").split(",") if t],
+            }
 
     tags_map: dict = {}
     for tr in tags_rows:
@@ -215,6 +239,7 @@ async def list_conversations(
                 "agents_involved": agent_map.get(r.phone, []),
                 "tags": tags_map.get(r.phone, []),
                 "owner": owner_map.get(r.phone),
+                "score": score_map.get(r.phone),
             }
         )
 

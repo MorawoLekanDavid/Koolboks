@@ -244,6 +244,24 @@ class ContactStage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ConversationScore(Base):
+    """AI-judged response-quality score for a chunk of conversation, computed once
+    it goes idle. Separate from Lead scoring — this rates how well the bot/agent
+    handled the customer, not how qualified the customer is."""
+    __tablename__ = "conversation_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String(30), index=True, nullable=False)
+    quality_score = Column(Integer, nullable=False)  # 1-10
+    likely_lost_customer = Column(Boolean, default=False, index=True)
+    responder_type = Column(String(20), nullable=True)  # bot | agent | mixed
+    issues = Column(String(500), nullable=True)  # comma-separated tags from a fixed vocabulary
+    reasoning = Column(String(500), nullable=True)
+    message_count = Column(Integer, default=0)
+    scored_through = Column(DateTime, nullable=False, index=True)  # last message timestamp included in this window
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 def init_db(database_url: str):
     """Initialize database tables"""
     engine = create_engine(database_url, echo=False)
