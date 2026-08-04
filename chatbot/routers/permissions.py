@@ -80,6 +80,30 @@ def require_tab_permission(tab: str):
     return _check
 
 
+def require_any_tab_permission(tabs: list[str]):
+    """Like require_tab_permission, but passes if the role has ANY of the given
+    tabs enabled. Used where one endpoint legitimately serves more than one tab
+    — e.g. the contact list is read both by the Contacts tab and by Broadcast's
+    audience filter, so a role with only "templates" (no "contacts") still needs
+    read access to build a broadcast audience."""
+    async def _check(ctx: dict = Depends(get_admin_ctx)) -> dict:
+        role = ctx.get("role")
+        if role in ("admin", "super_admin"):
+            return ctx
+
+        def _fetch():
+            db = get_db()
+            try:
+                return _build_role_perms(db, role)
+            finally:
+                db.close()
+        perms = await run_in_threadpool(_fetch)
+        if not any(perms.get(tab, False) for tab in tabs):
+            raise HTTPException(403, f"Your role does not have access to {' or '.join(tabs)}")
+        return ctx
+    return _check
+
+
 @router.get("")
 async def get_all_permissions(ctx: dict = Depends(require_admin)):
     """Full matrix for all configurable roles — used to render the Team tab matrix."""

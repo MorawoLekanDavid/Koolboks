@@ -6,8 +6,9 @@ from pydantic import BaseModel
 
 from chatbot.config import GROQ_MODEL, log
 from chatbot.database import get_db
-from chatbot.dependencies import require_admin, require_super_admin
+from chatbot.dependencies import require_super_admin
 from chatbot.models import AIInstruction, KBDocument
+from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.ai_settings_service import get_draft_content, invalidate_cache
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/admin/ai-settings", tags=["ai-settings"])
 # ── AI Instructions ───────────────────────────────────────────────────────────
 
 @router.get("/instructions")
-async def get_instructions(ctx: dict = Depends(require_admin)):
+async def get_instructions(ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
     try:
         live = (
@@ -56,7 +57,7 @@ class InstructionIn(BaseModel):
 
 
 @router.post("/instructions/draft")
-async def save_draft_instruction(body: InstructionIn, ctx: dict = Depends(require_admin)):
+async def save_draft_instruction(body: InstructionIn, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     if not body.content.strip():
         raise HTTPException(400, "Instruction content cannot be empty")
     db = get_db()
@@ -86,7 +87,7 @@ async def save_draft_instruction(body: InstructionIn, ctx: dict = Depends(requir
 
 
 @router.post("/instructions/go-live")
-async def publish_instruction(ctx: dict = Depends(require_admin)):
+async def publish_instruction(ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
     try:
         draft = (
@@ -111,7 +112,7 @@ async def publish_instruction(ctx: dict = Depends(require_admin)):
 
 
 @router.post("/instructions/{inst_id}/restore")
-async def restore_instruction(inst_id: int, ctx: dict = Depends(require_admin)):
+async def restore_instruction(inst_id: int, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
     try:
         inst = db.query(AIInstruction).filter(AIInstruction.id == inst_id).first()
@@ -161,7 +162,7 @@ async def delete_archived_instruction(inst_id: int, ctx: dict = Depends(require_
 # ── Knowledge Base Documents ──────────────────────────────────────────────────
 
 @router.get("/kb")
-async def get_kb_documents(ctx: dict = Depends(require_admin)):
+async def get_kb_documents(ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
     try:
         docs = db.query(KBDocument).order_by(KBDocument.created_at.asc()).all()
@@ -179,7 +180,7 @@ async def get_kb_documents(ctx: dict = Depends(require_admin)):
 @router.post("/kb/upload")
 async def upload_kb_document(
     file: UploadFile = File(...),
-    ctx: dict = Depends(require_admin),
+    ctx: dict = Depends(require_tab_permission("aiSettings")),
 ):
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:  # 10 MB cap
@@ -211,7 +212,7 @@ async def upload_kb_document(
 
 
 @router.get("/kb/{doc_id}")
-async def get_kb_document(doc_id: int, ctx: dict = Depends(require_admin)):
+async def get_kb_document(doc_id: int, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
     try:
         doc = db.query(KBDocument).filter(KBDocument.id == doc_id).first()
@@ -229,7 +230,7 @@ async def get_kb_document(doc_id: int, ctx: dict = Depends(require_admin)):
 
 
 @router.patch("/kb/{doc_id}/trash")
-async def mark_kb_trash(doc_id: int, ctx: dict = Depends(require_admin)):
+async def mark_kb_trash(doc_id: int, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     """Mark a live doc for removal (applied on Go Live) or delete a draft immediately."""
     db = get_db()
     try:
@@ -250,7 +251,7 @@ async def mark_kb_trash(doc_id: int, ctx: dict = Depends(require_admin)):
 
 
 @router.patch("/kb/{doc_id}/restore")
-async def restore_kb_document(doc_id: int, ctx: dict = Depends(require_admin)):
+async def restore_kb_document(doc_id: int, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     """Restore a trashed or pending_trash document back to live."""
     db = get_db()
     try:
@@ -269,7 +270,7 @@ async def restore_kb_document(doc_id: int, ctx: dict = Depends(require_admin)):
 
 
 @router.delete("/kb/{doc_id}")
-async def delete_kb_document_permanently(doc_id: int, ctx: dict = Depends(require_admin)):
+async def delete_kb_document_permanently(doc_id: int, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
     try:
         doc = db.query(KBDocument).filter(KBDocument.id == doc_id).first()
@@ -287,7 +288,7 @@ async def delete_kb_document_permanently(doc_id: int, ctx: dict = Depends(requir
 # ── Go Live (KB + Instructions together) ─────────────────────────────────────
 
 @router.post("/go-live")
-async def go_live(ctx: dict = Depends(require_admin)):
+async def go_live(ctx: dict = Depends(require_tab_permission("aiSettings"))):
     """Publish all pending KB changes and draft instruction in one action."""
     db = get_db()
     changes = []
@@ -337,7 +338,7 @@ class TestChatMessage(BaseModel):
 
 
 @router.post("/test-chat")
-async def test_chat(body: TestChatMessage, ctx: dict = Depends(require_admin)):
+async def test_chat(body: TestChatMessage, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     if not body.message.strip():
         raise HTTPException(400, "Message cannot be empty")
 

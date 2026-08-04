@@ -20,8 +20,9 @@ from chatbot.config import (
 )
 from chatbot.core import redis_client
 from chatbot.database import get_db
-from chatbot.dependencies import get_admin_ctx, require_admin
+from chatbot.dependencies import require_admin
 from chatbot.models import BroadcastCampaign, BroadcastRecipient, ConversationOwner
+from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db
 from chatbot.utils.phone import normalize_phone
 from fastapi.concurrency import run_in_threadpool
@@ -46,7 +47,7 @@ class SendTemplateRequest(BaseModel):
 
 
 @router.get("/templates")
-async def list_templates(ctx: dict = Depends(get_admin_ctx)):
+async def list_templates(ctx: dict = Depends(require_tab_permission("templates"))):
     if not WABA_ID or not WHATSAPP_API_TOKEN:
         raise HTTPException(status_code=400, detail="WABA_ID or API token not configured")
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -109,7 +110,7 @@ async def delete_template(template_name: str, ctx: dict = Depends(require_admin)
 
 
 @router.post("/conversations/{phone}/send-template")
-async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dict = Depends(get_admin_ctx)):
+async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dict = Depends(require_tab_permission("templates"))):
     norm = normalize_phone(phone)
     wa_to = norm.lstrip('+')
     payload = {
@@ -310,7 +311,7 @@ async def _run_bulk_broadcast(job_id: str,
 async def bulk_broadcast(
     body: BulkBroadcastRequest,
     background_tasks: BackgroundTasks,
-    ctx: dict = Depends(get_admin_ctx),
+    ctx: dict = Depends(require_tab_permission("templates")),
 ):
     if not body.phones and not body.recipients:
         raise HTTPException(400, "No recipients provided")
@@ -380,7 +381,7 @@ async def bulk_broadcast(
 
 
 @router.get("/templates/bulk-broadcast/{job_id}")
-async def bulk_broadcast_status(job_id: str, ctx: dict = Depends(get_admin_ctx)):
+async def bulk_broadcast_status(job_id: str, ctx: dict = Depends(require_tab_permission("templates"))):
     if not redis_client.client:
         raise HTTPException(503, "Redis unavailable")
     raw = await redis_client.client.get(f"koolbuy:broadcast:{job_id}")
@@ -402,7 +403,7 @@ async def set_reengagement_template(body: dict, ctx: dict = Depends(require_admi
 
 
 @router.get("/templates/reengagement-config")
-async def get_reengagement_config(ctx: dict = Depends(get_admin_ctx)):
+async def get_reengagement_config(ctx: dict = Depends(require_tab_permission("templates"))):
     if not redis_client.client:
         return {"name": REENGAGEMENT_TEMPLATE, "lang": REENGAGEMENT_TEMPLATE_LANG, "enabled": bool(REENGAGEMENT_TEMPLATE)}
     raw = await redis_client.client.get("koolbuy:reengagement_config")

@@ -18,6 +18,7 @@ from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, Tag
+from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -321,7 +322,7 @@ async def list_canned(ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.post("/canned-responses")
-async def create_canned(body: CannedRequest, ctx: dict = Depends(get_admin_ctx)):
+async def create_canned(body: CannedRequest, ctx: dict = Depends(require_tab_permission("canned"))):
     if not body.title.strip() or not body.content.strip():
         raise HTTPException(400, "Title and content required")
 
@@ -344,7 +345,7 @@ async def create_canned(body: CannedRequest, ctx: dict = Depends(get_admin_ctx))
 
 
 @router.patch("/canned-responses/{canned_id}")
-async def update_canned(canned_id: int, body: CannedRequest, ctx: dict = Depends(get_admin_ctx)):
+async def update_canned(canned_id: int, body: CannedRequest, ctx: dict = Depends(require_tab_permission("canned"))):
     if not body.title.strip() or not body.content.strip():
         raise HTTPException(400, "Title and content required")
 
@@ -365,7 +366,7 @@ async def update_canned(canned_id: int, body: CannedRequest, ctx: dict = Depends
 
 
 @router.delete("/canned-responses/{canned_id}")
-async def delete_canned(canned_id: int, ctx: dict = Depends(get_admin_ctx)):
+async def delete_canned(canned_id: int, ctx: dict = Depends(require_tab_permission("canned"))):
     def _delete():
         db = get_db()
         try:

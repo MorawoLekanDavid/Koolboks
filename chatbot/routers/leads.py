@@ -9,6 +9,7 @@ from sqlalchemy import case, func, select
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
 from chatbot.models import ContactStage, ConversationTag, Lead, LeadNote, Message, Tag
+from chatbot.routers.permissions import require_any_tab_permission, require_tab_permission
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/leads", tags=["leads"])
@@ -146,7 +147,7 @@ async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_
 
 
 @router.post("")
-async def create_lead(body: LeadCreateIn, ctx: dict = Depends(get_admin_ctx)):
+async def create_lead(body: LeadCreateIn, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _create():
         db = get_db()
         try:
@@ -184,7 +185,7 @@ async def create_lead(body: LeadCreateIn, ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.post("/import")
-async def import_leads(body: LeadImportIn, ctx: dict = Depends(get_admin_ctx)):
+async def import_leads(body: LeadImportIn, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _import():
         db = get_db()
         try:
@@ -235,7 +236,7 @@ async def import_leads(body: LeadImportIn, ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.get("/by-tag/{tag_id}")
-async def leads_by_tag(tag_id: int, ctx: dict = Depends(get_admin_ctx)):
+async def leads_by_tag(tag_id: int, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _fetch():
         db = get_db()
         try:
@@ -272,7 +273,7 @@ async def leads_by_tag(tag_id: int, ctx: dict = Depends(get_admin_ctx)):
 async def list_leads(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(get_admin_ctx),
+    ctx: dict = Depends(require_tab_permission("leads")),
 ):
     def _fetch():
         db = get_db()
@@ -304,7 +305,7 @@ async def list_leads(
 async def list_dropoffs(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(get_admin_ctx),
+    ctx: dict = Depends(require_tab_permission("leads")),
 ):
     def _fetch():
         db = get_db()
@@ -396,7 +397,7 @@ def _actor(ctx: dict) -> str:
 
 
 @contacts_router.get("")
-async def list_contacts(ctx: dict = Depends(get_admin_ctx)):
+async def list_contacts(ctx: dict = Depends(require_any_tab_permission(["contacts", "templates"]))):
     def _fetch():
         db = get_db()
         try:
@@ -490,7 +491,7 @@ def _default_stage_seed(db):
 
 
 @contacts_router.get("/stages")
-async def list_contact_stages(ctx: dict = Depends(get_admin_ctx)):
+async def list_contact_stages(ctx: dict = Depends(require_any_tab_permission(["contacts", "templates"]))):
     def _fetch():
         db = get_db()
         try:
@@ -600,7 +601,7 @@ class ContactStageIn(BaseModel):
 
 
 @contacts_router.patch("/{phone}/stage")
-async def update_contact_stage(phone: str, body: ContactStageIn, ctx: dict = Depends(get_admin_ctx)):
+async def update_contact_stage(phone: str, body: ContactStageIn, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _update():
         db = get_db()
         try:
@@ -628,7 +629,7 @@ class BulkDeleteIn(BaseModel):
 
 
 @contacts_router.post("/bulk-delete")
-async def bulk_delete_contacts(body: BulkDeleteIn, ctx: dict = Depends(get_admin_ctx)):
+async def bulk_delete_contacts(body: BulkDeleteIn, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _delete():
         db = get_db()
         try:
@@ -653,7 +654,7 @@ async def bulk_delete_contacts(body: BulkDeleteIn, ctx: dict = Depends(get_admin
 
 
 @contacts_router.patch("/{phone}")
-async def update_contact(phone: str, body: ContactUpdateIn, ctx: dict = Depends(get_admin_ctx)):
+async def update_contact(phone: str, body: ContactUpdateIn, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _update():
         db = get_db()
         try:
@@ -681,7 +682,7 @@ class ContactOwnerIn(BaseModel):
 
 
 @contacts_router.patch("/{phone}/owner")
-async def update_contact_owner(phone: str, body: ContactOwnerIn, ctx: dict = Depends(get_admin_ctx)):
+async def update_contact_owner(phone: str, body: ContactOwnerIn, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _update():
         db = get_db()
         try:
@@ -701,7 +702,7 @@ async def update_contact_owner(phone: str, body: ContactOwnerIn, ctx: dict = Dep
 
 
 @contacts_router.delete("/{phone}")
-async def delete_contact(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def delete_contact(phone: str, ctx: dict = Depends(require_tab_permission("contacts"))):
     def _delete():
         db = get_db()
         try:
