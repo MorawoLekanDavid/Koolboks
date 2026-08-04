@@ -192,27 +192,32 @@ async def broadcast_campaigns_list(ctx: dict = Depends(require_tab_permission("a
 
 @router.get("/broadcast-by-template")
 async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("analytics"))):
+    """Response stats grouped by template name, across every send path — bulk
+    broadcasts and one-off sends from a single conversation alike. Sourced from
+    `messages` (not broadcast_recipients) so a template sent directly from a
+    conversation shows up here too, not just campaigns."""
     def _fetch():
         db = get_db()
         try:
-            rows = db.execute(text("""
+            rows = db.execute(text(r"""
                 SELECT
-                    bc.template_name,
-                    COUNT(DISTINCT bc.id) AS campaigns,
-                    COUNT(br.id) AS total_sent,
-                    COUNT(CASE WHEN br.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
-                    COUNT(CASE WHEN br.delivery_status = 'read' THEN 1 END) AS read_count,
-                    COUNT(CASE WHEN br.responded = true THEN 1 END) AS responded,
-                    COUNT(CASE WHEN br.delivery_status = 'failed' THEN 1 END) AS failed
-                FROM broadcast_campaigns bc
-                LEFT JOIN broadcast_recipients br ON br.campaign_id = bc.id
-                GROUP BY bc.template_name
-                ORDER BY COUNT(br.id) DESC
+                    substring(m.content from '\[Template: ([^\]]+)\]') AS template_name,
+                    COUNT(*) AS total_sent,
+                    COUNT(CASE WHEN m.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
+                    COUNT(CASE WHEN m.delivery_status = 'read' THEN 1 END) AS read_count,
+                    COUNT(CASE WHEN m.delivery_status = 'failed' THEN 1 END) AS failed,
+                    COUNT(CASE WHEN EXISTS (
+                        SELECT 1 FROM messages mi
+                        WHERE mi.phone = m.phone AND mi.direction = 'inbound' AND mi.created_at > m.created_at
+                    ) THEN 1 END) AS responded
+                FROM messages m
+                WHERE m.direction = 'outbound' AND m.content LIKE '[Template:%'
+                GROUP BY template_name
+                ORDER BY COUNT(*) DESC
             """)).all()
             return [
                 {
                     "template": r.template_name,
-                    "campaigns": r.campaigns,
                     "total_sent": r.total_sent,
                     "delivered": r.delivered,
                     "read": r.read_count,

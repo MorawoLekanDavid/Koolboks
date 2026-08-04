@@ -5424,7 +5424,7 @@ async function loadBCTemplates(){
     const r=await fetch(`/admin/analytics/broadcast-by-template?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const data=await r.json();
-    if(!data.length){el.innerHTML='<p style="color:var(--g400);font-size:13px;margin:0">0 templates — response rates will appear here once broadcasts are sent</p>';return;}
+    if(!data.length){el.innerHTML='<p style="color:var(--g400);font-size:13px;margin:0">0 templates — response rates will appear here once template messages are sent</p>';return;}
     const maxRate=Math.max(...data.map(t=>t.response_rate),1);
     el.innerHTML=data.map(t=>{
       const clr=t.response_rate>=20?'#10b981':t.response_rate>=10?'var(--orange)':'#ef4444';
@@ -5437,7 +5437,7 @@ async function loadBCTemplates(){
         <div style="height:10px;background:var(--g100);border-radius:99px;overflow:hidden;margin-bottom:5px">
           <div style="height:100%;width:${barW}%;background:${clr};border-radius:99px;transition:width .5s ease;min-width:${t.response_rate>0?'3px':'0'}"></div>
         </div>
-        <div style="font-size:11px;color:var(--g400)">${t.total_sent} sent &middot; ${t.delivered} delivered &middot; ${t.responded} replied &middot; ${t.delivery_rate}% delivery rate &middot; ${t.campaigns} campaign${t.campaigns!==1?'s':''}</div>
+        <div style="font-size:11px;color:var(--g400)">${t.total_sent} sent &middot; ${t.delivered} delivered &middot; ${t.responded} replied &middot; ${t.delivery_rate}% delivery rate${t.failed?` &middot; <span style="color:var(--red)">${t.failed} failed</span>`:''}</div>
       </div>`;
     }).join('');
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
