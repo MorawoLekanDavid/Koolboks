@@ -1942,7 +1942,7 @@ let selectedPhone=null, selectedMode='bot';
 let allAgents=[];
 let allConversations=[], currentFilter='all';
 let interestedLeads=[], dropoffLeads=[], activeLeadGroup='interested';
-let pollInterval=null, msgPollInterval=null, isFirstLoad=true;
+let pollInterval=null, msgPollInterval=null, bcPollInterval=null, isFirstLoad=true;
 let convTotal=0, convOffset=0, convLimit=100, convHasMore=false;
 let _convSearchTimer=null, _searchResults=null;
 let _outreachTemplatesCache=null;
@@ -2011,7 +2011,7 @@ function showApp(){
   pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
-  clearInterval(pollInterval);clearInterval(msgPollInterval);
+  clearInterval(pollInterval);clearInterval(msgPollInterval);clearInterval(bcPollInterval);
   localStorage.removeItem('koolbot_agent');
   adminKey='';agentName='';agentRole='agent';agentEmail='';selectedPhone=null;allConversations=[];isFirstLoad=true;
   document.getElementById('appScreen').classList.add('hidden');document.getElementById('appScreen').style.display='none';
@@ -2338,7 +2338,13 @@ function switchTab(t){
   if(t==='canned')loadCanned();
   if(t==='leads')loadLeads();
   if(t==='contacts')loadContacts();
-  if(t==='analytics')loadAnalytics();
+  if(t==='analytics'){
+    loadAnalytics();
+    clearInterval(bcPollInterval);
+    bcPollInterval=setInterval(loadBroadcastAnalytics,15000);
+  }else{
+    clearInterval(bcPollInterval);
+  }
   if(t==='team')loadAgentList();
   if(t==='rolePerm')loadRolePermissions();
   if(t==='products')loadProducts();
