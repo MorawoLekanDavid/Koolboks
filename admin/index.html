@@ -1280,10 +1280,11 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
         <div id="bbContactPanel" style="display:none;max-width:500px">
           <div class="modal-field">
-            <label>Filter by Tag</label>
-            <select id="bbTagSelect" onchange="onBBTagSelect()" style="width:100%">
-              <option value="">— select a tag —</option>
-            </select>
+            <label>Filter Contacts</label>
+            <button class="cfilter-btn" id="bcFilterToggleBtn" onclick="openBCFilterDrawer()" style="width:100%;justify-content:flex-start">
+              <span>🔎 Owner, tag, stage, date created…</span>
+              <span class="cfilter-active-count hidden" id="bcFilterActiveCount" style="margin-left:auto">0</span>
+            </button>
           </div>
           <div id="bbContactPreview" style="font-size:12px;color:var(--g500);margin-bottom:8px;min-height:20px"></div>
         </div>
@@ -1930,6 +1931,41 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <div class="fd-scroll" id="fdDetailScroll"></div>
       <div class="fd-footer">
         <button class="fd-btn-primary" style="flex:1" onclick="closeFDSub()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Broadcast audience filter drawer -->
+<div class="fd-backdrop" id="bcFdBackdrop" onclick="closeBCFilterDrawer()"></div>
+<div class="fd-drawer" id="bcFdDrawer">
+  <div class="fd-slide-wrap" id="bcFdSlideWrap">
+    <!-- Panel 1: filter type list -->
+    <div class="fd-panel">
+      <div class="fd-hdr">
+        <span class="fd-hdr-title">Filter Contacts</span>
+        <button class="fd-close-btn" onclick="closeBCFilterDrawer()">✕</button>
+      </div>
+      <div class="fd-scroll" id="bcFdListScroll"></div>
+      <div class="fd-footer">
+        <button class="fd-btn-ghost" onclick="_bcFdClear()">Clear all</button>
+        <button class="fd-btn-primary" onclick="_bcFdApply()">Apply</button>
+      </div>
+    </div>
+    <!-- Panel 2: detail / checklist -->
+    <div class="fd-panel">
+      <div class="fd-hdr">
+        <button class="fd-back-btn" onclick="closeBCFDSub()">‹</button>
+        <span class="fd-hdr-title" id="bcFdDetailTitle"></span>
+        <button class="fd-close-btn" onclick="closeBCFilterDrawer()">✕</button>
+      </div>
+      <div class="fd-op-row" id="bcFdOpRow" style="display:none"></div>
+      <div class="fd-search-row" id="bcFdSearchRow">
+        <input type="text" class="fd-search-inp" id="bcFdSearchInp" placeholder="Search…" oninput="renderBCFDDetail()">
+      </div>
+      <div class="fd-scroll" id="bcFdDetailScroll"></div>
+      <div class="fd-footer">
+        <button class="fd-btn-primary" style="flex:1" onclick="closeBCFDSub()">Done</button>
       </div>
     </div>
   </div>
@@ -4321,12 +4357,230 @@ const BB_FIELDS=[
 
 const BB_STEP_IDS={1:'bbStepAudience',2:'bbStepMessage',3:'bbStepReview',4:'bbStepSending'};
 
+// ── Broadcast audience filter drawer (owner / tag / stage / date created) ──
+// Same interaction pattern as the Conversations filter drawer: click a filter
+// type to reveal its picker, combine multiple types with ALL/ANY. Filters run
+// client-side over _allContacts (already loaded by the Contacts tab), so any
+// combination narrows the audience instead of "every contact with this tag."
+const BC_FILTER_DEF={
+  owner:{label:'Owner',        icon:'👤', ops:['Is','Is not'],       valType:'bcowners'},
+  tag:  {label:'Tag',          icon:'🏷', ops:['Include','Exclude'], valType:'tags'},
+  stage:{label:'Stage',        icon:'📍', ops:['Is','Is not'],       valType:'bcstages'},
+  date: {label:'Date Created', icon:'📅', ops:[],                    valType:'daterange'},
+};
+let _bcFilterSels={};
+let _bcFilterLogic='AND';
+let _bcFdCurrentType=null;
+
+async function openBCFilterDrawer(){
+  if(!_allContacts.length||!_contactStages.length)await loadContacts();
+  document.getElementById('bcFdDrawer').classList.add('open');
+  document.getElementById('bcFdBackdrop').classList.add('open');
+  document.getElementById('bcFdSlideWrap').classList.remove('show-detail');
+  _bcFdCurrentType=null;
+  renderBCFDList();
+}
+function closeBCFilterDrawer(){
+  document.getElementById('bcFdDrawer').classList.remove('open');
+  document.getElementById('bcFdBackdrop').classList.remove('open');
+}
+function openBCFDSub(type){
+  _bcFdCurrentType=type;
+  const def=BC_FILTER_DEF[type];
+  document.getElementById('bcFdDetailTitle').textContent=def.label;
+  if(!_bcFilterSels[type])_bcFilterSels[type]=def.valType==='daterange'?{from:'',to:''}:{op:def.ops[0]||'',vals:[]};
+  const opRow=document.getElementById('bcFdOpRow');
+  if(def.ops.length>1){
+    opRow.style.display='flex';
+    opRow.innerHTML=def.ops.map(op=>
+      `<button class="fd-op-btn${_bcFilterSels[type].op===op?' active':''}" onclick="_bcFdSetOp('${type}','${op}')">${op}</button>`
+    ).join('');
+  } else {
+    opRow.style.display='none';
+  }
+  document.getElementById('bcFdSearchRow').style.display=def.valType==='daterange'?'none':'flex';
+  document.getElementById('bcFdSearchInp').value='';
+  renderBCFDDetail();
+  document.getElementById('bcFdSlideWrap').classList.add('show-detail');
+}
+function closeBCFDSub(){
+  document.getElementById('bcFdSlideWrap').classList.remove('show-detail');
+  _bcFdCurrentType=null;
+  renderBCFDList();
+}
+function _bcFilterActiveCount(){
+  return Object.entries(_bcFilterSels).filter(([k,s])=>k==='date'?(s.from||s.to):(s.vals&&s.vals.length)).length;
+}
+function renderBCFDList(){
+  const el=document.getElementById('bcFdListScroll');
+  if(!el)return;
+  let html='';
+  const activeCount=_bcFilterActiveCount();
+  if(activeCount>1){
+    html+=`<div class="fd-logic-row">
+      <span>Contacts match</span>
+      <div class="fd-logic-btns">
+        <button class="fd-logic-btn${_bcFilterLogic==='AND'?' active':''}" onclick="_bcFilterLogic='AND';renderBCFDList();_bcApplyFilters()">ALL</button>
+        <button class="fd-logic-btn${_bcFilterLogic==='OR'?' active':''}" onclick="_bcFilterLogic='OR';renderBCFDList();_bcApplyFilters()">ANY</button>
+      </div>
+    </div>`;
+  }
+  Object.entries(BC_FILTER_DEF).forEach(([k,d])=>{
+    const s=_bcFilterSels[k];
+    const count=d.valType==='daterange'?((s&&(s.from||s.to))?1:0):((s?.vals||[]).length);
+    const badge=count?`<span class="fd-row-count">${count}</span>`:'';
+    html+=`<div class="fd-row" onclick="openBCFDSub('${k}')">
+      <span class="fd-row-icon">${d.icon}</span>
+      <span class="fd-row-label">${d.label}</span>
+      ${badge}
+      <span class="fd-row-chevron">›</span>
+    </div>`;
+  });
+  if(!activeCount)html+=`<div class="fd-empty">No filters active — tap a row to add one</div>`;
+  el.innerHTML=html;
+}
+function renderBCFDDetail(){
+  const el=document.getElementById('bcFdDetailScroll');
+  if(!el||!_bcFdCurrentType)return;
+  const type=_bcFdCurrentType, def=BC_FILTER_DEF[type];
+  if(def.valType==='daterange'){
+    const sel=_bcFilterSels[type]||{from:'',to:''};
+    el.innerHTML=`
+      <div style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--g600);display:block;margin-bottom:5px">Created after</label>
+          <input type="date" value="${sel.from||''}" onchange="_bcFdSetDate('from',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--g600);display:block;margin-bottom:5px">Created before</label>
+          <input type="date" value="${sel.to||''}" onchange="_bcFdSetDate('to',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        </div>
+      </div>`;
+    return;
+  }
+  if(!_bcFilterSels[type])_bcFilterSels[type]={op:def.ops[0]||'',vals:[]};
+  const sel=_bcFilterSels[type];
+  const q=(document.getElementById('bcFdSearchInp')?.value||'').toLowerCase().trim();
+  let html='';
+  if(def.valType==='bcowners'){
+    const owners=[...new Set(_allContacts.map(c=>c.owner).filter(Boolean))].sort();
+    const items=['__unassigned__',...owners].filter(o=>{
+      const label=o==='__unassigned__'?'Unassigned':o;
+      return !q||label.toLowerCase().includes(q);
+    });
+    if(!items.length){html=`<div class="fd-empty">No owners found</div>`;}
+    else items.forEach(o=>{
+      const label=o==='__unassigned__'?'Unassigned':o;
+      const checked=sel.vals.includes(o);
+      html+=`<label class="fd-check-item">
+        <input type="checkbox" value="${esc(o)}" ${checked?'checked':''} onchange="_bcFdToggle('${type}','${esc(o)}',this.checked)">
+        <span class="fd-plain-label">${esc(label)}</span>
+      </label>`;
+    });
+  } else if(def.valType==='bcstages'){
+    const items=_contactStages.filter(s=>!q||s.name.toLowerCase().includes(q));
+    if(!items.length){html=`<div class="fd-empty">No stages found</div>`;}
+    else items.forEach(s=>{
+      const checked=sel.vals.includes(s.name);
+      html+=`<label class="fd-check-item">
+        <input type="checkbox" value="${esc(s.name)}" ${checked?'checked':''} onchange="_bcFdToggle('${type}','${esc(s.name)}',this.checked)">
+        <span class="fd-tag-pill" style="background:${s.color}">${esc(s.name)}</span>
+      </label>`;
+    });
+  } else if(def.valType==='tags'){
+    const items=_allTags.filter(t=>!q||t.name.toLowerCase().includes(q));
+    if(!items.length){html=`<div class="fd-empty">No tags found</div>`;}
+    else items.forEach(t=>{
+      const checked=sel.vals.includes(String(t.id));
+      html+=`<label class="fd-check-item">
+        <input type="checkbox" value="${t.id}" ${checked?'checked':''} onchange="_bcFdToggle('${type}','${t.id}',this.checked)">
+        <span class="fd-tag-pill" style="background:${t.color}">${esc(t.name)}</span>
+      </label>`;
+    });
+  }
+  el.innerHTML=html;
+}
+function _bcFdSetOp(type,op){
+  if(!_bcFilterSels[type])_bcFilterSels[type]={op,vals:[]};
+  else _bcFilterSels[type].op=op;
+  document.getElementById('bcFdOpRow').querySelectorAll('.fd-op-btn').forEach(b=>{
+    b.classList.toggle('active',b.textContent===op);
+  });
+  _bcApplyFilters();
+}
+function _bcFdToggle(type,val,checked){
+  if(!_bcFilterSels[type])_bcFilterSels[type]={op:BC_FILTER_DEF[type].ops[0]||'',vals:[]};
+  const arr=_bcFilterSels[type].vals;
+  if(checked){if(!arr.includes(String(val)))arr.push(String(val));}
+  else{_bcFilterSels[type].vals=arr.filter(v=>v!==String(val));}
+  _bcSyncFilterBadge();
+  _bcApplyFilters();
+}
+function _bcFdSetDate(which,val){
+  if(!_bcFilterSels.date)_bcFilterSels.date={from:'',to:''};
+  _bcFilterSels.date[which]=val;
+  _bcSyncFilterBadge();
+  _bcApplyFilters();
+}
+function _bcFdApply(){_bcApplyFilters();closeBCFilterDrawer();}
+function _bcFdClear(){
+  _bcFilterSels={};_bcFilterLogic='AND';
+  _bcSyncFilterBadge();_bcApplyFilters();renderBCFDList();
+}
+function _bcSyncFilterBadge(){
+  const n=_bcFilterActiveCount();
+  const cnt=document.getElementById('bcFilterActiveCount');
+  const btn=document.getElementById('bcFilterToggleBtn');
+  if(cnt){cnt.textContent=n;cnt.classList.toggle('hidden',n===0);}
+  if(btn)btn.classList.toggle('active',n>0);
+}
+function _bcPassesFilters(c){
+  const entries=Object.entries(_bcFilterSels).filter(([k,s])=>k==='date'?(s.from||s.to):(s.vals&&s.vals.length));
+  if(!entries.length)return true;
+  const checks=entries.map(([type,sel])=>{
+    switch(type){
+      case 'owner':{
+        const hit=sel.vals.some(v=>v==='__unassigned__'?!c.owner:c.owner===v);
+        return sel.op==='Is'?hit:!hit;
+      }
+      case 'tag':{
+        const ids=(c.tags||[]).map(t=>String(t.id));
+        const hit=sel.vals.some(v=>ids.includes(v));
+        return sel.op==='Include'?hit:!hit;
+      }
+      case 'stage':{
+        const hit=sel.vals.includes(c.outreach_stage||'');
+        return sel.op==='Is'?hit:!hit;
+      }
+      case 'date':{
+        if(!c.created_at)return false;
+        const t=new Date(c.created_at+'Z').getTime();
+        if(sel.from&&t<new Date(sel.from).getTime())return false;
+        if(sel.to&&t>new Date(sel.to).getTime()+86399999)return false;
+        return true;
+      }
+      default:return true;
+    }
+  });
+  return _bcFilterLogic==='AND'?checks.every(Boolean):checks.some(Boolean);
+}
+function _bcApplyFilters(){
+  const hasFilters=_bcFilterActiveCount()>0;
+  _bbContacts=hasFilters?_allContacts.filter(_bcPassesFilters):[];
+  const preview=document.getElementById('bbContactPreview');
+  if(!hasFilters){preview.textContent='';renderBBPreview();return;}
+  if(!_bbContacts.length){preview.textContent='No contacts match these filters';renderBBPreview();return;}
+  const names=_bbContacts.slice(0,3).map(c=>c.name||c.phone).join(', ');
+  preview.innerHTML=`<span style="color:#22c55e;font-weight:700">${_bbContacts.length} contact${_bbContacts.length!==1?'s':''}</span> — ${esc(names)}${_bbContacts.length>3?', …':''}`;
+  renderBBPreview();
+}
+
 function goBBStep(n){
   if(n===2){
     const errEl=document.getElementById('bbAudErr');
     errEl.style.display='none';
     const audienceOk=_bbMode==='phone'?parseBBPhones(document.getElementById('bbPhones').value).length>0:_bbContacts.length>0;
-    if(!audienceOk){errEl.textContent=_bbMode==='phone'?'Add at least one phone number.':'Pick a tag with at least one contact.';errEl.style.display='block';return;}
+    if(!audienceOk){errEl.textContent=_bbMode==='phone'?'Add at least one phone number.':'Add a filter that matches at least one contact.';errEl.style.display='block';return;}
   }
   if(n===3){
     const errEl=document.getElementById('bbErr');
@@ -4348,9 +4602,9 @@ function goBBStep(n){
 function resetBroadcastFlow(){
   clearInterval(_bbPollTimer);
   _bbJobId=null; _bbFailedPhones=[];_bbContacts=[];_bbVarCount=0;_bbTmplBody='';
+  _bcFilterSels={};_bcFilterLogic='AND';_bcSyncFilterBadge();
   document.getElementById('bbPhones').value='';
   document.getElementById('bbPhoneCount').textContent='';
-  document.getElementById('bbTagSelect').value='';
   document.getElementById('bbContactPreview').textContent='';
   document.getElementById('bbTmplSelect').value='';
   document.getElementById('bbVarsWrap').classList.add('hidden');
@@ -4367,20 +4621,7 @@ function resetBroadcastFlow(){
 
 async function initBroadcastFlow(){
   goBBStep(1);
-  // Load tags for contact mode
-  const tagSel=document.getElementById('bbTagSelect');
-  tagSel.innerHTML='<option value="">— select a tag —</option>';
-  try{
-    const r=await fetch(`/admin/tags?key=${encodeURIComponent(adminKey)}`);
-    if(r.ok){
-      const tags=await r.json();
-      tags.forEach(t=>{
-        const o=document.createElement('option');
-        o.value=t.id; o.textContent=t.name;
-        tagSel.appendChild(o);
-      });
-    }
-  }catch(e){}
+  _bcSyncFilterBadge();
 
   // Populate template dropdown
   const sel=document.getElementById('bbTmplSelect');
@@ -4524,22 +4765,6 @@ function renderBBReview(){
   const tmplSel=document.getElementById('bbTmplSelect');
   document.getElementById('bbReviewTmpl').textContent=tmplSel.options[tmplSel.selectedIndex]?.textContent||'—';
   document.getElementById('bbReviewPreviewBox').textContent=document.getElementById('bbPreviewBox').textContent||_bbTmplBody;
-}
-
-async function onBBTagSelect(){
-  const tagId=document.getElementById('bbTagSelect').value;
-  const preview=document.getElementById('bbContactPreview');
-  if(!tagId){preview.textContent='';_bbContacts=[];renderBBPreview();return;}
-  preview.textContent='Loading contacts…';
-  try{
-    const r=await fetch(`/admin/leads/by-tag/${tagId}?key=${encodeURIComponent(adminKey)}`);
-    if(!r.ok){preview.textContent='Failed to load contacts';return;}
-    _bbContacts=await r.json();
-    if(!_bbContacts.length){preview.textContent='No contacts with this tag';renderBBPreview();return;}
-    const names=_bbContacts.slice(0,3).map(c=>c.name||c.phone).join(', ');
-    preview.innerHTML=`<span style="color:#22c55e;font-weight:700">${_bbContacts.length} contact${_bbContacts.length!==1?'s':''}</span> — ${esc(names)}${_bbContacts.length>3?', …':''}`;
-    renderBBPreview();
-  }catch(e){preview.textContent='Error loading contacts';}
 }
 
 async function startBulkBroadcast(){
