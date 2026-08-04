@@ -107,26 +107,32 @@ async def broadcast_overview(
     date_to: Optional[str] = Query(None),
     ctx: dict = Depends(require_tab_permission("analytics")),
 ):
+    """Aggregate funnel across every template send — bulk broadcasts and
+    one-off sends from a single conversation alike. Sourced from `messages`,
+    same as /broadcast-by-template, so the two sections never disagree."""
     def _fetch():
         db = get_db()
         try:
-            where_clauses = []
+            where_clauses = ["m.direction = 'outbound'", "m.content LIKE '[Template:%'"]
             params: dict = {}
             if date_from:
-                where_clauses.append("br.created_at >= :date_from")
+                where_clauses.append("m.created_at >= :date_from")
                 params["date_from"] = date_from
             if date_to:
-                where_clauses.append("br.created_at <= :date_to")
+                where_clauses.append("m.created_at <= :date_to")
                 params["date_to"] = date_to + "T23:59:59"
-            where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            where_sql = "WHERE " + " AND ".join(where_clauses)
             row = db.execute(text(f"""
                 SELECT
                     COUNT(*) AS total,
-                    COUNT(CASE WHEN delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
-                    COUNT(CASE WHEN delivery_status = 'read' THEN 1 END) AS read_count,
-                    COUNT(CASE WHEN responded = true THEN 1 END) AS responded,
-                    COUNT(CASE WHEN delivery_status = 'failed' THEN 1 END) AS failed
-                FROM broadcast_recipients br
+                    COUNT(CASE WHEN m.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
+                    COUNT(CASE WHEN m.delivery_status = 'read' THEN 1 END) AS read_count,
+                    COUNT(CASE WHEN EXISTS (
+                        SELECT 1 FROM messages mi
+                        WHERE mi.phone = m.phone AND mi.direction = 'inbound' AND mi.created_at > m.created_at
+                    ) THEN 1 END) AS responded,
+                    COUNT(CASE WHEN m.delivery_status = 'failed' THEN 1 END) AS failed
+                FROM messages m
                 {where_sql}
             """), params).first()
             total = row.total or 0
