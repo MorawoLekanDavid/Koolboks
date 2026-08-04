@@ -136,8 +136,14 @@ async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dic
         session_id = f"wa_{norm}"
         agent_name = ctx.get("name", "Agent")
         agent_email = ctx.get("email", "")
+        resp_json = r.json()
+        wamid = None
+        msgs = resp_json.get("messages", [])
+        if msgs:
+            wamid = msgs[0].get("id")
         save_message_db(session_id, norm, agent_name, "outbound",
-                        f"[Template: {body.template_name}]" + (f" — {', '.join(body.variables)}" if body.variables else ""))
+                        f"[Template: {body.template_name}]" + (f" — {', '.join(body.variables)}" if body.variables else ""),
+                        wamid=wamid)
 
         def _claim_owner():
             db = get_db()
@@ -241,6 +247,7 @@ async def _run_bulk_broadcast(job_id: str,
                     save_message_db(
                         session_id, norm, agent_name, "outbound",
                         f"[Template: {template_name}]" + (f" — {', '.join(variables)}" if variables else ""),
+                        wamid=wamid,
                     )
                 else:
                     _save_broadcast_recipient(campaign_id, norm, None, "failed")

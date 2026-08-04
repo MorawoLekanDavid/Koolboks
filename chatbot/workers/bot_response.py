@@ -35,11 +35,10 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     # Keep the admin transcript readable as one combined message, even though
     # multiple products get sent as separate WhatsApp messages below.
     transcript_text = chat_resp.response + "".join(f"\n\n{_blurb(p)}" for p in chat_resp.products)
-    save_message_db(session_id, wa_from, "KoolBot", "outbound", transcript_text)
 
     if chat_resp.products:
         first = chat_resp.products[0]
-        await send_whatsapp_message(
+        wamid = await send_whatsapp_message(
             wa_from, chat_resp.response,
             first.original_image_url,  # raw S3/CDN URL — WhatsApp fetches directly
             image_caption=_blurb(first),
@@ -51,7 +50,9 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
                 wa_from, "", product.original_image_url, image_caption=_blurb(product)
             )
     else:
-        await send_whatsapp_message(wa_from, chat_resp.response)
+        wamid = await send_whatsapp_message(wa_from, chat_resp.response)
+
+    save_message_db(session_id, wa_from, "KoolBot", "outbound", transcript_text, wamid=wamid)
 
     # Run background tasks queued by chat_handler (save_lead, update_lead_address, etc.)
     for task in bg.tasks:

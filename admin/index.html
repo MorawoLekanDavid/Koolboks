@@ -172,6 +172,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .msg{position:relative}
 .msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
 .msg-time{font-size:10px;color:var(--g400)}
+.msg-status{font-size:10px;color:var(--g400);cursor:default}
+.msg-status-read{color:#53bdeb}
+.msg-status-failed{color:var(--red);font-weight:600;cursor:help}
 .msg-date-sep{display:flex;align-items:center;gap:8px;margin:8px 0;align-self:stretch}
 .msg-date-sep::before,.msg-date-sep::after{content:'';flex:1;border-top:1px solid var(--g200)}
 .msg-date-sep span{white-space:nowrap;font-size:11px;font-weight:600;color:var(--g500);padding:3px 10px;background:#fff;border:1px solid var(--g200);border-radius:99px}
@@ -2813,7 +2816,21 @@ async function loadMessages(){
         ?`<img src="${esc(imgMatch[1])}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
         :esc(m.content);
       const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span></div></div>`);
+      let statusHtml='';
+      if(m.direction==='outbound'&&m.delivery_status){
+        const ds=m.delivery_status;
+        if(ds==='failed'){
+          const reason=m.delivery_error?esc(m.delivery_error):'Not delivered';
+          statusHtml=`<span class="msg-status msg-status-failed" title="${reason}">⚠ Not delivered</span>`;
+        }else if(ds==='read'){
+          statusHtml=`<span class="msg-status msg-status-read" title="Read">✓✓</span>`;
+        }else if(ds==='delivered'){
+          statusHtml=`<span class="msg-status" title="Delivered">✓✓</span>`;
+        }else{
+          statusHtml=`<span class="msg-status" title="Sent">✓</span>`;
+        }
+      }
+      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span>${statusHtml}</div></div>`);
     });
     box.innerHTML=parts.join('');
     if(atBottom)box.scrollTop=box.scrollHeight;

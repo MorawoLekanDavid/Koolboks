@@ -59,6 +59,8 @@ class Message(Base):
     direction = Column(String(10))  # inbound / outbound
     content = Column(String(4000))
     wamid = Column(String(100), nullable=True)
+    delivery_status = Column(String(20), default="sent")  # sent | delivered | read | failed
+    delivery_error = Column(String(255), nullable=True)  # Meta's failure reason, set only when delivery_status='failed'
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 

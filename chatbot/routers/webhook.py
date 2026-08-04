@@ -26,19 +26,34 @@ FILLER_ACK_RE = re.compile(
 )
 
 
-def _update_broadcast_delivery(wamid: str, status: str):
-    """Update delivery_status on a broadcast recipient when Meta fires a status event."""
+def _update_message_delivery(wamid: str, status: str, error_detail: str = None):
+    """Update delivery_status on a broadcast recipient and/or the matching Message
+    row when Meta fires a status event. A wamid may match either, both, or neither
+    (regular agent/bot messages only ever have a Message row; broadcast sends have
+    both). Without this, the admin conversation view always shows "sent" forever,
+    even when Meta later fails to actually deliver the message to the customer."""
     db = get_db()
     try:
+        rank = {"sent": 0, "delivered": 1, "read": 2, "failed": -1}
+
         recipient = db.query(BroadcastRecipient).filter(BroadcastRecipient.wamid == wamid).first()
         if recipient:
-            # Only upgrade status rank; never downgrade (read > delivered > sent)
-            rank = {"sent": 0, "delivered": 1, "read": 2, "failed": -1}
             if rank.get(status, 0) > rank.get(recipient.delivery_status, 0) or status == "failed":
                 recipient.delivery_status = status
-                db.commit()
+
+        message = db.query(Message).filter(Message.wamid == wamid).first()
+        if message:
+            if rank.get(status, 0) > rank.get(message.delivery_status or "sent", 0) or status == "failed":
+                message.delivery_status = status
+                if status == "failed":
+                    message.delivery_error = error_detail
+
+        if status == "failed" and error_detail:
+            log.warning(f"WhatsApp delivery failed for wamid {wamid}: {error_detail}")
+
+        db.commit()
     except Exception as e:
-        log.warning(f"Broadcast delivery update failed for wamid {wamid}: {e}")
+        log.warning(f"Delivery status update failed for wamid {wamid}: {e}")
     finally:
         db.close()
 
@@ -88,7 +103,12 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     wamid = status_evt.get("id")
                     status_type = status_evt.get("status")
                     if wamid and status_type in ("delivered", "read", "failed"):
-                        background_tasks.add_task(_update_broadcast_delivery, wamid, status_type)
+                        error_detail = None
+                        if status_type == "failed":
+                            errors = status_evt.get("errors", [])
+                            if errors:
+                                error_detail = errors[0].get("title") or errors[0].get("message")
+                        background_tasks.add_task(_update_message_delivery, wamid, status_type, error_detail)
 
                 messages = value.get("messages", [])
                 for msg in messages:

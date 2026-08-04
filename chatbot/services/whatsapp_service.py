@@ -61,10 +61,10 @@ async def send_whatsapp_message(
     return wamid
 
 
-def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None):
+def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None, delivery_status: str = "sent"):
     try:
         db = get_db()
-        db.add(Message(session_id=session_id, phone=normalize_phone(phone), name=name, direction=direction, content=content, wamid=wamid))
+        db.add(Message(session_id=session_id, phone=normalize_phone(phone), name=name, direction=direction, content=content, wamid=wamid, delivery_status=delivery_status))
         db.commit()
         db.close()
     except Exception as e:

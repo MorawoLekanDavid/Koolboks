@@ -279,6 +279,8 @@ async def get_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
                     "content": m.content,
                     "timestamp": m.created_at.isoformat(),
                     "name": m.name,
+                    "delivery_status": m.delivery_status if m.direction == "outbound" else None,
+                    "delivery_error": m.delivery_error,
                 }
                 for m in rows
             ]
