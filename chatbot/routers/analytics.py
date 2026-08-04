@@ -109,7 +109,16 @@ async def broadcast_overview(
 ):
     """Aggregate funnel across every template send — bulk broadcasts and
     one-off sends from a single conversation alike. Sourced from `messages`,
-    same as /broadcast-by-template, so the two sections never disagree."""
+    same as /broadcast-by-template, so the two sections never disagree.
+
+    Delivered/read/failed can only be known for messages with a captured
+    wamid (delivery-status tracking was added retroactively — sends from
+    before that have no wamid and no way to ever learn their real status).
+    Counting an untracked message as "not delivered" is wrong — it can make
+    delivered look far lower than responded, which is impossible if it's
+    actually measuring real failures. So those rates are computed only over
+    the trackable subset, and untracked count is surfaced separately instead
+    of silently folded into "not delivered"."""
     def _fetch():
         db = get_db()
         try:
@@ -125,28 +134,32 @@ async def broadcast_overview(
             row = db.execute(text(f"""
                 SELECT
                     COUNT(*) AS total,
-                    COUNT(CASE WHEN m.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
-                    COUNT(CASE WHEN m.delivery_status = 'read' THEN 1 END) AS read_count,
+                    COUNT(m.wamid) AS trackable,
+                    COUNT(CASE WHEN m.wamid IS NOT NULL AND m.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
+                    COUNT(CASE WHEN m.wamid IS NOT NULL AND m.delivery_status = 'read' THEN 1 END) AS read_count,
                     COUNT(CASE WHEN EXISTS (
                         SELECT 1 FROM messages mi
                         WHERE mi.phone = m.phone AND mi.direction = 'inbound' AND mi.created_at > m.created_at
                     ) THEN 1 END) AS responded,
-                    COUNT(CASE WHEN m.delivery_status = 'failed' THEN 1 END) AS failed
+                    COUNT(CASE WHEN m.wamid IS NOT NULL AND m.delivery_status = 'failed' THEN 1 END) AS failed
                 FROM messages m
                 {where_sql}
             """), params).first()
             total = row.total or 0
+            trackable = row.trackable or 0
             delivered = row.delivered or 0
             read_c = row.read_count or 0
             responded = row.responded or 0
             failed = row.failed or 0
             return {
                 "total_sent": total,
+                "trackable": trackable,
+                "untracked": max(0, total - trackable),
                 "delivered": delivered,
                 "read": read_c,
                 "responded": responded,
                 "failed": failed,
-                "pending": max(0, total - delivered - failed),
+                "pending": max(0, trackable - delivered - failed),
             }
         finally:
             db.close()
@@ -201,7 +214,13 @@ async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("anal
     """Response stats grouped by template name, across every send path — bulk
     broadcasts and one-off sends from a single conversation alike. Sourced from
     `messages` (not broadcast_recipients) so a template sent directly from a
-    conversation shows up here too, not just campaigns."""
+    conversation shows up here too, not just campaigns.
+
+    Delivery/read/failed rates are computed only over messages with a wamid
+    (delivery tracking is only possible for those) — see broadcast_overview
+    for why: folding untracked sends into "not delivered" produces a
+    delivery rate that can look lower than the response rate, which is
+    nonsensical when it's meant to represent actual failures."""
     def _fetch():
         db = get_db()
         try:
@@ -209,9 +228,10 @@ async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("anal
                 SELECT
                     substring(m.content from '\[Template: ([^\]]+)\]') AS template_name,
                     COUNT(*) AS total_sent,
-                    COUNT(CASE WHEN m.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
-                    COUNT(CASE WHEN m.delivery_status = 'read' THEN 1 END) AS read_count,
-                    COUNT(CASE WHEN m.delivery_status = 'failed' THEN 1 END) AS failed,
+                    COUNT(m.wamid) AS trackable,
+                    COUNT(CASE WHEN m.wamid IS NOT NULL AND m.delivery_status IN ('delivered','read') THEN 1 END) AS delivered,
+                    COUNT(CASE WHEN m.wamid IS NOT NULL AND m.delivery_status = 'read' THEN 1 END) AS read_count,
+                    COUNT(CASE WHEN m.wamid IS NOT NULL AND m.delivery_status = 'failed' THEN 1 END) AS failed,
                     COUNT(CASE WHEN EXISTS (
                         SELECT 1 FROM messages mi
                         WHERE mi.phone = m.phone AND mi.direction = 'inbound' AND mi.created_at > m.created_at
@@ -225,12 +245,13 @@ async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("anal
                 {
                     "template": r.template_name,
                     "total_sent": r.total_sent,
+                    "trackable": r.trackable,
                     "delivered": r.delivered,
                     "read": r.read_count,
                     "responded": r.responded,
                     "failed": r.failed,
                     "response_rate": round(r.responded / r.total_sent * 100) if r.total_sent else 0,
-                    "delivery_rate": round(r.delivered / r.total_sent * 100) if r.total_sent else 0,
+                    "delivery_rate": round(r.delivered / r.trackable * 100) if r.trackable else None,
                 }
                 for r in rows
             ]

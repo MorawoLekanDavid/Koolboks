@@ -5348,9 +5348,10 @@ async function loadBCOverview(){
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const d=await r.json();
     const total=d.total_sent||0;
-    const pctN=n=>total?Math.round(n/total*100):0;
-    const fBar=(label,n,color)=>{
-      const p=pctN(n);
+    const trackable=d.trackable||0;
+    const untracked=d.untracked||0;
+    const fBar=(label,n,base,color)=>{
+      const p=base?Math.round(n/base*100):0;
       return`<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
           <span style="font-size:13px;font-weight:600;color:var(--g700)">${label}</span>
@@ -5364,17 +5365,18 @@ async function loadBCOverview(){
       </div>`;
     };
     el.innerHTML=`
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
         <div class="stat-c"><div class="stat-n">${total.toLocaleString()}</div><div class="stat-l">Total Sent</div></div>
         <div class="stat-c"><div class="stat-n" style="color:#3b82f6">${d.delivered.toLocaleString()}</div><div class="stat-l">Delivered</div></div>
         <div class="stat-c"><div class="stat-n" style="color:#8b5cf6">${d.read.toLocaleString()}</div><div class="stat-l">Read</div></div>
         <div class="stat-c"><div class="stat-n" style="color:var(--orange)">${d.responded.toLocaleString()}</div><div class="stat-l">Responded</div></div>
         <div class="stat-c"><div class="stat-n" style="color:#ef4444">${d.failed.toLocaleString()}</div><div class="stat-l">Failed</div></div>
       </div>
-      ${fBar('📬 Delivered',d.delivered,'#3b82f6')}
-      ${fBar('👁 Read',d.read,'#8b5cf6')}
-      ${fBar('💬 Responded',d.responded,'var(--orange)')}
-      ${fBar('❌ Failed',d.failed,'#ef4444')}
+      ${untracked?`<p style="font-size:11px;color:var(--g400);margin:0 0 16px">ⓘ Delivered/Read/Failed cover ${trackable.toLocaleString()} of ${total.toLocaleString()} sends — the other ${untracked.toLocaleString()} were sent before delivery tracking existed and have no status data (not the same as "not delivered"). Responded is unaffected — it's checked independently for every send.</p>`:''}
+      ${fBar('📬 Delivered',d.delivered,trackable,'#3b82f6')}
+      ${fBar('👁 Read',d.read,trackable,'#8b5cf6')}
+      ${fBar('💬 Responded',d.responded,total,'var(--orange)')}
+      ${fBar('❌ Failed',d.failed,trackable,'#ef4444')}
     `;
   }catch(e){const el2=document.getElementById('bcOverviewFunnel');if(el2)el2.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load overview</p>';}
 }
@@ -5437,7 +5439,7 @@ async function loadBCTemplates(){
         <div style="height:10px;background:var(--g100);border-radius:99px;overflow:hidden;margin-bottom:5px">
           <div style="height:100%;width:${barW}%;background:${clr};border-radius:99px;transition:width .5s ease;min-width:${t.response_rate>0?'3px':'0'}"></div>
         </div>
-        <div style="font-size:11px;color:var(--g400)">${t.total_sent} sent &middot; ${t.delivered} delivered &middot; ${t.responded} replied &middot; ${t.delivery_rate}% delivery rate${t.failed?` &middot; <span style="color:var(--red)">${t.failed} failed</span>`:''}</div>
+        <div style="font-size:11px;color:var(--g400)">${t.total_sent} sent &middot; ${t.responded} replied${t.delivery_rate===null?' &middot; no delivery tracking (sent before tracking existed)':` &middot; ${t.delivered} delivered (${t.delivery_rate}% of ${t.trackable} tracked)`}${t.failed?` &middot; <span style="color:var(--red)">${t.failed} failed</span>`:''}</div>
       </div>`;
     }).join('');
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
