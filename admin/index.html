@@ -1405,7 +1405,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <h3>Team Members</h3>
       <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add members. Only the super admin can promote or demote roles.</p>
       <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
-      <div class="add-agent-form" style="margin-top:18px">
+      <div class="add-agent-form" id="addAgentForm" style="margin-top:18px;display:none">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
         <input type="email"    id="newAgentEmail"    placeholder="Email address"/>
         <input type="password" id="newAgentPassword" placeholder="Password"/>
@@ -2043,7 +2043,7 @@ function showApp(){
   requestNotificationPermission();isFirstLoad=true;
   convOffset=0;loadConversations();loadAllTags();
   // Pre-load agent list so conversation owner dropdown is ready immediately
-  fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`).then(r=>r.ok?r.json():[]).then(a=>{allAgents=a;}).catch(()=>{});
+  fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`).then(r=>r.ok?r.json():[]).then(a=>{allAgents=a;}).catch(()=>{});
   pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
@@ -3297,7 +3297,7 @@ async function loadLeads(){
     const[ir,dr,ar]=await Promise.all([
       fetch(`/admin/leads?${p}`),
       fetch(`/admin/leads/dropoffs?${p}`),
-      allAgents.length?null:fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`),
+      allAgents.length?null:fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`),
     ]);
     interestedLeads=ir.ok?await ir.json():[];
     dropoffLeads=dr.ok?await dr.json():[];
@@ -3593,13 +3593,18 @@ async function loadAgentList(){
     const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`);if(!r.ok)return;
     const agents=await r.json();
     const isSuperAdmin=agentRole==='super_admin';
+    const viewerIsAdmin=agentRole==='admin'||isSuperAdmin;
+    // Adding/removing/resetting passwords stays admin-only even if a role has
+    // been granted "team" permission — that toggle only unlocks viewing the
+    // roster, not managing other people's accounts.
+    document.getElementById('addAgentForm').style.display=viewerIsAdmin?'':'none';
     document.getElementById('agentTableBody').innerHTML=agents.length
       ?agents.map(a=>{
           const _rl={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success','customer_success_agent':'Customer Success','sales_agent':'Telesales','telesales_agent':'Telesales'};
           const roleBadge=`<span class="role-badge ${a.role}">${_rl[a.role]||a.role}</span>`;
           const isAgentRole=a.role==='agent'||a.role==='customer_success_agent';
           const isTelRole=a.role==='telesales_agent'||a.role==='sales_agent';
-          const canManage=(a.role!=='super_admin')&&(isSuperAdmin||(isAgentRole||isTelRole));
+          const canManage=viewerIsAdmin&&(a.role!=='super_admin')&&(isSuperAdmin||(isAgentRole||isTelRole));
           const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
           const rn=(a.name||'').replace(/'/g,"\\'");
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';

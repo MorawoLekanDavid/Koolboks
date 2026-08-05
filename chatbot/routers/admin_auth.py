@@ -13,6 +13,7 @@ from chatbot.core.security import hash_password, verify_password
 from chatbot.database import get_db
 from chatbot.dependencies import AGENT_SESSION_TTL, get_admin_ctx, require_admin, require_super_admin
 from chatbot.models import Agent
+from chatbot.routers.permissions import require_tab_permission
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
@@ -97,13 +98,29 @@ class AgentCreate(BaseModel):
 
 
 @router.get("/agents")
-async def list_agents(ctx: dict = Depends(require_admin)):
+async def list_agents(ctx: dict = Depends(require_tab_permission("team"))):
     def _fetch():
         db = get_db()
         try:
             agents = db.query(Agent).order_by(Agent.created_at.asc()).all()
             return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
                      "created_at": a.created_at.isoformat() if a.created_at else None} for a in agents]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+@router.get("/agents/directory")
+async def agents_directory(ctx: dict = Depends(get_admin_ctx)):
+    """Minimal agent list (name/email/role only) for every logged-in user,
+    regardless of "team" permission — used to populate "assign this
+    conversation/lead to..." dropdowns, which are a normal action available
+    to any agent, not a Team-tab management capability."""
+    def _fetch():
+        db = get_db()
+        try:
+            agents = db.query(Agent).order_by(Agent.name.asc()).all()
+            return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role} for a in agents]
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
