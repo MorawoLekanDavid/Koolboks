@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
-from chatbot.models import RolePermission
+from chatbot.models import Agent, ConversationOwner, RolePermission
+from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/role-permissions", tags=["permissions"])
 
@@ -85,14 +86,78 @@ def require_tab_permission(tab: str):
     return _check
 
 
-async def require_conversation_write(ctx: dict = Depends(get_admin_ctx)) -> dict:
-    """Blocks READ_ONLY_CONVERSATION_ROLES (bi_analyst) from any endpoint that
-    mutates a conversation — reply, handoff, tag, template send, reassign.
-    Conversations itself has no tab permission gate (always visible to
-    everyone), so this is enforced by role rather than by the tab matrix."""
-    if ctx.get("role") in READ_ONLY_CONVERSATION_ROLES:
-        raise HTTPException(403, "Your role has read-only access to conversations")
-    return ctx
+# Roles that see every conversation regardless of assignment — bi_analyst is
+# read-only (see READ_ONLY_CONVERSATION_ROLES) but still needs full visibility
+# to do reporting/audit work.
+CONVERSATION_UNRESTRICTED_ROLES = ("admin", "super_admin", "bi_analyst")
+
+
+def _dept_emails(db, agent_id: Optional[int]) -> set:
+    if not agent_id:
+        return set()
+    me = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not me or me.department_id is None:
+        return set()
+    return {a.email for a in db.query(Agent).filter(Agent.department_id == me.department_id).all()}
+
+
+def get_conversation_scope(db, ctx: dict) -> dict:
+    """Computes what a role is allowed to see in Conversations, once per
+    request — used both to filter the list and to gate a single phone.
+    - admin/super_admin/bi_analyst: unrestricted.
+    - team_lead: their own department's assigned chats, plus anything
+      unassigned (so a Team Lead can hand out new chats, per the "only Team
+      Lead and Admin can see/hand out unassigned chats" rule).
+    - everyone else: only conversations assigned to them personally —
+      unassigned chats are invisible until routing or a Team Lead assigns one.
+    """
+    role = ctx.get("role")
+    if role in CONVERSATION_UNRESTRICTED_ROLES:
+        return {"unrestricted": True}
+    if role == "team_lead":
+        return {"unrestricted": False, "team_lead": True, "dept_emails": _dept_emails(db, ctx.get("agent_id")), "include_unassigned": True}
+    return {"unrestricted": False, "team_lead": False, "own_email": ctx.get("email"), "include_unassigned": False}
+
+
+def _phone_allowed(db, scope: dict, phone: str, claim: bool = False) -> bool:
+    if scope["unrestricted"]:
+        return True
+    norm = normalize_phone(phone)
+    owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+    if not owner:
+        # No owner yet: normally only Team Lead/Admin can see/claim an
+        # unassigned chat (so it doesn't get lost among an agent's own
+        # inbox). But `claim=True` is for actions that ARE the claim —
+        # proactively messaging a lead for the first time — where forcing
+        # every agent's outreach through a Team Lead first would defeat
+        # the point of letting them work their own leads.
+        return scope["include_unassigned"] or claim
+    if scope["team_lead"]:
+        return owner.owner_email in scope["dept_emails"]
+    return owner.owner_email == scope["own_email"]
+
+
+def conversation_guard(write: bool = False, claim: bool = False):
+    """Dependency factory for any endpoint keyed by a {phone} path param.
+    write=True additionally blocks READ_ONLY_CONVERSATION_ROLES (bi_analyst)
+    — they can view any conversation but never send/take-over/tag/reassign.
+    claim=True allows touching a phone with no owner yet regardless of role
+    — see _phone_allowed."""
+    async def _check(phone: str, ctx: dict = Depends(get_admin_ctx)) -> dict:
+        if write and ctx.get("role") in READ_ONLY_CONVERSATION_ROLES:
+            raise HTTPException(403, "Your role has read-only access to conversations")
+
+        def _fetch():
+            db = get_db()
+            try:
+                scope = get_conversation_scope(db, ctx)
+                return _phone_allowed(db, scope, phone, claim=claim)
+            finally:
+                db.close()
+        if not await run_in_threadpool(_fetch):
+            raise HTTPException(403, "You don't have access to this conversation")
+        return ctx
+    return _check
 
 
 def require_any_tab_permission(tabs: list[str]):

@@ -12,7 +12,7 @@ from chatbot.config import GROQ_MODEL, log
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
 from chatbot.models import ConversationTag, Message, Tag
-from chatbot.routers.permissions import require_conversation_write
+from chatbot.routers.permissions import conversation_guard
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
 
@@ -105,7 +105,7 @@ async def delete_tag(tag_id: int, ctx: dict = Depends(require_admin)):
 # ── Conversation tagging (all agents) ────────────────────────────────────────
 
 @router.get("/conversations/{phone}/tags")
-async def get_conversation_tags(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def get_conversation_tags(phone: str, ctx: dict = Depends(conversation_guard())):
     def _fetch():
         db = get_db()
         try:
@@ -126,7 +126,7 @@ async def get_conversation_tags(phone: str, ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.post("/conversations/{phone}/tags/{tag_id}")
-async def add_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(require_conversation_write)):
+async def add_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(conversation_guard(write=True))):
     agent = ctx.get("name", "Agent")
 
     def _add():
@@ -154,7 +154,7 @@ async def add_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(requ
 
 
 @router.delete("/conversations/{phone}/tags/{tag_id}")
-async def remove_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(require_conversation_write)):
+async def remove_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(conversation_guard(write=True))):
     def _remove():
         db = get_db()
         try:
@@ -177,7 +177,7 @@ async def remove_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(r
 # ── AI auto-tagging ───────────────────────────────────────────────────────────
 
 @router.post("/conversations/{phone}/auto-tag")
-async def auto_tag_conversation(phone: str, ctx: dict = Depends(require_conversation_write)):
+async def auto_tag_conversation(phone: str, ctx: dict = Depends(conversation_guard(write=True))):
     def _fetch_data():
         db = get_db()
         try:

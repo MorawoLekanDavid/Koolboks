@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 
 from chatbot.config import (
     WHATSAPP_API_TOKEN,
@@ -18,7 +18,7 @@ from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, Tag
-from chatbot.routers.permissions import require_conversation_write, require_tab_permission
+from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -35,6 +35,24 @@ async def list_conversations(
     def _db_fetch():
         db = get_db()
         try:
+            scope = get_conversation_scope(db, ctx)
+            scope_filter = None
+            count_filter = None
+            if not scope["unrestricted"]:
+                owned_by_dept_or_self = exists(
+                    select(ConversationOwner.id).where(
+                        ConversationOwner.phone == Message.phone,
+                        ConversationOwner.owner_email.in_(scope["dept_emails"]) if scope["team_lead"]
+                        else ConversationOwner.owner_email == scope["own_email"],
+                    )
+                )
+                if scope["include_unassigned"]:
+                    has_any_owner = exists(select(ConversationOwner.id).where(ConversationOwner.phone == Message.phone))
+                    scope_filter = or_(owned_by_dept_or_self, ~has_any_owner)
+                else:
+                    scope_filter = owned_by_dept_or_self
+                count_filter = scope_filter
+
             name_agg = func.max(
                 case((Message.direction == "inbound", Message.name), else_=None)
             )
@@ -44,6 +62,8 @@ async def list_conversations(
                 func.max(Message.created_at).label("last_message"),
                 func.count(Message.id).label("total"),
             ).group_by(Message.phone)
+            if scope_filter is not None:
+                base_select = base_select.where(scope_filter)
 
             if q and q.strip():
                 qp = f"%{q.strip()}%"
@@ -66,9 +86,10 @@ async def list_conversations(
                         rows.append(r)
                 total = len(rows)
             else:
-                total = db.execute(
-                    select(func.count(func.distinct(Message.phone)))
-                ).scalar() or 0
+                count_q = select(func.count(func.distinct(Message.phone)))
+                if count_filter is not None:
+                    count_q = count_q.where(count_filter)
+                total = db.execute(count_q).scalar() or 0
                 rows = db.execute(
                     base_select
                     .order_by(func.max(Message.created_at).desc())
@@ -260,7 +281,7 @@ async def list_conversations(
 
 
 @router.get("/conversations/{phone}")
-async def get_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def get_conversation(phone: str, ctx: dict = Depends(conversation_guard())):
     def _fetch():
         db = get_db()
         try:
@@ -292,7 +313,7 @@ async def get_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.post("/conversations/{phone}/mark-read")
-async def mark_conversation_read(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def mark_conversation_read(phone: str, ctx: dict = Depends(conversation_guard())):
     if redis_client.client:
         await redis_client.client.set(
             f"koolbuy:conv_read:{phone}", datetime.utcnow().isoformat(), ex=86400 * 7
@@ -389,7 +410,7 @@ class AgentReply(BaseModel):
 
 
 @router.post("/conversations/{phone}/reply")
-async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(require_conversation_write)):
+async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversation_guard(write=True, claim=True))):
     session_id = f"wa_{phone}"
     display_name = ctx.get("name") or body.agent_name or "Agent"
 
@@ -440,7 +461,7 @@ class OwnerUpdate(BaseModel):
 
 
 @router.patch("/conversations/{phone}/owner")
-async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(require_conversation_write)):
+async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(conversation_guard(write=True))):
     def _upsert():
         db = get_db()
         try:
@@ -475,7 +496,7 @@ class HandoffRequest(BaseModel):
 async def toggle_handoff(
     phone: str,
     body: HandoffRequest = HandoffRequest(),
-    ctx: dict = Depends(require_conversation_write),
+    ctx: dict = Depends(conversation_guard(write=True, claim=True)),
 ):
     if not redis_client.client:
         raise HTTPException(status_code=503, detail="Redis unavailable")

@@ -22,7 +22,7 @@ from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import require_admin
 from chatbot.models import BroadcastCampaign, BroadcastRecipient, ConversationOwner
-from chatbot.routers.permissions import require_tab_permission
+from chatbot.routers.permissions import conversation_guard, require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db
 from chatbot.utils.phone import normalize_phone
 from fastapi.concurrency import run_in_threadpool
@@ -110,7 +110,11 @@ async def delete_template(template_name: str, ctx: dict = Depends(require_admin)
 
 
 @router.post("/conversations/{phone}/send-template")
-async def send_template_to_phone(phone: str, body: SendTemplateRequest, ctx: dict = Depends(require_tab_permission("templates"))):
+async def send_template_to_phone(
+    phone: str, body: SendTemplateRequest,
+    ctx: dict = Depends(require_tab_permission("templates")),
+    _access: dict = Depends(conversation_guard(write=True, claim=True)),
+):
     norm = normalize_phone(phone)
     wa_to = norm.lstrip('+')
     payload = {
