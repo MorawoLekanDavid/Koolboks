@@ -37,11 +37,11 @@ DEFAULTS: Dict[str, Dict[str, bool]] = {
     },
     "customer_success_agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
-        "analytics": False, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
+        "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
     },
     "telesales_agent": {
         "leads": False, "contacts": False, "products": False, "canned": False,
-        "analytics": False, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
+        "analytics": True, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
     },
     "bi_analyst": {
         "leads": False, "contacts": False, "products": False, "canned": False,
@@ -117,6 +117,45 @@ def get_conversation_scope(db, ctx: dict) -> dict:
     if role == "team_lead":
         return {"unrestricted": False, "team_lead": True, "dept_emails": _dept_emails(db, ctx.get("agent_id")), "include_unassigned": True}
     return {"unrestricted": False, "team_lead": False, "own_email": ctx.get("email"), "include_unassigned": False}
+
+
+# Roles that see every agent's numbers in the Analytics Console, unscoped.
+ANALYTICS_UNRESTRICTED_ROLES = ("admin", "super_admin", "bi_analyst")
+
+
+def get_analytics_scope(db, ctx: dict) -> dict:
+    """Computes what a role is allowed to see in the Analytics Console's
+    agent-scoped tabs (Agent Performance, Shift & Login — the only two with
+    a per-agent breakdown in the data).
+    - admin/super_admin/bi_analyst: unrestricted (org-wide).
+    - team_lead: their own department's agents only.
+    - everyone else: themselves only.
+    Tabs with no agent dimension at all (Overview, AI Performance, Traffic,
+    Campaigns) are gated separately by require_org_wide_analytics below —
+    this scope has nothing to filter them by."""
+    role = ctx.get("role")
+    if role in ANALYTICS_UNRESTRICTED_ROLES:
+        return {"unrestricted": True}
+    if role == "team_lead":
+        agent_id = ctx.get("agent_id")
+        me = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
+        if me and me.department_id is not None:
+            dept_agents = db.query(Agent).filter(Agent.department_id == me.department_id).all()
+            return {"unrestricted": False, "agent_ids": {a.id for a in dept_agents}, "agent_names": {a.name for a in dept_agents}}
+        return {"unrestricted": False, "agent_ids": set(), "agent_names": set()}
+    agent_id = ctx.get("agent_id")
+    name = ctx.get("name")
+    return {"unrestricted": False, "agent_ids": {agent_id} if agent_id else set(), "agent_names": {name} if name else set()}
+
+
+async def require_org_wide_analytics(ctx: dict = Depends(require_tab_permission("analytics"))) -> dict:
+    """Gates the Analytics Console tabs that have no per-agent breakdown
+    (Overview, AI Performance, Traffic Telemetry, Campaigns) — there's no
+    way to scope company-wide numbers down to "my own", so regular agents
+    don't get an unscoped view of them at all."""
+    if ctx.get("role") not in ANALYTICS_UNRESTRICTED_ROLES and ctx.get("role") != "team_lead":
+        raise HTTPException(403, "Your role only has access to your own analytics")
+    return ctx
 
 
 def _phone_allowed(db, scope: dict, phone: str, claim: bool = False) -> bool:

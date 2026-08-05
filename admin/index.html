@@ -1233,6 +1233,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="aiPerf" onclick="switchAnalyticsSubTab('aiPerf')">AI Performance</button>
       <button class="bulk-tab" data-subtab="traffic" onclick="switchAnalyticsSubTab('traffic')">Traffic</button>
       <button class="bulk-tab" data-subtab="campaigns" onclick="switchAnalyticsSubTab('campaigns')">Campaigns</button>
+      <button class="bulk-tab" data-subtab="retention" onclick="switchAnalyticsSubTab('retention')">Retention</button>
     </div>
 
     <!-- Overview panel: Lead Funnel + Product Recommendations -->
@@ -1377,6 +1378,23 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <div id="bcTemplateChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Customer Retention -->
+    <div id="anPanel-retention" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h3 style="margin:0 0 2px">🔁 Customer Retention</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">First-time vs. returning customers — a "return" is a new conversation starting 24h+ after the last one from that number</p>
+        </div>
+
+        <div class="stat-cards-row" id="retentionKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Daily First-Time vs. Returning</p>
+        <div id="retentionTrendChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
       </div>
     </div>
   </div>
@@ -3950,11 +3968,16 @@ async function runAutoAssign(){
 let _anActiveSubtab='overview';
 let allDepartments=[];
 let _anCharts={};
-const AN_SUBTABS=['overview','shift','agentPerf','aiPerf','traffic','campaigns'];
+const AN_SUBTABS=['overview','shift','agentPerf','aiPerf','traffic','campaigns','retention'];
 // Tabs whose Agent/Department dropdowns are real filters — the rest (AI
-// Performance, Traffic, Campaigns) run on tables with no agent/department
-// dimension, so those filters are greyed out there rather than faked.
+// Performance, Traffic, Campaigns, Retention) run on tables with no agent/
+// department dimension, so those filters are greyed out there rather than faked.
 const AN_DIMENSIONAL_SUBTABS=['shift','agentPerf'];
+// Tabs with no per-agent breakdown — hidden entirely for regular agents
+// (server-enforced too, via require_org_wide_analytics), since there's no
+// way to scope a company-wide number down to "my own".
+const AN_ORG_WIDE_SUBTABS=['overview','aiPerf','traffic','campaigns','retention'];
+const AN_AGENT_SCOPED_ROLES=['customer_success_agent','telesales_agent'];
 
 function _anDrawChart(canvasId,config){
   const el=document.getElementById(canvasId);
@@ -4023,6 +4046,41 @@ function _anPopulateDeptFilter(){
   sel.value=cur;
 }
 
+function _anApplyRoleVisibility(){
+  const isAgentScoped=AN_AGENT_SCOPED_ROLES.includes(agentRole);
+  document.querySelectorAll('.an-subnav .bulk-tab').forEach(b=>{
+    b.classList.toggle('hidden',isAgentScoped&&AN_ORG_WIDE_SUBTABS.includes(b.dataset.subtab));
+  });
+
+  const agentGroup=document.getElementById('anAgentFilter')?.closest('.an-filter-group');
+  const deptGroup=document.getElementById('anDeptFilter')?.closest('.an-filter-group');
+  if(isAgentScoped){
+    // A plain agent only ever sees their own data — the filter dropdowns
+    // have nothing left to filter.
+    agentGroup?.classList.add('hidden');
+    deptGroup?.classList.add('hidden');
+  } else if(agentRole==='team_lead'){
+    deptGroup?.classList.add('hidden');  // fixed to their own department
+    const sel=document.getElementById('anAgentFilter');
+    if(sel&&myDepartmentId){
+      const teamAgents=(allAgents||[]).filter(a=>a.department_id===myDepartmentId);
+      const cur=sel.value;
+      sel.innerHTML='<option value="">My Team</option>'+teamAgents.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+      sel.value=cur;
+    }
+    agentGroup?.classList.remove('hidden');
+  } else {
+    agentGroup?.classList.remove('hidden');
+    deptGroup?.classList.remove('hidden');
+  }
+
+  // If the currently active sub-tab just got hidden (role changed, or first
+  // load for an agent-scoped role), land somewhere they can actually see.
+  if(isAgentScoped&&AN_ORG_WIDE_SUBTABS.includes(_anActiveSubtab)){
+    _anActiveSubtab='agentPerf';
+  }
+}
+
 async function initAnalyticsConsole(){
   if(!allAgents.length){
     try{const ar=await fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`);if(ar.ok)allAgents=await ar.json();}catch(e){}
@@ -4032,6 +4090,7 @@ async function initAnalyticsConsole(){
     try{const dr=await fetch(`/admin/departments/directory?key=${encodeURIComponent(adminKey)}`);if(dr.ok)allDepartments=await dr.json();}catch(e){}
   }
   _anPopulateDeptFilter();
+  _anApplyRoleVisibility();
   switchAnalyticsSubTab(_anActiveSubtab);
 }
 
@@ -4058,6 +4117,7 @@ function switchAnalyticsSubTab(name){
     loadCampaignsTab();
     bcPollInterval=setInterval(loadCampaignsTab,15000);
   }
+  if(name==='retention')loadCustomerRetentionTab();
 }
 // ── End Analytics Console scaffold ─────────────────────────────────────────
 
@@ -6539,6 +6599,43 @@ async function loadCampaignsTemplateChart(){
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
 }
 // ── End Campaigns & Templates ─────────────────────────────────────────────────
+
+// ── Customer Retention (Analytics Console Tab 6) ──────────────────────────────
+async function loadCustomerRetentionTab(){
+  const kpiEl=document.getElementById('retentionKpiCards');
+  const trendEl=document.getElementById('retentionTrendChart');
+  if(!kpiEl)return;
+  kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/analytics/customer-retention?${_anQS()}`);
+    if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';trendEl.innerHTML='';return;}
+    const d=await r.json();
+    const k=d.kpis||{};
+    kpiEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n">${(k.first_time||0).toLocaleString()}</div><div class="stat-l">First-Time Leads</div></div>
+      <div class="stat-c"><div class="stat-n">${(k.returning||0).toLocaleString()}</div><div class="stat-l">Returning Customers</div></div>
+      <div class="stat-c"><div class="stat-n">${(k.total_unique_customers||0).toLocaleString()}</div><div class="stat-l">Total Unique Customers</div></div>
+    `;
+
+    if(!d.trend||!d.trend.length){
+      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
+    } else {
+      trendEl.innerHTML='<canvas id="retentionTrendCanvas" height="240"></canvas>';
+      _anDrawChart('retentionTrendCanvas',{
+        type:'bar',
+        data:{
+          labels:d.trend.map(t=>t.date.slice(5)),
+          datasets:[
+            {label:'First-Time',data:d.trend.map(t=>t.first_time),backgroundColor:'#FF6B00'},
+            {label:'Returning',data:d.trend.map(t=>t.returning),backgroundColor:'#334155'},
+          ],
+        },
+        options:{scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{precision:0}}},plugins:{legend:{position:'bottom'}}},
+      });
+    }
+  }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+// ── End Customer Retention ─────────────────────────────────────────────────────
 
 // ── Chat & Traffic Telemetry (Analytics Console Tab 4) ────────────────────────
 async function loadTrafficTab(){

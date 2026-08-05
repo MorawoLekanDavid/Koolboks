@@ -6,7 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, case, func, select, text
 
 from chatbot.database import get_db
-from chatbot.routers.permissions import require_tab_permission
+from chatbot.routers.permissions import get_analytics_scope, require_org_wide_analytics, require_tab_permission
 from chatbot.models import Agent, AgentHeartbeatLog, AgentLoginEvent, ConversationScore, Department, HandoffEvent, Lead, Message
 from chatbot.services.presence_service import HEARTBEAT_TTL
 from chatbot.utils.phone import normalize_phone
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/admin/analytics", tags=["analytics"])
 async def conversations_handled(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_tab_permission("analytics")),
+    ctx: dict = Depends(require_org_wide_analytics),
 ):
     def _fetch():
         db = get_db()
@@ -53,7 +53,7 @@ async def conversations_handled(
 async def agent_handoffs(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_tab_permission("analytics")),
+    ctx: dict = Depends(require_org_wide_analytics),
 ):
     def _fetch():
         db = get_db()
@@ -80,7 +80,7 @@ async def agent_handoffs(
 
 
 @router.get("/product-recommendations")
-async def product_recommendations(ctx: dict = Depends(require_tab_permission("analytics"))):
+async def product_recommendations(ctx: dict = Depends(require_org_wide_analytics)):
     def _fetch():
         db = get_db()
         try:
@@ -106,7 +106,7 @@ async def product_recommendations(ctx: dict = Depends(require_tab_permission("an
 async def broadcast_overview(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_tab_permission("analytics")),
+    ctx: dict = Depends(require_org_wide_analytics),
 ):
     """Aggregate funnel across every template send — bulk broadcasts and
     one-off sends from a single conversation alike. Sourced from `messages`,
@@ -170,7 +170,7 @@ async def broadcast_overview(
 
 
 @router.get("/broadcast-campaigns")
-async def broadcast_campaigns_list(ctx: dict = Depends(require_tab_permission("analytics"))):
+async def broadcast_campaigns_list(ctx: dict = Depends(require_org_wide_analytics)):
     def _fetch():
         db = get_db()
         try:
@@ -213,7 +213,7 @@ async def broadcast_campaigns_list(ctx: dict = Depends(require_tab_permission("a
 
 
 @router.get("/broadcast-by-template")
-async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("analytics"))):
+async def broadcast_by_template(ctx: dict = Depends(require_org_wide_analytics)):
     """Response stats grouped by template name, across every send path — bulk
     broadcasts and one-off sends from a single conversation alike. Sourced from
     `messages` (not broadcast_recipients) so a template sent directly from a
@@ -264,7 +264,7 @@ async def broadcast_by_template(ctx: dict = Depends(require_tab_permission("anal
 
 
 @router.get("/lead-funnel")
-async def lead_funnel(ctx: dict = Depends(require_tab_permission("analytics"))):
+async def lead_funnel(ctx: dict = Depends(require_org_wide_analytics)):
     def _fetch():
         db = get_db()
         try:
@@ -298,7 +298,7 @@ async def lead_funnel(ctx: dict = Depends(require_tab_permission("analytics"))):
 async def conversation_quality(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_tab_permission("analytics")),
+    ctx: dict = Depends(require_org_wide_analytics),
 ):
     def _fetch():
         db = get_db()
@@ -404,7 +404,7 @@ async def conversation_quality(
 async def traffic_telemetry(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    ctx: dict = Depends(require_tab_permission("analytics")),
+    ctx: dict = Depends(require_org_wide_analytics),
 ):
     def _fetch():
         db = get_db()
@@ -487,6 +487,7 @@ async def agent_performance(
     def _fetch():
         db = get_db()
         try:
+            scope = get_analytics_scope(db, ctx)
             agents_by_name = {a.name: a for a in db.query(Agent).all()}
             allowed_names = None
             if agent_id:
@@ -494,6 +495,11 @@ async def agent_performance(
                 allowed_names = {target.name} if target else set()
             elif department_id:
                 allowed_names = {a.name for a in db.query(Agent).filter(Agent.department_id == department_id).all()}
+
+            if not scope["unrestricted"]:
+                # Hard server-side boundary — query params can only narrow
+                # within the caller's own scope, never escape it.
+                allowed_names = scope["agent_names"] if allowed_names is None else (allowed_names & scope["agent_names"])
 
             hq = db.query(HandoffEvent)
             if date_from:
@@ -671,12 +677,18 @@ async def shift_tracker(
             day_end = day_start + timedelta(days=1) - timedelta(microseconds=1)
             now = datetime.utcnow()
 
+            scope = get_analytics_scope(db, ctx)
             agents_by_id = {a.id: a for a in db.query(Agent).all()}
             allowed_ids = None
             if agent_id:
                 allowed_ids = {agent_id}
             elif department_id:
                 allowed_ids = {a.id for a in agents_by_id.values() if a.department_id == department_id}
+
+            if not scope["unrestricted"]:
+                # Hard server-side boundary — query params can only narrow
+                # within the caller's own scope, never escape it.
+                allowed_ids = scope["agent_ids"] if allowed_ids is None else (allowed_ids & scope["agent_ids"])
 
             hb_q = db.query(AgentHeartbeatLog).filter(
                 AgentHeartbeatLog.logged_at >= day_start, AgentHeartbeatLog.logged_at <= day_end
@@ -780,6 +792,89 @@ async def shift_tracker(
                 },
                 "timeline": timeline,
                 "audit": audit,
+            }
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+# A gap of this many hours between two inbound messages from the same phone
+# marks the start of a new "session" — chosen to match FOLLOW_UP_HOURS, the
+# other place this app already draws the line between "still talking" and
+# "came back later," rather than the much shorter Redis CHAT_TTL (1h), which
+# is a technical cache expiry, not a meaningful customer-behavior boundary.
+RETURNING_CUSTOMER_GAP_HOURS = 24
+
+
+@router.get("/customer-retention")
+async def customer_retention(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ctx: dict = Depends(require_org_wide_analytics),
+):
+    """A phone's first-ever session is "first-time"; every session after a
+    RETURNING_CUSTOMER_GAP_HOURS-hour gap is "returning". Telling whether an
+    in-range session is truly that phone's first requires their full inbound
+    history, not just the filtered range, so this scans all inbound messages
+    rather than a date-bounded query."""
+    def _fetch():
+        db = get_db()
+        try:
+            rows = db.execute(
+                select(Message.phone, Message.created_at)
+                .where(Message.direction == "inbound")
+                .order_by(Message.phone, Message.created_at)
+            ).all()
+
+            range_start = datetime.fromisoformat(date_from) if date_from else None
+            range_end = datetime.fromisoformat(date_to + "T23:59:59") if date_to else None
+
+            def _in_range(ts):
+                return (range_start is None or ts >= range_start) and (range_end is None or ts <= range_end)
+
+            by_phone: dict = {}
+            for r in rows:
+                by_phone.setdefault(r.phone, []).append(r.created_at)
+
+            gap = timedelta(hours=RETURNING_CUSTOMER_GAP_HOURS)
+            first_time_count = 0
+            returning_count = 0
+            active_phones_in_range = set()
+            trend_map: dict = {}
+
+            for phone, timestamps in by_phone.items():
+                if any(_in_range(t) for t in timestamps):
+                    active_phones_in_range.add(phone)
+
+                session_starts = [timestamps[0]]
+                for prev, cur in zip(timestamps, timestamps[1:]):
+                    if cur - prev >= gap:
+                        session_starts.append(cur)
+
+                for i, start in enumerate(session_starts):
+                    if not _in_range(start):
+                        continue
+                    day = start.date().isoformat()
+                    bucket = trend_map.setdefault(day, {"first_time": 0, "returning": 0})
+                    if i == 0:
+                        first_time_count += 1
+                        bucket["first_time"] += 1
+                    else:
+                        returning_count += 1
+                        bucket["returning"] += 1
+
+            trend = [
+                {"date": d, "first_time": v["first_time"], "returning": v["returning"]}
+                for d, v in sorted(trend_map.items())
+            ]
+
+            return {
+                "kpis": {
+                    "first_time": first_time_count,
+                    "returning": returning_count,
+                    "total_unique_customers": len(active_phones_in_range),
+                },
+                "trend": trend,
             }
         finally:
             db.close()
