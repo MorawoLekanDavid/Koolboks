@@ -2869,7 +2869,7 @@ function renderConversations(){
               ?`<span class="badge-score sc-bad" title="AI flagged this conversation as at risk — ${issueTxt}">⚠ ${qs}/10</span>`
               :`<span class="badge-score ${tier}" title="AI response quality — ${issueTxt}">${qs}/10</span>`;
           })():''}
-          <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}">${c.mode==='bot'?'🤖 Bot':`👤 ${esc(c.agent||'Agent')}`}</span>
+          <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}" title="${c.mode==='bot'?'Bot is auto-replying':'Taken over — see the owner chip for who'}">${c.mode==='bot'?'🤖 Bot':'🤝 Taken Over'}</span>
           ${unread>0?`<span class="unread-pill">${unread}</span>`:''}
         </div>
       </div>
