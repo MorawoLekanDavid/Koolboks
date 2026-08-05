@@ -139,11 +139,13 @@ class AgentLoginEvent(Base):
     """One row per login — powers the Shift & Login audit table. logout_at
     stays null for crash/force-quit sessions (no clean-exit signal fires);
     the reporting endpoint infers an approximate end from the last heartbeat
-    row instead of fabricating a logout event here."""
+    row instead of fabricating a logout event here. agent_id is deliberately
+    NOT a real FK (same convention as HandoffEvent.agent_name) — an audit
+    trail must survive deleting the agent it's about, not block it."""
     __tablename__ = "agent_login_events"
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    agent_id = Column(Integer, nullable=False, index=True)
     login_at = Column(DateTime, default=datetime.utcnow, index=True)
     logout_at = Column(DateTime, nullable=True)
     ip_address = Column(String(64), nullable=True)
@@ -153,11 +155,12 @@ class AgentLoginEvent(Base):
 class AgentHeartbeatLog(Base):
     """Throttled presence snapshots (written on status change or >60s since
     the last row) — turns the otherwise-ephemeral Redis heartbeat into a
-    real history the Shift & Login Gantt timeline can be built from."""
+    real history the Shift & Login Gantt timeline can be built from.
+    agent_id is not a real FK for the same reason as AgentLoginEvent above."""
     __tablename__ = "agent_heartbeat_log"
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    agent_id = Column(Integer, nullable=False, index=True)
     status = Column(String(20), nullable=False)  # online | away | offline
     logged_at = Column(DateTime, default=datetime.utcnow, index=True)
 

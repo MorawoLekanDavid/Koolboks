@@ -102,6 +102,12 @@ def init_database():
             """))
             _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_agent_heartbeat_log_agent_id ON agent_heartbeat_log (agent_id)"))
             _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_agent_heartbeat_log_logged_at ON agent_heartbeat_log (logged_at)"))
+            # Deploys before this line shipped these tables via create_all()
+            # with a hard FK to agents.id, which blocks deleting any agent
+            # who's ever logged in. Drop it — an audit trail must survive
+            # deleting the agent it's about, not block that deletion.
+            _c.execute(sa_text("ALTER TABLE agent_login_events DROP CONSTRAINT IF EXISTS agent_login_events_agent_id_fkey"))
+            _c.execute(sa_text("ALTER TABLE agent_heartbeat_log DROP CONSTRAINT IF EXISTS agent_heartbeat_log_agent_id_fkey"))
             _c.commit()
     except Exception as _e:
         log.warning(f"agent_login_events/agent_heartbeat_log migration: {_e}")
