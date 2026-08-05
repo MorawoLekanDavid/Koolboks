@@ -1235,23 +1235,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="campaigns" onclick="switchAnalyticsSubTab('campaigns')">Campaigns</button>
     </div>
 
-    <!-- Overview panel: Lead Funnel + (temporary, pre-Stage-C) Agent Performance + Product Recommendations -->
+    <!-- Overview panel: Lead Funnel + Product Recommendations -->
     <div id="anPanel-overview">
       <div class="cards-grid">
         <div class="card"><h3>Lead Funnel</h3><div class="stat-cards-row" id="funnelCards"></div><div id="funnelBars"></div></div>
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-            <h3 style="margin:0">Agent Performance <span style="font-size:10px;font-weight:500;color:var(--g300)">(see the new Agent Performance tab)</span></h3>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <input type="date" id="agentPerfFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-              <span style="font-size:12px;color:var(--g400)">to</span>
-              <input type="date" id="agentPerfTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-              <button onclick="loadAgentStats()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
-              <button onclick="downloadAgentPerf()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
-            </div>
-          </div>
-          <div id="agentStatsContent"></div>
-        </div>
       </div>
       <div class="card" style="margin-top:20px">
         <h3>Product Recommendations <span style="font-size:11px;font-weight:500;color:var(--g400)">— what the bot recommends most</span></h3>
@@ -1264,9 +1251,29 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="card"><p class="an-soon">🚧 Shift &amp; Login Tracker is coming soon.</p></div>
     </div>
 
-    <!-- Agent Performance (Stage C) -->
+    <!-- Agent Performance -->
     <div id="anPanel-agentPerf" class="hidden">
-      <div class="card"><p class="an-soon">🚧 The new Agent Performance dashboard (AHT, SLA, resolution rate, leaderboard) is coming soon — see the Overview tab for the current agent stats in the meantime.</p></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin:0 0 2px">🎯 Agent Performance</h3>
+            <p style="font-size:12px;color:var(--g400);margin:0">Handling time, response speed, and resolution — per agent</p>
+          </div>
+          <button onclick="downloadAgentPerformance()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
+        </div>
+
+        <div class="stat-cards-row" id="agentPerfKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Conversations vs. Avg Handling Time</p>
+        <div id="agentPerfComboChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Leaderboard</p>
+        <div id="agentPerfLeaderboard" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      </div>
     </div>
 
     <!-- AI Performance & Conversational Quality -->
@@ -3918,9 +3925,6 @@ async function runAutoAssign(){
   finally{btn.textContent=origText;btn.disabled=false;}
 }
 
-// ── Analytics ──────────────────────────────────────────────────────────
-let _agentPerfData=[];  // last loaded rows — used by CSV download
-
 // ── Analytics Console: filter bar + sub-tab scaffold ──────────────────────────
 let _anActiveSubtab='overview';
 let allDepartments=[];
@@ -4020,7 +4024,8 @@ function switchAnalyticsSubTab(name){
   if(deptSel)deptSel.disabled=!dimensional;
 
   clearInterval(bcPollInterval);
-  if(name==='overview'){loadFunnel();loadAgentStats();loadProductRecs();}
+  if(name==='overview'){loadFunnel();loadProductRecs();}
+  if(name==='agentPerf')loadAgentPerformanceTab();
   if(name==='aiPerf')loadAiPerformanceTab();
   if(name==='traffic')loadTrafficTab();
   if(name==='campaigns'){
@@ -4038,80 +4043,6 @@ async function loadFunnel(){
     document.getElementById('funnelCards').innerHTML=funnel.map(s=>`<div class="stat-c"><div class="stat-n">${s.count}</div><div class="stat-l">${s.stage}</div></div>`).join('');
     document.getElementById('funnelBars').innerHTML=funnel.map(s=>{const pct=Math.round((s.count/max)*100);return`<div class="funnel-stage"><div class="funnel-lbl"><span>${s.stage}</span><span>${pct}%</span></div><div class="funnel-track"><div class="funnel-fill" style="width:${pct}%">${s.count}</div></div></div>`;}).join('');
   }catch(e){console.error(e);}
-}
-
-async function loadAgentStats(){
-  const el=document.getElementById('agentStatsContent');
-  el.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
-  const from=document.getElementById('agentPerfFrom').value;
-  const to=document.getElementById('agentPerfTo').value;
-  const qs=new URLSearchParams({key:adminKey});
-  if(from)qs.set('date_from',from);
-  if(to)qs.set('date_to',to);
-  try{
-    const [convRes, handoffRes]=await Promise.all([
-      fetch(`/admin/analytics/conversations-handled?${qs}`),
-      fetch(`/admin/analytics/agent-handoffs?${qs}`),
-    ]);
-    if(!convRes.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
-    const convData=await convRes.json();
-    const handoffData=handoffRes.ok?await handoffRes.json():[];
-
-    // Aggregate conversations by agent
-    const convBy={};
-    convData.forEach(r=>{convBy[r.agent]=(convBy[r.agent]||0)+r.conversations;});
-
-    // Merge handoff counts keyed by agent name
-    const handoffBy={};
-    handoffData.forEach(h=>{handoffBy[h.agent]={takeovers:h.takeovers,handbacks:h.handbacks};});
-
-    // Union of all agent names across both datasets
-    const agents=[...new Set([...Object.keys(convBy),...Object.keys(handoffBy)])];
-    agents.sort((a,b)=>(convBy[b]||0)-(convBy[a]||0));
-
-    if(!agents.length){
-      _agentPerfData=[];
-      el.innerHTML='<p style="color:var(--g400);font-size:13px">No agent activity in this period</p>';
-      return;
-    }
-
-    _agentPerfData=agents.map(name=>({
-      agent:name,
-      conversations:convBy[name]||0,
-      takeovers:(handoffBy[name]||{}).takeovers||0,
-      handbacks:(handoffBy[name]||{}).handbacks||0,
-    }));
-
-    el.innerHTML=`<table class="agt-table">
-      <thead><tr>
-        <th>Agent</th>
-        <th style="text-align:center">Conversations</th>
-        <th style="text-align:center">Takeovers</th>
-        <th style="text-align:center">Handbacks</th>
-      </tr></thead>
-      <tbody>${_agentPerfData.map(r=>`<tr>
-        <td>${esc(r.agent)}</td>
-        <td style="text-align:center">${r.conversations}</td>
-        <td style="text-align:center">${r.takeovers}</td>
-        <td style="text-align:center">${r.handbacks}</td>
-      </tr>`).join('')}</tbody>
-    </table>`;
-  }catch(e){console.error(e);el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
-}
-
-function downloadAgentPerf(){
-  if(!_agentPerfData.length){alert('No data to download. Apply a date range first.');return;}
-  const from=document.getElementById('agentPerfFrom').value||'all';
-  const to=document.getElementById('agentPerfTo').value||'time';
-  const header='Agent,Conversations,Takeovers,Handbacks';
-  const rows=_agentPerfData.map(r=>[r.agent,r.conversations,r.takeovers,r.handbacks].join(','));
-  const csv=[header,...rows].join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download=`agent-performance-${from}-to-${to}.csv`;
-  document.body.appendChild(a);a.click();
-  document.body.removeChild(a);URL.revokeObjectURL(url);
 }
 
 async function loadProductRecs(){
@@ -6293,6 +6224,100 @@ async function deleteContact(phone){
   }catch(e){alert('Network error — please try again');}
 }
 // ── End Contacts tab ──────────────────────────────────────────────────────────
+
+// ── Agent Performance (Analytics Console Tab 2) ───────────────────────────────
+let _agentPerfLeaderboard=[];
+
+function _anFmtDuration(seconds){
+  if(seconds<60)return Math.round(seconds)+'s';
+  const m=Math.floor(seconds/60),s=Math.round(seconds%60);
+  return m+'m '+s+'s';
+}
+
+async function loadAgentPerformanceTab(){
+  const kpiEl=document.getElementById('agentPerfKpiCards');
+  const chartEl=document.getElementById('agentPerfComboChart');
+  const tableEl=document.getElementById('agentPerfLeaderboard');
+  if(!kpiEl)return;
+  kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/analytics/agent-performance?${_anQS()}`);
+    if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';chartEl.innerHTML='';tableEl.innerHTML='';return;}
+    const d=await r.json();
+    _agentPerfLeaderboard=d.leaderboard||[];
+
+    if(!_agentPerfLeaderboard.length){
+      kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">No agent handoff activity in this period</p>';
+      chartEl.innerHTML='';tableEl.innerHTML='';
+      return;
+    }
+
+    const k=d.kpis||{};
+    kpiEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n">${k.avg_aht_minutes!=null?k.avg_aht_minutes+'m':'—'}</div><div class="stat-l">Avg AHT</div></div>
+      <div class="stat-c"><div class="stat-n">${k.avg_sla_seconds!=null?_anFmtDuration(k.avg_sla_seconds):'—'}</div><div class="stat-l">Avg SLA Speed</div></div>
+      <div class="stat-c"><div class="stat-n">${(k.total_closures||0).toLocaleString()}</div><div class="stat-l">Total Agent Closures</div></div>
+    `;
+
+    chartEl.innerHTML='<canvas id="agentPerfComboCanvas" height="240"></canvas>';
+    _anDrawChart('agentPerfComboCanvas',{
+      type:'bar',
+      data:{
+        labels:_agentPerfLeaderboard.map(row=>row.agent),
+        datasets:[
+          {type:'bar',label:'Conversations',data:_agentPerfLeaderboard.map(row=>row.total_conversations),backgroundColor:'#FF6B00',order:2,yAxisID:'y'},
+          {type:'line',label:'Avg AHT (min)',data:_agentPerfLeaderboard.map(row=>row.aht_minutes),borderColor:'#1D4ED8',backgroundColor:'#1D4ED8',order:1,yAxisID:'y1',spanGaps:true},
+        ],
+      },
+      options:{
+        scales:{
+          y:{beginAtZero:true,ticks:{precision:0},position:'left'},
+          y1:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false}},
+        },
+        plugins:{legend:{position:'bottom'}},
+      },
+    });
+
+    tableEl.innerHTML=`<table class="agt-table">
+      <thead><tr>
+        <th>Agent</th><th>Department</th>
+        <th style="text-align:right">Open Chats</th>
+        <th style="text-align:right">AHT</th>
+        <th style="text-align:right">SLA</th>
+        <th style="text-align:right">Resolution</th>
+        <th style="text-align:right">Conversion</th>
+        <th style="text-align:right">Conversations</th>
+      </tr></thead>
+      <tbody>${_agentPerfLeaderboard.map(row=>`<tr>
+        <td style="font-weight:600">${esc(row.agent)}</td>
+        <td style="color:var(--g500)">${esc(row.department||'—')}</td>
+        <td style="text-align:right">${row.open_chats}</td>
+        <td style="text-align:right">${row.aht_minutes!=null?row.aht_minutes+'m':'—'}</td>
+        <td style="text-align:right">${row.sla_seconds!=null?_anFmtDuration(row.sla_seconds):'—'}</td>
+        <td style="text-align:right">${row.resolution_rate!=null?row.resolution_rate+'%':'—'}</td>
+        <td style="text-align:right">${row.conversion_rate!=null?row.conversion_rate+'%':'—'}</td>
+        <td style="text-align:right;font-weight:700">${row.total_conversations}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+
+function downloadAgentPerformance(){
+  if(!_agentPerfLeaderboard.length){alert('No data to download — load the Agent Performance tab first.');return;}
+  const header='Agent,Department,Open Chats,AHT (min),SLA (sec),Resolution Rate %,Conversion Rate %,Conversations';
+  const rows=_agentPerfLeaderboard.map(row=>[
+    row.agent,row.department||'',row.open_chats,
+    row.aht_minutes??'',row.sla_seconds??'',row.resolution_rate??'',row.conversion_rate??'',row.total_conversations,
+  ].join(','));
+  const csv=[header,...rows].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='agent-performance.csv';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+// ── End Agent Performance ─────────────────────────────────────────────────────
 
 // ── Campaigns & Templates (Analytics Console Tab 5) ───────────────────────────
 async function loadCampaignsTab(){
