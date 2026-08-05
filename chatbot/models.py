@@ -61,6 +61,8 @@ class Message(Base):
     wamid = Column(String(100), nullable=True)
     delivery_status = Column(String(20), default="sent")  # sent | delivered | read | failed
     delivery_error = Column(String(255), nullable=True)  # Meta's failure reason, set only when delivery_status='failed'
+    delivered_at = Column(DateTime, nullable=True)  # set from Meta's status callback timestamp; null for messages sent before this was tracked
+    read_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 

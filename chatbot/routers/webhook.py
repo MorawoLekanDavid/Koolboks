@@ -27,7 +27,7 @@ FILLER_ACK_RE = re.compile(
 )
 
 
-def _update_message_delivery(wamid: str, status: str, error_detail: str = None):
+def _update_message_delivery(wamid: str, status: str, error_detail: str = None, event_ts: str = None):
     """Update delivery_status on a broadcast recipient and/or the matching Message
     row when Meta fires a status event. A wamid may match either, both, or neither
     (regular agent/bot messages only ever have a Message row; broadcast sends have
@@ -36,6 +36,12 @@ def _update_message_delivery(wamid: str, status: str, error_detail: str = None):
     db = get_db()
     try:
         rank = {"sent": 0, "delivered": 1, "read": 2, "failed": -1}
+        event_dt = None
+        if event_ts:
+            try:
+                event_dt = datetime.utcfromtimestamp(int(event_ts))
+            except (TypeError, ValueError):
+                event_dt = None
 
         recipient = db.query(BroadcastRecipient).filter(BroadcastRecipient.wamid == wamid).first()
         if recipient:
@@ -48,6 +54,14 @@ def _update_message_delivery(wamid: str, status: str, error_detail: str = None):
                 message.delivery_status = status
                 if status == "failed":
                     message.delivery_error = error_detail
+            # First-write-wins, independent of the rank-gated status field above —
+            # a later out-of-order "delivered" webhook shouldn't overwrite an
+            # earlier-recorded timestamp for the same transition.
+            ts = event_dt or datetime.utcnow()
+            if status == "delivered" and message.delivered_at is None:
+                message.delivered_at = ts
+            elif status == "read" and message.read_at is None:
+                message.read_at = ts
 
         if status == "failed" and error_detail:
             log.warning(f"WhatsApp delivery failed for wamid {wamid}: {error_detail}")
@@ -109,7 +123,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                             errors = status_evt.get("errors", [])
                             if errors:
                                 error_detail = errors[0].get("title") or errors[0].get("message")
-                        background_tasks.add_task(_update_message_delivery, wamid, status_type, error_detail)
+                        background_tasks.add_task(_update_message_delivery, wamid, status_type, error_detail, status_evt.get("timestamp"))
 
                 messages = value.get("messages", [])
                 for msg in messages:

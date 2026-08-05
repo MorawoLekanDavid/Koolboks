@@ -22,6 +22,14 @@ def init_database():
 
     try:
         with db_engine.connect() as _c:
+            _c.execute(sa_text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP"))
+            _c.execute(sa_text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMP"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"messages delivered_at/read_at migration: {_e}")
+
+    try:
+        with db_engine.connect() as _c:
             _c.execute(sa_text("""
                 CREATE TABLE IF NOT EXISTS canned_responses (
                     id SERIAL PRIMARY KEY,

@@ -1300,9 +1300,26 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       </div>
     </div>
 
-    <!-- Chat & Traffic Telemetry (Stage B) -->
+    <!-- Chat & Traffic Telemetry -->
     <div id="anPanel-traffic" class="hidden">
-      <div class="card"><p class="an-soon">🚧 Chat &amp; Traffic Telemetry is coming soon.</p></div>
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h3 style="margin:0 0 2px">📡 Chat &amp; Traffic Telemetry</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">Message volume, peak hours, and webhook delivery health</p>
+        </div>
+
+        <div class="stat-cards-row" id="trafficKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Hourly Message Volume</p>
+        <div id="trafficVolumeChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Delivery Pipeline</p>
+        <div id="trafficFunnel" style="max-width:480px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      </div>
     </div>
 
     <!-- Campaigns & Templates -->
@@ -4005,6 +4022,7 @@ function switchAnalyticsSubTab(name){
   clearInterval(bcPollInterval);
   if(name==='overview'){loadFunnel();loadAgentStats();loadProductRecs();}
   if(name==='aiPerf')loadAiPerformanceTab();
+  if(name==='traffic')loadTrafficTab();
   if(name==='campaigns'){
     loadCampaignsTab();
     bcPollInterval=setInterval(loadCampaignsTab,15000);
@@ -6385,6 +6403,69 @@ async function loadCampaignsTemplateChart(){
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
 }
 // ── End Campaigns & Templates ─────────────────────────────────────────────────
+
+// ── Chat & Traffic Telemetry (Analytics Console Tab 4) ────────────────────────
+async function loadTrafficTab(){
+  const kpiEl=document.getElementById('trafficKpiCards');
+  const volEl=document.getElementById('trafficVolumeChart');
+  const funnelEl=document.getElementById('trafficFunnel');
+  if(!kpiEl)return;
+  kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/analytics/traffic-telemetry?${_anQS()}`);
+    if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';volEl.innerHTML='';funnelEl.innerHTML='';return;}
+    const d=await r.json();
+    if(!d.total_messages){
+      kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">No messages in this period</p>';
+      volEl.innerHTML='';funnelEl.innerHTML='';
+      return;
+    }
+
+    const latencyLbl=d.latency_sample_size
+      ?`${d.avg_latency_seconds}s <span style="font-size:9px;font-weight:400;color:var(--g300)">(n=${d.latency_sample_size})</span>`
+      :'—';
+    kpiEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n">${d.total_messages.toLocaleString()}</div><div class="stat-l">Total Messages</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--green)">${d.webhook_success_rate!=null?d.webhook_success_rate+'%':'—'}</div><div class="stat-l">Webhook Success Rate</div></div>
+      <div class="stat-c"><div class="stat-n">${latencyLbl}</div><div class="stat-l">Avg Message Latency</div></div>
+    `;
+
+    if(!d.hourly.length){
+      volEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
+    } else {
+      volEl.innerHTML='<canvas id="trafficVolumeCanvas" height="220"></canvas>';
+      _anDrawChart('trafficVolumeCanvas',{
+        type:'line',
+        data:{
+          labels:d.hourly.map(h=>h.hour_bucket.slice(5).replace('T',' ')),
+          datasets:[
+            {label:'Inbound',data:d.hourly.map(h=>h.inbound),borderColor:'#FF6B00',backgroundColor:'rgba(255,107,0,.25)',fill:true,tension:.25},
+            {label:'Outbound',data:d.hourly.map(h=>h.outbound),borderColor:'#1D4ED8',backgroundColor:'rgba(29,78,216,.25)',fill:true,tension:.25},
+          ],
+        },
+        options:{scales:{y:{stacked:true,beginAtZero:true,ticks:{precision:0}},x:{ticks:{maxTicksLimit:12}}},plugins:{legend:{position:'bottom'}}},
+      });
+    }
+
+    const f=d.funnel;
+    const fBar=(label,n,base,color)=>{
+      const p=base?Math.round(n/base*100):0;
+      return`<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+          <span style="font-size:13px;font-weight:600;color:var(--g700)">${label}</span>
+          <span style="font-size:14px;font-weight:800;color:${color}">${n.toLocaleString()} <span style="font-size:11px;font-weight:400;color:var(--g400)">(${p}%)</span></span>
+        </div>
+        <div style="height:20px;background:var(--g100);border-radius:5px;overflow:hidden">
+          <div style="height:100%;width:${p}%;background:${color};border-radius:5px;min-width:${n>0?'3px':'0'};transition:width .5s ease"></div>
+        </div>
+      </div>`;
+    };
+    funnelEl.innerHTML=f.sent
+      ?`${fBar('📤 Sent',f.sent,f.sent,'var(--orange)')}${fBar('📬 Delivered',f.delivered,f.sent,'#3b82f6')}${fBar('👁 Read',f.read,f.sent,'#8b5cf6')}`
+      :'<p style="color:var(--g400);font-size:13px">No trackable sends in this period</p>';
+  }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+// ── End Chat & Traffic Telemetry ──────────────────────────────────────────────
 
 // ── AI Performance & Conversational Quality (Analytics Console Tab 3) ────────
 const CQ_ISSUE_LABELS={

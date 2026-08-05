@@ -397,3 +397,73 @@ async def conversation_quality(
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
+
+
+@router.get("/traffic-telemetry")
+async def traffic_telemetry(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ctx: dict = Depends(require_tab_permission("analytics")),
+):
+    def _fetch():
+        db = get_db()
+        try:
+            q = db.query(Message)
+            if date_from:
+                q = q.filter(Message.created_at >= datetime.fromisoformat(date_from))
+            if date_to:
+                q = q.filter(Message.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+            rows = q.all()
+
+            if not rows:
+                return {
+                    "total_messages": 0, "inbound_count": 0, "outbound_count": 0,
+                    "hourly": [], "webhook_success_rate": None,
+                    "funnel": {"sent": 0, "delivered": 0, "read": 0},
+                    "avg_latency_seconds": None, "latency_sample_size": 0,
+                }
+
+            inbound = [r for r in rows if r.direction == "inbound"]
+            outbound = [r for r in rows if r.direction == "outbound"]
+
+            hourly_map: dict = {}
+            for r in rows:
+                bucket = r.created_at.strftime("%Y-%m-%dT%H:00")
+                h = hourly_map.setdefault(bucket, {"inbound": 0, "outbound": 0})
+                h["inbound" if r.direction == "inbound" else "outbound"] += 1
+            hourly = [
+                {"hour_bucket": b, "inbound": v["inbound"], "outbound": v["outbound"]}
+                for b, v in sorted(hourly_map.items())
+            ]
+
+            # Webhook success rate and the delivery funnel only cover messages we
+            # can actually track (have a wamid) — same reasoning as
+            # broadcast_overview: an untracked send isn't the same as a failed one.
+            trackable_out = [r for r in outbound if r.wamid]
+            webhook_success_rate = (
+                round(sum(1 for r in trackable_out if r.delivery_status != "failed") / len(trackable_out) * 100, 1)
+                if trackable_out else None
+            )
+            sent = len(trackable_out)
+            delivered = sum(1 for r in trackable_out if r.delivery_status in ("delivered", "read"))
+            read_c = sum(1 for r in trackable_out if r.delivery_status == "read")
+
+            # delivered_at only populates going forward (added alongside this
+            # endpoint) — messages sent before that have no latency data, hence
+            # the separate sample size so the frontend can flag a thin sample.
+            latencies = [(r.delivered_at - r.created_at).total_seconds() for r in outbound if r.delivered_at]
+            avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else None
+
+            return {
+                "total_messages": len(rows),
+                "inbound_count": len(inbound),
+                "outbound_count": len(outbound),
+                "hourly": hourly,
+                "webhook_success_rate": webhook_success_rate,
+                "funnel": {"sent": sent, "delivered": delivered, "read": read_c},
+                "avg_latency_seconds": avg_latency,
+                "latency_sample_size": len(latencies),
+            }
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
