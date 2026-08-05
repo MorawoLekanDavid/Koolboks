@@ -77,7 +77,7 @@ async def create_template(body: CreateTemplateRequest, ctx: dict = Depends(requi
         # button, so header/body/footer/body_samples are ignored here.
         payload = {
             "name": name,
-            "languages": [body.language],
+            "language": body.language,
             "category": "AUTHENTICATION",
             "components": [
                 {"type": "BODY", "add_security_recommendation": True},
