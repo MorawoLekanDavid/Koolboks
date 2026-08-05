@@ -1258,6 +1258,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <div>
             <h3 style="margin:0 0 2px">🎯 Agent Performance</h3>
             <p style="font-size:12px;color:var(--g400);margin:0">Handling time, response speed, and resolution — per agent</p>
+            <p style="font-size:11px;color:var(--g300);margin:4px 0 0" title="Resolution Rate = explicit hand-backs ÷ takeovers. A chat the bot silently resumed after 8h of agent inactivity isn't counted as a hand-back, so a low rate here reflects how often agents actively close out a chat vs. it timing out, not how many customers went unhelped.">ⓘ How Resolution Rate is measured — hover for details</p>
           </div>
           <button onclick="downloadAgentPerformance()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
         </div>
@@ -6281,7 +6282,7 @@ async function loadAgentPerformanceTab(){
     tableEl.innerHTML=`<table class="agt-table">
       <thead><tr>
         <th>Agent</th><th>Department</th>
-        <th style="text-align:right">Open Chats</th>
+        <th style="text-align:right" title="Takeovers in this period with no matching handback logged — includes chats the bot silently resumed after 8h of agent inactivity, not just chats still active right now">Open Chats (period) ⓘ</th>
         <th style="text-align:right">AHT</th>
         <th style="text-align:right">SLA</th>
         <th style="text-align:right">Resolution</th>
@@ -6304,7 +6305,7 @@ async function loadAgentPerformanceTab(){
 
 function downloadAgentPerformance(){
   if(!_agentPerfLeaderboard.length){alert('No data to download — load the Agent Performance tab first.');return;}
-  const header='Agent,Department,Open Chats,AHT (min),SLA (sec),Resolution Rate %,Conversion Rate %,Conversations';
+  const header='Agent,Department,Open Chats (period),AHT (min),SLA (sec),Resolution Rate %,Conversion Rate %,Conversations';
   const rows=_agentPerfLeaderboard.map(row=>[
     row.agent,row.department||'',row.open_chats,
     row.aht_minutes??'',row.sla_seconds??'',row.resolution_rate??'',row.conversion_rate??'',row.total_conversations,
