@@ -403,6 +403,28 @@ async def delete_canned(canned_id: int, ctx: dict = Depends(require_tab_permissi
     return await run_in_threadpool(_delete)
 
 
+def _claim_owner_if_unassigned(phone: str, owner_name: str, owner_email: str) -> None:
+    """Establishes ownership the moment an agent first acts on an unassigned
+    conversation. Without this, `claim=True` only relaxed the access check —
+    it never actually assigned the chat, so a conversation an agent had
+    already claimed and was actively replying to could get silently
+    reassigned to someone else the next time routing ran (routing only ever
+    checks "does a ConversationOwner row exist yet")."""
+    db = get_db()
+    try:
+        norm = normalize_phone(phone)
+        existing = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+        if not existing:
+            db.add(ConversationOwner(phone=norm, owner_name=owner_name, owner_email=owner_email))
+            try:
+                db.commit()
+            except Exception:
+                # Lost a race to routing or another claim — fine, it's owned either way.
+                db.rollback()
+    finally:
+        db.close()
+
+
 class AgentReply(BaseModel):
     message: str
     agent_name: str = "Agent"
@@ -452,6 +474,7 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
         )
         await redis_client.save_history(session_id, history)
 
+    await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
     return {"status": "sent"}
 
 
@@ -531,4 +554,6 @@ async def toggle_handoff(
             db.close()
 
     await run_in_threadpool(_log_handoff)
+    if mode == "agent":
+        await run_in_threadpool(_claim_owner_if_unassigned, phone, agent_display, ctx.get("email", ""))
     return {"phone": phone, "mode": mode, "agent": agent}
