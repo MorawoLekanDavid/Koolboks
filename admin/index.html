@@ -80,7 +80,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .status-dot{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:#94a3b8;border:2px solid var(--sidebar-bg);cursor:pointer}
 .status-dot.online{background:#22c55e}
 .status-dot.away{background:#f59e0b}
-#statusSelect{flex-shrink:0;background:var(--sidebar-hover);color:var(--sidebar-text);border:1px solid rgba(255,255,255,.12);border-radius:6px;font-size:10px;padding:3px 4px;font-family:inherit;cursor:pointer;max-width:74px}
 .sb-notif{display:flex;align-items:center;justify-content:space-between;padding:4px 8px}
 .notif-wrap{position:relative;cursor:pointer;display:inline-flex}
 .notif-icon{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px}
@@ -761,11 +760,13 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <div class="user-name" id="agentNameDisplay"></div>
           <div class="user-role-lbl" id="agentRoleDisplay">Agent</div>
         </div>
-        <select id="statusSelect" onchange="updateMyStatus(this.value)" onclick="event.stopPropagation()" title="Set your availability">
-          <option value="online">🟢 Online</option>
-          <option value="away">🟡 Away</option>
-          <option value="offline">⚪ Offline</option>
-        </select>
+        <div id="awayToggleWrap" style="flex-shrink:0;display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()" title="Online is automatic while this tab is open — toggle Away if you're here but stepped out">
+          <span style="font-size:9px;color:var(--sidebar-text);white-space:nowrap">Away</span>
+          <label class="perm-sw">
+            <input type="checkbox" id="awayToggle" onchange="toggleAway(this.checked)">
+            <span class="perm-sw-slider"></span>
+          </label>
+        </div>
       </div>
       <button class="sb-logout" onclick="logout()">Sign Out</button>
     </div>
@@ -2101,7 +2102,7 @@ window.onload=async()=>{
       if(r&&r.ok){
         const me=await r.json();
         adminKey=d.key;agentName=me.name||d.name;agentRole=me.role||'customer_success_agent';agentEmail=me.email||d.email||'';
-        myAgentId=me.agent_id||null;myDepartmentId=me.department_id||null;myStatus=me.status||'offline';
+        myAgentId=me.agent_id||null;myDepartmentId=me.department_id||null;myStatus=me.status||'offline';_myAway=me.status==='away';
         save();showApp();
       }else if(r&&r.status===403){
         // Session genuinely invalid/expired — back to login
@@ -2157,17 +2158,19 @@ async function showApp(){
   if(myAgentId===null){
     try{
       const mr=await fetch(`/admin/me?key=${encodeURIComponent(adminKey)}`);
-      if(mr.ok){const me=await mr.json();myAgentId=me.agent_id||null;myDepartmentId=me.department_id||null;myStatus=me.status||'offline';}
+      if(mr.ok){const me=await mr.json();myAgentId=me.agent_id||null;myDepartmentId=me.department_id||null;myStatus=me.status||'offline';_myAway=me.status==='away';}
     }catch(e){}
   }
-  syncStatusDropdown();
+  syncPresenceUI();
+  startPresenceHeartbeat();
   pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
-  clearInterval(pollInterval);clearInterval(msgPollInterval);clearInterval(bcPollInterval);
+  clearInterval(pollInterval);clearInterval(msgPollInterval);clearInterval(bcPollInterval);clearInterval(_presenceInterval);
+  if(myAgentId)navigator.sendBeacon(`/admin/presence/offline?key=${encodeURIComponent(adminKey)}`);
   localStorage.removeItem('koolbot_agent');
   adminKey='';agentName='';agentRole='customer_success_agent';agentEmail='';selectedPhone=null;allConversations=[];isFirstLoad=true;
-  myAgentId=null;myDepartmentId=null;myStatus='offline';
+  myAgentId=null;myDepartmentId=null;myStatus='offline';_myAway=false;
   document.getElementById('appScreen').classList.add('hidden');document.getElementById('appScreen').style.display='none';
   document.getElementById('loginScreen').classList.remove('hidden');
   showLoginForm();
@@ -2186,31 +2189,59 @@ function applyReadOnlyRole(){
 }
 
 // ── Presence ───────────────────────────────────────────────────────────
-function syncStatusDropdown(){
-  const sel=document.getElementById('statusSelect');
+// Online is automatic (a heartbeat while this tab is open+visible); "Away"
+// is the only thing a user can toggle by hand — offline is never manually
+// selectable, it's purely a consequence of the heartbeat lapsing.
+let _presenceInterval=null, _myAway=false;
+const HEARTBEAT_MS=20000;
+
+function syncPresenceUI(){
   const dot=document.getElementById('statusDot');
-  if(sel)sel.value=myStatus;
+  const toggle=document.getElementById('awayToggle');
+  const wrap=document.getElementById('awayToggleWrap');
   if(dot)dot.className='status-dot '+myStatus;
+  if(toggle)toggle.checked=_myAway;
   // Super admin sessions via the master key have no agent_id, so there's
-  // no row to store a status against — hide the control rather than let
+  // no row to store presence against — hide the control rather than let
   // it silently fail on change.
-  if(sel)sel.style.display=myAgentId?'':'none';
+  if(wrap)wrap.style.display=myAgentId?'':'none';
 }
-async function updateMyStatus(status){
-  const prev=myStatus;
-  myStatus=status;
-  const dot=document.getElementById('statusDot');
-  if(dot)dot.className='status-dot '+status;
+async function sendHeartbeat(){
+  if(!myAgentId||document.hidden)return;
   try{
-    const r=await fetch(`/admin/my-status?key=${encodeURIComponent(adminKey)}`,{
-      method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})
+    const r=await fetch(`/admin/presence/heartbeat?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    if(r.ok){myStatus=_myAway?'away':'online';syncPresenceUI();}
+  }catch(e){}
+}
+function startPresenceHeartbeat(){
+  if(!myAgentId)return;
+  sendHeartbeat();
+  clearInterval(_presenceInterval);
+  _presenceInterval=setInterval(sendHeartbeat,HEARTBEAT_MS);
+  // Backgrounding a tab shouldn't instantly drop someone offline (routing
+  // would flicker every time they glance at another tab) — just pause pings
+  // and let the 45s TTL be the real "have they actually gone" signal. Coming
+  // back into view pings immediately instead of waiting for the next tick.
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)sendHeartbeat();});
+  window.addEventListener('beforeunload',()=>{
+    if(myAgentId)navigator.sendBeacon(`/admin/presence/offline?key=${encodeURIComponent(adminKey)}`);
+  });
+}
+async function toggleAway(checked){
+  const prev=_myAway;
+  _myAway=checked;
+  myStatus=checked?'away':'online';
+  syncPresenceUI();
+  try{
+    const r=await fetch(`/admin/presence/away?key=${encodeURIComponent(adminKey)}`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({away:checked})
     });
     if(!r.ok)throw new Error();
   }catch(e){
-    myStatus=prev;
-    if(dot)dot.className='status-dot '+prev;
-    const sel=document.getElementById('statusSelect');if(sel)sel.value=prev;
-    alert('Failed to update status — please try again.');
+    _myAway=prev;
+    myStatus=prev?'away':'online';
+    syncPresenceUI();
+    alert('Failed to update — please try again.');
   }
 }
 

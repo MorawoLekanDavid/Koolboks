@@ -14,7 +14,7 @@ from chatbot.database import get_db
 from chatbot.dependencies import AGENT_SESSION_TTL, get_admin_ctx, require_admin, require_super_admin
 from chatbot.models import Agent, Department
 from chatbot.routers.permissions import require_tab_permission
-from chatbot.services.presence_service import get_status, get_statuses, set_status
+from chatbot.services.presence_service import get_status, get_statuses
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
@@ -152,23 +152,6 @@ async def agents_directory(ctx: dict = Depends(get_admin_ctx)):
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
-
-
-class StatusUpdate(BaseModel):
-    status: str  # online | away | offline
-
-
-@router.put("/my-status")
-async def update_my_status(body: StatusUpdate, ctx: dict = Depends(get_admin_ctx)):
-    """Self-service presence toggle — any logged-in agent sets their own
-    status. Feeds Sticky Ownership and Capacity Guard routing."""
-    if body.status not in ("online", "away", "offline"):
-        raise HTTPException(400, "status must be online, away, or offline")
-    agent_id = ctx.get("agent_id")
-    if not agent_id:
-        raise HTTPException(400, "Super admin sessions don't have a presence status.")
-    await set_status(agent_id, body.status)
-    return {"status": body.status}
 
 
 # ── Departments ─────────────────────────────────────────────────────────────
