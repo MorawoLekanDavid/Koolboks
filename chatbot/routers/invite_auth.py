@@ -16,7 +16,7 @@ from chatbot.database import get_db
 from chatbot.dependencies import AGENT_SESSION_TTL, require_admin
 from chatbot.models import Agent
 from chatbot.routers.admin_auth import AGENT_ROLES
-from chatbot.services.whatsapp_service import send_whatsapp_template
+from chatbot.services.whatsapp_service import send_whatsapp_otp_template, send_whatsapp_template
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(tags=["invite-auth"])
@@ -263,7 +263,7 @@ async def complete_registration(body: CompleteRegistrationIn):
     if agent.phone_number and redis_client.client:
         otp = _gen_otp()
         await redis_client.client.set(_otp_key("auth_otp", agent.id), otp, ex=REGISTRATION_OTP_TTL)
-        otp_sent = await send_whatsapp_template(agent.phone_number, OTP_TEMPLATE, [otp])
+        otp_sent = await send_whatsapp_otp_template(agent.phone_number, OTP_TEMPLATE, otp)
 
     # Password + is_active are already committed regardless of OTP delivery —
     # the normal email/password login always works from here even if
@@ -338,7 +338,7 @@ async def forgot_password(body: ForgotPasswordIn):
 
     otp = _gen_otp()
     await redis_client.client.set(_otp_key("password_reset", agent.id), otp, ex=RESET_OTP_TTL)
-    await send_whatsapp_template(agent.phone_number, OTP_TEMPLATE, [otp])
+    await send_whatsapp_otp_template(agent.phone_number, OTP_TEMPLATE, otp)
     return generic
 
 

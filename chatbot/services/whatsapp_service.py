@@ -98,6 +98,48 @@ async def send_whatsapp_template(to: str, template_name: str, variables: list[st
         return False
 
 
+async def send_whatsapp_otp_template(to: str, template_name: str, code: str, language: str = "en") -> bool:
+    """Send an AUTHENTICATION-category template. Meta renders fixed wording for
+    these — no free-text body params — and requires a copy-code BUTTON
+    component alongside the BODY component, both carrying the same code."""
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        log.warning("WhatsApp credentials not configured")
+        return False
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to.lstrip("+"),
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": language, "policy": "deterministic"},
+            "components": [
+                {"type": "body", "parameters": [{"type": "text", "text": code}]},
+                {
+                    "type": "button",
+                    "sub_type": "copy_code",
+                    "index": "0",
+                    "parameters": [{"type": "coupon_code", "coupon_code": code}],
+                },
+            ],
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            resp = await client.post(
+                f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages",
+                json=payload,
+                headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"},
+            )
+        if resp.is_success:
+            log.info(f"WhatsApp OTP template '{template_name}' sent to {to}")
+            return True
+        log.warning(f"WhatsApp OTP template '{template_name}' send to {to} failed ({resp.status_code}): {resp.text}")
+        return False
+    except Exception as e:
+        log.error(f"WhatsApp OTP template send error: {e}")
+        return False
+
+
 def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None, delivery_status: str = "sent"):
     try:
         db = get_db()

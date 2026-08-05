@@ -34,10 +34,11 @@ class CreateTemplateRequest(BaseModel):
     name: str
     category: str = "UTILITY"
     language: str = "en"
-    body: str
+    body: Optional[str] = None  # not used for AUTHENTICATION — Meta controls the wording
     header: Optional[str] = None
     footer: Optional[str] = None
     body_samples: List[str] = []  # example values for {{1}}, {{2}}, … in body
+    code_expiration_minutes: int = 10  # AUTHENTICATION only
 
 
 class SendTemplateRequest(BaseModel):
@@ -65,27 +66,50 @@ async def list_templates(ctx: dict = Depends(require_tab_permission("templates")
 async def create_template(body: CreateTemplateRequest, ctx: dict = Depends(require_admin)):
     if not WABA_ID or not WHATSAPP_API_TOKEN:
         raise HTTPException(status_code=400, detail="WABA_ID or API token not configured")
-    components = []
-    if body.header:
-        components.append({"type": "HEADER", "format": "TEXT", "text": body.header})
-    body_comp: dict = {"type": "BODY", "text": body.body}
-    # Meta requires sample values for every {{n}} variable
-    var_count = len(set(re.findall(r'\{\{\d+\}\}', body.body)))
-    if var_count:
-        samples = body.body_samples or []
-        # Pad with "Sample text" if fewer samples than variables
-        while len(samples) < var_count:
-            samples.append("Sample text")
-        body_comp["example"] = {"body_text": [samples[:var_count]]}
-    components.append(body_comp)
-    if body.footer:
-        components.append({"type": "FOOTER", "text": body.footer})
-    payload = {
-        "name": body.name.lower().replace(" ", "_"),
-        "category": body.category.upper(),
-        "language": body.language,
-        "components": components,
-    }
+    name = body.name.lower().replace(" ", "_")
+    category = body.category.upper()
+
+    if category == "AUTHENTICATION":
+        # Meta auto-rejects OTP-style content submitted under any other
+        # category (confirmed: reason INCORRECT_CATEGORY). Authentication
+        # templates have no custom header/body/footer text at all — Meta
+        # renders fixed, locale-specific wording around a required OTP
+        # button, so header/body/footer/body_samples are ignored here.
+        payload = {
+            "name": name,
+            "languages": [body.language],
+            "category": "AUTHENTICATION",
+            "components": [
+                {"type": "BODY", "add_security_recommendation": True},
+                {"type": "FOOTER", "code_expiration_minutes": body.code_expiration_minutes},
+                {"type": "BUTTONS", "buttons": [{"type": "OTP", "otp_type": "COPY_CODE"}]},
+            ],
+        }
+    else:
+        if not body.body:
+            raise HTTPException(400, "Body text is required for non-Authentication templates")
+        components = []
+        if body.header:
+            components.append({"type": "HEADER", "format": "TEXT", "text": body.header})
+        body_comp: dict = {"type": "BODY", "text": body.body}
+        # Meta requires sample values for every {{n}} variable
+        var_count = len(set(re.findall(r'\{\{\d+\}\}', body.body)))
+        if var_count:
+            samples = body.body_samples or []
+            # Pad with "Sample text" if fewer samples than variables
+            while len(samples) < var_count:
+                samples.append("Sample text")
+            body_comp["example"] = {"body_text": [samples[:var_count]]}
+        components.append(body_comp)
+        if body.footer:
+            components.append({"type": "FOOTER", "text": body.footer})
+        payload = {
+            "name": name,
+            "category": category,
+            "language": body.language,
+            "components": components,
+        }
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.post(
             f"{WHATSAPP_API_URL}/{WABA_ID}/message_templates",
