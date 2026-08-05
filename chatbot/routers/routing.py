@@ -19,9 +19,13 @@ class RoutingConfigIn(BaseModel):
     sticky_enabled: Optional[bool] = None
     capacity_enabled: Optional[bool] = None
     max_chats: Optional[int] = None
+    fallback_agent_id: Optional[int] = None
 
 
 @router.put("/config")
 async def update_config(body: RoutingConfigIn, ctx: dict = Depends(require_tab_permission("routing"))):
-    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    # exclude_unset (not "not None") so {"fallback_agent_id": null} can
+    # explicitly clear the overflow assignee instead of being ignored as if
+    # the field were never sent.
+    patch = body.model_dump(exclude_unset=True)
     return await routing_service.set_routing_config(patch)

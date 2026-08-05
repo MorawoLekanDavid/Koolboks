@@ -20,6 +20,7 @@ DEFAULT_CONFIG = {
     "sticky_enabled": False,      # new algorithm — starts off until explicitly enabled
     "capacity_enabled": False,    # same
     "max_chats": 5,
+    "fallback_agent_id": None,    # who catches new chats when nobody eligible is online
 }
 
 
@@ -90,8 +91,11 @@ async def auto_assign_conversation(phone: str) -> None:
     owns this," same as manually picking from the Assign to... dropdown
     would.
 
-    Pipeline: Sticky Ownership (if enabled) -> Capacity-filtered Round Robin
-    (if round robin enabled) -> unassigned if nothing matches."""
+    Pipeline: Sticky Ownership (creator online) -> Round Robin among online
+    eligible agents (capacity-filtered, if enabled) -> configured Overflow
+    Assignee if nobody eligible is online -> last-resort blind round robin
+    across the full pool so a chat is never silently left unassigned just
+    because no fallback was configured."""
     cfg = await get_routing_config()
     if not (cfg["round_robin_enabled"] or cfg["sticky_enabled"]):
         return
@@ -112,26 +116,35 @@ async def auto_assign_conversation(phone: str) -> None:
         if not picked and cfg["round_robin_enabled"]:
             agents = db.query(Agent).filter(Agent.role.in_(ROBIN_ROLES)).order_by(Agent.id).all()
             if agents:
-                pool = agents
-                if cfg["capacity_enabled"]:
-                    under_capacity = []
-                    for a in agents:
-                        if not await is_online(a.id):
-                            continue
-                        count = await _active_chat_count(db, a.name)
-                        if count < cfg["max_chats"]:
-                            under_capacity.append(a)
-                    # If nobody online is under capacity (or nobody's online at
-                    # all), fall back to the full pool rather than stockpiling
-                    # unassigned chats — better distributed-but-imperfect than
-                    # silently unassigned.
-                    pool = under_capacity or agents
+                online_pool = []
+                for a in agents:
+                    if not await is_online(a.id):
+                        continue
+                    if cfg["capacity_enabled"] and await _active_chat_count(db, a.name) >= cfg["max_chats"]:
+                        continue
+                    online_pool.append(a)
 
-                idx = 0
-                if redis_client.client:
-                    idx = await redis_client.client.incr(ROBIN_INDEX_KEY)
-                picked = pool[idx % len(pool)]
-                log.info(f"[Round-robin] Assigned {phone} to {picked.name}")
+                if online_pool:
+                    idx = 0
+                    if redis_client.client:
+                        idx = await redis_client.client.incr(ROBIN_INDEX_KEY)
+                    picked = online_pool[idx % len(online_pool)]
+                    log.info(f"[Round-robin] Assigned {phone} to {picked.name}")
+                elif cfg["fallback_agent_id"]:
+                    fallback = db.query(Agent).filter(Agent.id == cfg["fallback_agent_id"]).first()
+                    if fallback:
+                        picked = fallback
+                        log.info(f"[Overflow] Nobody online — assigned {phone} to fallback {picked.name}")
+
+                if not picked:
+                    # No fallback configured (or it no longer exists) — still
+                    # don't leave the chat unassigned, just spread it blindly
+                    # across the full pool regardless of presence.
+                    idx = 0
+                    if redis_client.client:
+                        idx = await redis_client.client.incr(ROBIN_INDEX_KEY)
+                    picked = agents[idx % len(agents)]
+                    log.info(f"[Round-robin] Nobody online, no overflow assignee — assigned {phone} to {picked.name} anyway")
 
         if not picked:
             return

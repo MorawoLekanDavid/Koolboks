@@ -1623,7 +1623,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     </div>
     <div class="card" style="max-width:640px">
       <h3>Auto-Routing</h3>
-      <p style="font-size:13px;color:var(--g400);margin-bottom:20px">When a new customer messages in for the first time, automatically assign the conversation to an agent instead of leaving it unowned until someone claims it. Rules run in order — Sticky first, then Round Robin (filtered by Capacity, if on).</p>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:20px">When a new customer messages in for the first time, automatically assign the conversation to an agent instead of leaving it unowned until someone claims it. Rules run in order: Sticky first, then Round Robin among whoever's currently Online (capacity-filtered, if on), then the Overflow Assignee if nobody's online at all.</p>
 
       <div class="routing-rule-row">
         <div>
@@ -1639,7 +1639,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="routing-rule-row">
         <div>
           <div class="routing-rule-title">2 · Round-Robin New Conversations</div>
-          <div class="routing-rule-desc">Distributes new chats evenly across Customer Success agents, in rotation. Telesales isn't included — that role is outbound-focused.</div>
+          <div class="routing-rule-desc">Distributes new chats evenly across Customer Success agents who are currently Online, in rotation. Telesales isn't included — that role is outbound-focused.</div>
         </div>
         <label class="perm-sw">
           <input type="checkbox" id="routingEnabledToggle" onchange="toggleRoutingField('round_robin_enabled',this.checked)">
@@ -1662,6 +1662,16 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <label style="font-size:12px;color:var(--g600);font-weight:600">Max active chats per agent</label>
           <input type="number" id="maxChatsInput" min="1" max="50" style="width:64px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;font-size:13px;font-family:inherit" onchange="toggleRoutingField('max_chats',parseInt(this.value)||5)">
         </div>
+      </div>
+
+      <div class="routing-rule-row" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div>
+          <div class="routing-rule-title">3 · Overflow Assignee</div>
+          <div class="routing-rule-desc">If nobody eligible for round robin is Online when a new chat comes in, assign it to this person instead of picking someone offline at random. They can reassign it to whoever they choose once they're online — a Team Lead works well here, since they can hand it off within their department.</div>
+        </div>
+        <select id="fallbackAgentSelect" onchange="toggleRoutingField('fallback_agent_id',this.value?parseInt(this.value):null)" style="padding:7px 10px;border:1px solid var(--g200);border-radius:6px;font-size:13px;font-family:inherit;color:var(--g700);background:#fff;max-width:280px">
+          <option value="">— None (spread blindly instead) —</option>
+        </select>
       </div>
 
       <div id="routingConfigStatus" style="font-size:12px;color:var(--g400);margin-top:14px"></div>
@@ -4036,13 +4046,25 @@ function _routingStatusMsg(cfg){
   const parts=[];
   if(cfg.sticky_enabled)parts.push('sticky ownership');
   if(cfg.round_robin_enabled)parts.push('round robin'+(cfg.capacity_enabled?` (capacity-guarded at ${cfg.max_chats}/agent)`:''));
+  if(cfg.fallback_agent_id){
+    const fb=(allAgents||[]).find(a=>a.id===cfg.fallback_agent_id);
+    parts.push(`overflow → ${fb?fb.name:'agent #'+cfg.fallback_agent_id}`);
+  }
   return parts.length?`Active: ${parts.join(' → ')}.`:'All routing rules are off — new conversations stay unassigned until someone claims them.';
+}
+function _populateFallbackAgentSelect(selectedId){
+  const sel=document.getElementById('fallbackAgentSelect');
+  if(!sel)return;
+  sel.innerHTML='<option value="">— None (spread blindly instead) —</option>'+
+    (allAgents||[]).map(a=>`<option value="${a.id}">${esc(a.name)} (${PERM_ROLE_LABELS[a.role]||a.role})</option>`).join('');
+  sel.value=selectedId||'';
 }
 async function loadRoutingConfig(){
   const status=document.getElementById('routingConfigStatus');
   const toggle=document.getElementById('routingEnabledToggle');
   if(!toggle)return;
-  [toggle,document.getElementById('stickyEnabledToggle'),document.getElementById('capacityEnabledToggle'),document.getElementById('maxChatsInput')].forEach(el=>{if(el)el.disabled=true;});
+  const controls=[toggle,document.getElementById('stickyEnabledToggle'),document.getElementById('capacityEnabledToggle'),document.getElementById('maxChatsInput'),document.getElementById('fallbackAgentSelect')];
+  controls.forEach(el=>{if(el)el.disabled=true;});
   if(status)status.textContent='Loading…';
   try{
     const r=await fetch(`/admin/routing/config?key=${encodeURIComponent(adminKey)}`);
@@ -4052,11 +4074,15 @@ async function loadRoutingConfig(){
     document.getElementById('stickyEnabledToggle').checked=!!cfg.sticky_enabled;
     document.getElementById('capacityEnabledToggle').checked=!!cfg.capacity_enabled;
     document.getElementById('maxChatsInput').value=cfg.max_chats||5;
+    if(!allAgents||!allAgents.length){
+      try{const ar=await fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`);if(ar.ok)allAgents=await ar.json();}catch(e){}
+    }
+    _populateFallbackAgentSelect(cfg.fallback_agent_id);
     if(status){status.textContent=_routingStatusMsg(cfg);status.style.color='var(--g400)';}
   }catch(e){
     if(status){status.textContent='Error loading setting.';status.style.color='var(--red)';}
   }finally{
-    [toggle,document.getElementById('stickyEnabledToggle'),document.getElementById('capacityEnabledToggle'),document.getElementById('maxChatsInput')].forEach(el=>{if(el)el.disabled=false;});
+    controls.forEach(el=>{if(el)el.disabled=false;});
   }
 }
 async function toggleRoutingField(field,value){
