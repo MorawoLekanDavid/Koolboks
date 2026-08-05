@@ -2,7 +2,7 @@ import json
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -12,7 +12,7 @@ from chatbot.core import redis_client
 from chatbot.core.security import hash_password, verify_password
 from chatbot.database import get_db
 from chatbot.dependencies import AGENT_SESSION_TTL, get_admin_ctx, require_admin, require_super_admin
-from chatbot.models import Agent, Department
+from chatbot.models import Agent, AgentLoginEvent, Department
 from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.presence_service import get_status, get_statuses
 
@@ -51,8 +51,31 @@ class AgentLoginRequest(BaseModel):
     admin_key: Optional[str] = None  # provided only when registering/logging in as super_admin
 
 
+def _client_ip(request: Request) -> Optional[str]:
+    # Trusts X-Forwarded-For if present (reverse-proxy deployments); falls
+    # back to the direct peer address otherwise. Not hardened against a
+    # client spoofing this header on a deployment with no trusted proxy in
+    # front — fine for an internal audit trail, not meant as an ACL input.
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+def _log_login_event(db, agent_id: int, request: Request) -> None:
+    try:
+        db.add(AgentLoginEvent(
+            agent_id=agent_id,
+            ip_address=_client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        ))
+        db.commit()
+    except Exception as e:
+        log.warning(f"Failed to log login event for agent {agent_id}: {e}")
+
+
 @router.post("/agent-login")
-async def agent_login(body: AgentLoginRequest):
+async def agent_login(body: AgentLoginRequest, request: Request):
     db = get_db()
     try:
         email = body.email.strip().lower()
@@ -82,6 +105,7 @@ async def agent_login(body: AgentLoginRequest):
                     agent.password_hash = hash_password(body.password)
                     db.commit()
                     log.info(f"Super admin password reset via admin key: {email}")
+            _log_login_event(db, agent.id, request)
             # Super admin token is always the ADMIN_KEY for backward compat
             return {"token": ADMIN_KEY, "name": agent.name, "role": "super_admin", "email": agent.email}
 
@@ -102,6 +126,7 @@ async def agent_login(body: AgentLoginRequest):
         })
         if redis_client.client:
             await redis_client.client.set(f"koolbuy:agent_session:{token}", session_data, ex=AGENT_SESSION_TTL)
+        _log_login_event(db, agent.id, request)
         return {"token": token, "name": agent.name, "role": agent.role, "email": agent.email}
     finally:
         db.close()

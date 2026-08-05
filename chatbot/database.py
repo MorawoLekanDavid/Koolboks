@@ -78,6 +78,34 @@ def init_database():
     except Exception as _e:
         log.warning(f"handoff_events migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS agent_login_events (
+                    id SERIAL PRIMARY KEY,
+                    agent_id INTEGER NOT NULL,
+                    login_at TIMESTAMP DEFAULT NOW(),
+                    logout_at TIMESTAMP,
+                    ip_address VARCHAR(64),
+                    user_agent VARCHAR(500)
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_agent_login_events_agent_id ON agent_login_events (agent_id)"))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_agent_login_events_login_at ON agent_login_events (login_at)"))
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS agent_heartbeat_log (
+                    id SERIAL PRIMARY KEY,
+                    agent_id INTEGER NOT NULL,
+                    status VARCHAR(20) NOT NULL,
+                    logged_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_agent_heartbeat_log_agent_id ON agent_heartbeat_log (agent_id)"))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_agent_heartbeat_log_logged_at ON agent_heartbeat_log (logged_at)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"agent_login_events/agent_heartbeat_log migration: {_e}")
+
     # AI instructions + knowledge base tables, seeded from existing files on first run
     try:
         with db_engine.connect() as _c:

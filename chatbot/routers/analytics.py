@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -7,7 +7,8 @@ from sqlalchemy import and_, case, func, select, text
 
 from chatbot.database import get_db
 from chatbot.routers.permissions import require_tab_permission
-from chatbot.models import Agent, ConversationScore, Department, HandoffEvent, Lead, Message
+from chatbot.models import Agent, AgentHeartbeatLog, AgentLoginEvent, ConversationScore, Department, HandoffEvent, Lead, Message
+from chatbot.services.presence_service import HEARTBEAT_TTL
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/analytics", tags=["analytics"])
@@ -630,6 +631,155 @@ async def agent_performance(
                     {"agent": r["agent"], "total_conversations": r["total_conversations"], "avg_aht_minutes": r["aht_minutes"]}
                     for r in leaderboard
                 ],
+            }
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+_UA_OS_PATTERNS = [
+    ("Windows", "Windows"), ("Mac OS", "macOS"), ("iPhone", "iOS"),
+    ("iPad", "iOS"), ("Android", "Android"), ("Linux", "Linux"),
+]
+
+
+def _parse_device_os(user_agent: Optional[str]) -> str:
+    if not user_agent:
+        return "Unknown"
+    for needle, label in _UA_OS_PATTERNS:
+        if needle in user_agent:
+            return label
+    return "Unknown"
+
+
+@router.get("/shift-tracker")
+async def shift_tracker(
+    date: Optional[str] = Query(None),
+    agent_id: Optional[int] = Query(None),
+    department_id: Optional[int] = Query(None),
+    ctx: dict = Depends(require_tab_permission("analytics")),
+):
+    """Single-day view — the Gantt is inherently per-day, unlike every other
+    Analytics Console tab which uses the global date-range filter. Built
+    entirely from AgentHeartbeatLog/AgentLoginEvent, which only exist from
+    the point this feature shipped — earlier dates return empty, not wrong."""
+    def _fetch():
+        db = get_db()
+        try:
+            day = datetime.fromisoformat(date).date() if date else datetime.utcnow().date()
+            day_start = datetime(day.year, day.month, day.day)
+            day_end = day_start + timedelta(days=1) - timedelta(microseconds=1)
+            now = datetime.utcnow()
+
+            agents_by_id = {a.id: a for a in db.query(Agent).all()}
+            allowed_ids = None
+            if agent_id:
+                allowed_ids = {agent_id}
+            elif department_id:
+                allowed_ids = {a.id for a in agents_by_id.values() if a.department_id == department_id}
+
+            hb_q = db.query(AgentHeartbeatLog).filter(
+                AgentHeartbeatLog.logged_at >= day_start, AgentHeartbeatLog.logged_at <= day_end
+            )
+            if allowed_ids is not None:
+                hb_q = hb_q.filter(AgentHeartbeatLog.agent_id.in_(allowed_ids))
+            hb_rows = hb_q.order_by(AgentHeartbeatLog.agent_id, AgentHeartbeatLog.logged_at).all()
+
+            rows_by_agent: dict = {}
+            for r in hb_rows:
+                rows_by_agent.setdefault(r.agent_id, []).append(r)
+
+            # Run-length-encode consecutive heartbeat rows into timeline segments.
+            segments_by_agent: dict = {}
+            for aid, rows in rows_by_agent.items():
+                segs = []
+                for i, r in enumerate(rows):
+                    start = r.logged_at
+                    if i + 1 < len(rows):
+                        end = rows[i + 1].logged_at
+                    elif r.status == "offline":
+                        end = start
+                    else:
+                        # No closing row — the heartbeat silently expired
+                        # (crash/network drop never fires the offline beacon).
+                        # Cap the open segment at one TTL window past the last
+                        # ping rather than dragging it out to "now".
+                        cap = start + timedelta(seconds=HEARTBEAT_TTL)
+                        end = min(cap, now) if day == now.date() else cap
+                    segs.append({"status": r.status, "start": start.isoformat(), "end": end.isoformat()})
+                segments_by_agent[aid] = segs
+
+            total_online_agents = sum(
+                1 for segs in segments_by_agent.values() if any(s["status"] == "online" for s in segs)
+            )
+
+            shift_minutes, idle_rates = [], []
+            for aid, rows in rows_by_agent.items():
+                non_offline = [r for r in rows if r.status != "offline"]
+                if not non_offline:
+                    continue
+                segs = segments_by_agent[aid]
+                first_ts = non_offline[0].logged_at
+                last_ts = max(datetime.fromisoformat(s["end"]) for s in segs if s["status"] != "offline")
+                shift_minutes.append((last_ts - first_ts).total_seconds() / 60)
+
+                online_secs = sum(
+                    (datetime.fromisoformat(s["end"]) - datetime.fromisoformat(s["start"])).total_seconds()
+                    for s in segs if s["status"] == "online"
+                )
+                away_secs = sum(
+                    (datetime.fromisoformat(s["end"]) - datetime.fromisoformat(s["start"])).total_seconds()
+                    for s in segs if s["status"] == "away"
+                )
+                if online_secs + away_secs > 0:
+                    # Idle rate = share of *working* time (online+away) spent
+                    # away — offline time isn't "idle while working", it's not
+                    # working at all, so it's excluded from the denominator.
+                    idle_rates.append(away_secs / (online_secs + away_secs) * 100)
+
+            timeline = [
+                {"agent_id": aid, "agent": agents_by_id[aid].name if aid in agents_by_id else f"Agent {aid}", "segments": segs}
+                for aid, segs in segments_by_agent.items()
+            ]
+            timeline.sort(key=lambda t: t["agent"])
+
+            login_q = db.query(AgentLoginEvent).filter(
+                AgentLoginEvent.login_at >= day_start, AgentLoginEvent.login_at <= day_end
+            )
+            if allowed_ids is not None:
+                login_q = login_q.filter(AgentLoginEvent.agent_id.in_(allowed_ids))
+            login_rows = login_q.order_by(AgentLoginEvent.login_at.desc()).all()
+
+            last_hb_by_agent = {aid: rows[-1] for aid, rows in rows_by_agent.items()}
+            audit = []
+            for ev in login_rows:
+                agent_obj = agents_by_id.get(ev.agent_id)
+                if ev.logout_at:
+                    session_status = "Ended"
+                else:
+                    last_hb = last_hb_by_agent.get(ev.agent_id)
+                    if last_hb and last_hb.status != "offline" and (now - last_hb.logged_at).total_seconds() < HEARTBEAT_TTL + 60:
+                        session_status = "Active"
+                    else:
+                        session_status = "Dropped"
+                audit.append({
+                    "agent": agent_obj.name if agent_obj else f"Agent {ev.agent_id}",
+                    "login_at": ev.login_at.isoformat() if ev.login_at else None,
+                    "logout_at": ev.logout_at.isoformat() if ev.logout_at else None,
+                    "device_os": _parse_device_os(ev.user_agent),
+                    "ip_address": ev.ip_address,
+                    "session_status": session_status,
+                })
+
+            return {
+                "date": day.isoformat(),
+                "kpis": {
+                    "total_online_agents": total_online_agents,
+                    "avg_shift_minutes": round(sum(shift_minutes) / len(shift_minutes), 1) if shift_minutes else None,
+                    "avg_idle_rate_pct": round(sum(idle_rates) / len(idle_rates), 1) if idle_rates else None,
+                },
+                "timeline": timeline,
+                "audit": audit,
             }
         finally:
             db.close()

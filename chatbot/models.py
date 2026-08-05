@@ -135,6 +135,33 @@ class HandoffEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class AgentLoginEvent(Base):
+    """One row per login — powers the Shift & Login audit table. logout_at
+    stays null for crash/force-quit sessions (no clean-exit signal fires);
+    the reporting endpoint infers an approximate end from the last heartbeat
+    row instead of fabricating a logout event here."""
+    __tablename__ = "agent_login_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    login_at = Column(DateTime, default=datetime.utcnow, index=True)
+    logout_at = Column(DateTime, nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+
+
+class AgentHeartbeatLog(Base):
+    """Throttled presence snapshots (written on status change or >60s since
+    the last row) — turns the otherwise-ephemeral Redis heartbeat into a
+    real history the Shift & Login Gantt timeline can be built from."""
+    __tablename__ = "agent_heartbeat_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    status = Column(String(20), nullable=False)  # online | away | offline
+    logged_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class AIInstruction(Base):
     """Versioned system prompt / AI instruction set"""
     __tablename__ = "ai_instructions"

@@ -1246,9 +1246,29 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       </div>
     </div>
 
-    <!-- Shift & Login Tracker (Stage D) -->
+    <!-- Shift & Login Tracker -->
     <div id="anPanel-shift" class="hidden">
-      <div class="card"><p class="an-soon">🚧 Shift &amp; Login Tracker is coming soon.</p></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin:0 0 2px">🕐 Shift &amp; Login Tracker</h3>
+            <p style="font-size:12px;color:var(--g400);margin:0">Presence, idle time, and login/device audit for a single day</p>
+          </div>
+          <input type="date" id="shiftDatePicker" onchange="loadShiftTrackerTab()" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+        </div>
+
+        <div class="stat-cards-row" id="shiftKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Presence Timeline <span style="text-transform:none;font-weight:400;letter-spacing:0">— <span style="color:#10B981">●</span> Online &nbsp; <span style="color:#F59E0B">●</span> Away &nbsp; <span style="color:#94A3B8">●</span> Offline</span></p>
+        <div id="shiftGanttChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Login &amp; Device Audit</p>
+        <div id="shiftAuditTable" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      </div>
     </div>
 
     <!-- Agent Performance -->
@@ -4026,6 +4046,11 @@ function switchAnalyticsSubTab(name){
 
   clearInterval(bcPollInterval);
   if(name==='overview'){loadFunnel();loadProductRecs();}
+  if(name==='shift'){
+    const dp=document.getElementById('shiftDatePicker');
+    if(dp&&!dp.value)dp.value=new Date().toISOString().slice(0,10);
+    loadShiftTrackerTab();
+  }
   if(name==='agentPerf')loadAgentPerformanceTab();
   if(name==='aiPerf')loadAiPerformanceTab();
   if(name==='traffic')loadTrafficTab();
@@ -6225,6 +6250,91 @@ async function deleteContact(phone){
   }catch(e){alert('Network error — please try again');}
 }
 // ── End Contacts tab ──────────────────────────────────────────────────────────
+
+// ── Shift & Login Tracker (Analytics Console Tab 1) ────────────────────────────
+const SHIFT_STATUS_COLORS={online:'#10B981',away:'#F59E0B',offline:'#94A3B8'};
+
+function _anMinutesSinceMidnight(iso){
+  const d=new Date(iso+'Z');
+  return d.getUTCHours()*60+d.getUTCMinutes();
+}
+
+function _anFmtDateTime(iso){
+  return iso?new Date(iso+'Z').toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+}
+
+function _anFmtHoursMinutes(totalMinutes){
+  const h=Math.floor(totalMinutes/60),m=Math.round(totalMinutes%60);
+  return h>0?`${h}h ${m}m`:`${m}m`;
+}
+
+function _renderGanttRow(agentName,segments){
+  const bars=segments.map(s=>{
+    const startMin=_anMinutesSinceMidnight(s.start);
+    const endMin=Math.max(startMin,_anMinutesSinceMidnight(s.end));
+    const left=(startMin/1440*100).toFixed(2);
+    const width=Math.max(0.2,(endMin-startMin)/1440*100).toFixed(2);
+    const label=`${s.status} ${formatTime(s.start)}–${formatTime(s.end)}`;
+    return `<div style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:${SHIFT_STATUS_COLORS[s.status]||'#ccc'}" title="${esc(label)}"></div>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="width:140px;flex-shrink:0;font-size:12px;font-weight:600;color:var(--g700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(agentName)}</div>
+    <div style="position:relative;flex:1;height:22px;background:var(--g50);border-radius:4px;overflow:hidden">${bars}</div>
+  </div>`;
+}
+
+async function loadShiftTrackerTab(){
+  const kpiEl=document.getElementById('shiftKpiCards');
+  const ganttEl=document.getElementById('shiftGanttChart');
+  const auditEl=document.getElementById('shiftAuditTable');
+  if(!kpiEl)return;
+  kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const date=document.getElementById('shiftDatePicker')?.value||new Date().toISOString().slice(0,10);
+    const qs=new URLSearchParams({key:adminKey,date});
+    const agentId=document.getElementById('anAgentFilter')?.value;
+    const deptId=document.getElementById('anDeptFilter')?.value;
+    if(agentId)qs.set('agent_id',agentId);
+    if(deptId)qs.set('department_id',deptId);
+
+    const r=await fetch(`/admin/analytics/shift-tracker?${qs}`);
+    if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';ganttEl.innerHTML='';auditEl.innerHTML='';return;}
+    const d=await r.json();
+    const k=d.kpis||{};
+    kpiEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n">${k.total_online_agents||0}</div><div class="stat-l">Total Online Agents</div></div>
+      <div class="stat-c"><div class="stat-n">${k.avg_shift_minutes!=null?_anFmtHoursMinutes(k.avg_shift_minutes):'—'}</div><div class="stat-l">Avg Shift Duration</div></div>
+      <div class="stat-c"><div class="stat-n">${k.avg_idle_rate_pct!=null?k.avg_idle_rate_pct+'%':'—'}</div><div class="stat-l">Avg Idle Rate</div></div>
+    `;
+
+    if(!d.timeline||!d.timeline.length){
+      ganttEl.innerHTML='<p style="color:var(--g400);font-size:13px">No presence data for this day yet</p>';
+    } else {
+      ganttEl.innerHTML=d.timeline.map(t=>_renderGanttRow(t.agent,t.segments)).join('');
+    }
+
+    if(!d.audit||!d.audit.length){
+      auditEl.innerHTML='<p style="color:var(--g400);font-size:13px">No logins recorded for this day</p>';
+    } else {
+      const statusBadge=s=>{
+        const c=s==='Active'?{bg:'#dcfce7',fg:'#166534'}:s==='Ended'?{bg:'var(--g100)',fg:'var(--g500)'}:{bg:'#fee2e2',fg:'#991b1b'};
+        return `<span style="font-size:10px;padding:2px 8px;background:${c.bg};color:${c.fg};border-radius:99px;font-weight:700">${esc(s)}</span>`;
+      };
+      auditEl.innerHTML=`<table class="agt-table">
+        <thead><tr><th>Agent</th><th>Login Time</th><th>Logout Time</th><th>Device OS</th><th>IP</th><th>Session Status</th></tr></thead>
+        <tbody>${d.audit.map(row=>`<tr>
+          <td style="font-weight:600">${esc(row.agent)}</td>
+          <td style="font-size:12px">${_anFmtDateTime(row.login_at)}</td>
+          <td style="font-size:12px">${row.logout_at?_anFmtDateTime(row.logout_at):'—'}</td>
+          <td style="font-size:12px;color:var(--g500)">${esc(row.device_os)}</td>
+          <td style="font-size:12px;color:var(--g500)">${esc(row.ip_address||'—')}</td>
+          <td>${statusBadge(row.session_status)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+  }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+// ── End Shift & Login Tracker ──────────────────────────────────────────────────
 
 // ── Agent Performance (Analytics Console Tab 2) ───────────────────────────────
 let _agentPerfLeaderboard=[];
