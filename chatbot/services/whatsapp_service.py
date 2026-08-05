@@ -61,6 +61,43 @@ async def send_whatsapp_message(
     return wamid
 
 
+async def send_whatsapp_template(to: str, template_name: str, variables: list[str] = None, language: str = "en") -> bool:
+    """Send an approved template message — the only way to reach a phone
+    number that hasn't messaged us first (invites, OTPs), since Meta blocks
+    free-text sends outside a 24h customer-initiated window. Returns False
+    (never raises) if the template doesn't exist yet or isn't approved, so
+    callers can degrade gracefully instead of crashing the whole flow."""
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        log.warning("WhatsApp credentials not configured")
+        return False
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to.lstrip("+"),
+        "type": "template",
+        "template": {"name": template_name, "language": {"code": language}},
+    }
+    if variables:
+        payload["template"]["components"] = [{
+            "type": "body",
+            "parameters": [{"type": "text", "text": v} for v in variables],
+        }]
+    try:
+        async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            resp = await client.post(
+                f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages",
+                json=payload,
+                headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"},
+            )
+        if resp.is_success:
+            log.info(f"WhatsApp template '{template_name}' sent to {to}")
+            return True
+        log.warning(f"WhatsApp template '{template_name}' send to {to} failed ({resp.status_code}): {resp.text}")
+        return False
+    except Exception as e:
+        log.error(f"WhatsApp template send error: {e}")
+        return False
+
+
 def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None, delivery_status: str = "sent"):
     try:
         db = get_db()

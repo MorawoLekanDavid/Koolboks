@@ -14,6 +14,7 @@ from chatbot.routers import (
     chat,
     conversations,
     followup,
+    invite_auth,
     leads,
     misc,
     permissions,
@@ -73,3 +74,4 @@ app.include_router(ai_settings.router)
 app.include_router(usage.router)
 app.include_router(routing.router)
 app.include_router(presence.router)
+app.include_router(invite_auth.router)

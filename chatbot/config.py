@@ -22,6 +22,10 @@ ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "KoolbotAdmin2026")
 BOT_RESPONSE_DELAY = int(os.environ.get("BOT_RESPONSE_DELAY_SECONDS", "10"))
 
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://chat.koolbuystore.com")
+INVITE_TEMPLATE = os.environ.get("INVITE_TEMPLATE", "koolbuy_staff_invite")
+OTP_TEMPLATE = os.environ.get("OTP_TEMPLATE", "koolbuy_otp_code")
+
 WABA_ID = os.environ.get("WABA_ID", "")
 REENGAGEMENT_TEMPLATE = os.environ.get("REENGAGEMENT_TEMPLATE", "")
 REENGAGEMENT_TEMPLATE_LANG = os.environ.get("REENGAGEMENT_TEMPLATE_LANG", "en")

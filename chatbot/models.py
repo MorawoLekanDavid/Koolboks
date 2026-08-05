@@ -76,6 +76,12 @@ class Agent(Base):
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Invite-only signup + WhatsApp OTP password recovery
+    is_active = Column(Boolean, default=True)  # False only while an invite is pending acceptance
+    invite_token = Column(String(255), nullable=True, unique=True, index=True)
+    invite_token_expires_at = Column(DateTime, nullable=True)
+    phone_number = Column(String(30), nullable=True, unique=True)  # WhatsApp target for invite/OTP delivery
+
     department = relationship("Department", back_populates="agents")
 
 

@@ -132,6 +132,7 @@ async def list_agents(ctx: dict = Depends(require_tab_permission("team"))):
     agents, depts = await run_in_threadpool(_fetch)
     statuses = await get_statuses([a.id for a in agents])
     return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
+             "phone_number": a.phone_number, "is_active": a.is_active,
              "department_id": a.department_id, "department_name": depts.get(a.department_id),
              "status": statuses.get(a.id, "offline"),
              "created_at": a.created_at.isoformat() if a.created_at else None} for a in agents]
@@ -146,7 +147,9 @@ async def agents_directory(ctx: dict = Depends(get_admin_ctx)):
     def _fetch():
         db = get_db()
         try:
-            agents = db.query(Agent).order_by(Agent.name.asc()).all()
+            # Pending invites can't be assigned anything yet — only surface
+            # accounts that can actually log in and act on a conversation.
+            agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.name.asc()).all()
             return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
                      "department_id": a.department_id} for a in agents]
         finally:

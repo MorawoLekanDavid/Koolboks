@@ -705,7 +705,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <input type="password" id="loginKey" placeholder="Admin key (super admin only)"/>
       <div class="login-error" id="loginError"></div>
       <button class="login-btn" onclick="login()">Sign In</button>
-      <div class="login-link" onclick="showChangePwForm()">Change Password</div>
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <div class="login-link" onclick="showChangePwForm()">Change Password</div>
+        <div class="login-link" onclick="showForgotScreen()">Forgot password?</div>
+      </div>
     </div>
     <div id="changePwFields" class="hidden">
       <input type="email"    id="cpEmail"   placeholder="Email address" autocomplete="email"/>
@@ -715,6 +718,54 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="login-error" id="cpError"></div>
       <div class="login-success" id="cpSuccess"></div>
       <button class="login-btn" id="cpSubmitBtn" onclick="submitLoginChangePassword()">Change Password</button>
+      <div class="login-link" onclick="showLoginForm()">Back to Sign In</div>
+    </div>
+  </div>
+</div>
+
+<!-- Invite registration screen (?token=... in the URL) -->
+<div class="login-screen hidden" id="registerScreen">
+  <div class="login-card">
+    <div class="login-logo">🤖</div>
+    <h2>Set Up Your Account</h2>
+    <p id="regWelcome">Loading your invite…</p>
+    <div id="regLoadingFields"></div>
+    <div id="regPasswordFields" class="hidden">
+      <input type="password" id="regPassword"        placeholder="Choose a password (at least 6 characters)" autocomplete="new-password"/>
+      <input type="password" id="regPasswordConfirm"  placeholder="Confirm password" autocomplete="new-password"/>
+      <div class="login-error" id="regError"></div>
+      <button class="login-btn" onclick="submitRegistration()">Create Account</button>
+    </div>
+    <div id="regOtpFields" class="hidden">
+      <p style="font-size:13px;color:var(--g500);margin:0 0 12px" id="regOtpMsg">A verification code was sent to your WhatsApp.</p>
+      <input type="text" id="regOtpCode" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+      <div class="login-error" id="regOtpError"></div>
+      <button class="login-btn" onclick="submitRegistrationOtp()">Verify &amp; Sign In</button>
+      <div class="login-link" id="regSkipOtpLink" onclick="showLoginForm()">Skip — sign in with email &amp; password instead</div>
+    </div>
+  </div>
+</div>
+
+<!-- Forgot password screen -->
+<div class="login-screen hidden" id="forgotScreen">
+  <div class="login-card">
+    <div class="login-logo">🤖</div>
+    <h2>Reset Your Password</h2>
+    <div id="forgotRequestFields">
+      <p>Enter your email or WhatsApp number — if you have an account, we'll send a code.</p>
+      <input type="text" id="forgotIdentifier" placeholder="Email or WhatsApp number"/>
+      <div class="login-error" id="forgotError"></div>
+      <div class="login-success" id="forgotSuccess"></div>
+      <button class="login-btn" onclick="submitForgotPassword()">Send Code</button>
+      <div class="login-link" onclick="showLoginForm()">Back to Sign In</div>
+    </div>
+    <div id="forgotResetFields" class="hidden">
+      <p>Enter the code we sent and choose a new password.</p>
+      <input type="text"     id="forgotOtpCode"    placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+      <input type="password" id="forgotNewPassword" placeholder="New password (at least 6 characters)" autocomplete="new-password"/>
+      <input type="password" id="forgotNewPasswordConfirm" placeholder="Confirm new password" autocomplete="new-password"/>
+      <div class="login-error" id="forgotResetError"></div>
+      <button class="login-btn" onclick="submitResetPassword()">Reset Password</button>
       <div class="login-link" onclick="showLoginForm()">Back to Sign In</div>
     </div>
   </div>
@@ -1438,12 +1489,12 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     </div>
     <div class="card">
       <h3>Team Members</h3>
-      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add members. Only the super admin can promote or demote roles.</p>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">New members are invited by WhatsApp — they set their own password and verify their phone number. Admins and super admin can send invites. Only the super admin can promote or demote roles.</p>
       <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
-      <div class="add-agent-form" id="addAgentForm" style="margin-top:18px;display:none">
+      <div class="add-agent-form" id="addAgentForm" style="margin-top:18px;display:none;flex-wrap:wrap">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
         <input type="email"    id="newAgentEmail"    placeholder="Email address"/>
-        <input type="password" id="newAgentPassword" placeholder="Password"/>
+        <input type="tel"      id="newAgentPhone"     placeholder="WhatsApp number, e.g. 08012345678"/>
         <select id="newAgentRole" style="padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g700);outline:none;min-width:160px">
           <option value="customer_success_agent">Customer Success Agent</option>
           <option value="telesales_agent">Telesales Agent</option>
@@ -1451,8 +1502,12 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <option value="team_lead">Team Lead</option>
           <option value="admin">Admin</option>
         </select>
-        <button class="btn-primary" onclick="addAgent()">+ Add Member</button>
+        <select id="newAgentDept" style="padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g700);outline:none;min-width:160px">
+          <option value="">— No department —</option>
+        </select>
+        <button class="btn-primary" onclick="inviteMember()">+ Send Invite</button>
       </div>
+      <div id="inviteResult" style="font-size:12px;margin-top:10px"></div>
     </div>
 
     <div class="card" style="margin-top:20px" id="departmentsCard">
@@ -2103,6 +2158,13 @@ let _outreachTemplatesCache=null;
 
 // ── Boot ───────────────────────────────────────────────────────────────
 window.onload=async()=>{
+  const inviteToken=new URLSearchParams(window.location.search).get('token');
+  if(inviteToken){
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('registerScreen').classList.remove('hidden');
+    await loadInvite(inviteToken);
+    return;
+  }
   const s=localStorage.getItem('koolbot_agent');
   if(s){
     try{
@@ -2266,6 +2328,112 @@ function showLoginForm(){
   document.getElementById('changePwFields').classList.add('hidden');
   document.getElementById('loginFields').classList.remove('hidden');
   ['cpEmail','cpOld','cpNew','cpConfirm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('registerScreen').classList.add('hidden');
+  document.getElementById('forgotScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  // Drop the invite token from the URL so a refresh doesn't re-trigger it
+  if(window.location.search.includes('token='))history.replaceState({},'',window.location.pathname);
+}
+function showForgotScreen(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('registerScreen').classList.add('hidden');
+  document.getElementById('forgotScreen').classList.remove('hidden');
+  document.getElementById('forgotRequestFields').classList.remove('hidden');
+  document.getElementById('forgotResetFields').classList.add('hidden');
+  ['forgotIdentifier','forgotOtpCode','forgotNewPassword','forgotNewPasswordConfirm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('forgotError').style.display='none';
+  document.getElementById('forgotSuccess').style.display='none';
+}
+
+// ── Invite registration ──────────────────────────────────────────────────
+let _regToken=null;
+async function loadInvite(token){
+  _regToken=token;
+  try{
+    const r=await fetch(`/auth/verify-invite?token=${encodeURIComponent(token)}`);
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){
+      document.getElementById('regWelcome').textContent=d.detail||'This invite link is invalid or has expired.';
+      return;
+    }
+    document.getElementById('regWelcome').textContent=`Welcome, ${d.name}! Choose a password for ${d.email}.`;
+    document.getElementById('regPasswordFields').classList.remove('hidden');
+  }catch(e){
+    document.getElementById('regWelcome').textContent='Could not reach the server — please refresh and try again.';
+  }
+}
+async function submitRegistration(){
+  const password=document.getElementById('regPassword').value;
+  const confirm_password=document.getElementById('regPasswordConfirm').value;
+  const err=document.getElementById('regError');
+  err.style.display='none';
+  if(password.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
+  if(password!==confirm_password){err.textContent='Passwords do not match.';err.style.display='block';return;}
+  try{
+    const r=await fetch('/auth/complete-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:_regToken,password,confirm_password})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=d.detail||'Failed to create account.';err.style.display='block';return;}
+    document.getElementById('regPasswordFields').classList.add('hidden');
+    document.getElementById('regWelcome').textContent=d.message;
+    window._regEmail=d.email;
+    document.getElementById('regOtpFields').classList.remove('hidden');
+    // Only show the code entry when one was actually sent — otherwise the
+    // account is already fully set up, so just point them at normal sign-in.
+    document.getElementById('regOtpMsg').style.display=d.otp_sent?'':'none';
+    document.getElementById('regOtpCode').style.display=d.otp_sent?'':'none';
+    document.querySelector('#regOtpFields .login-btn').style.display=d.otp_sent?'':'none';
+    document.getElementById('regSkipOtpLink').textContent=d.otp_sent
+      ?'Skip — sign in with email & password instead'
+      :'Continue to Sign In';
+  }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
+}
+async function submitRegistrationOtp(){
+  const otp_code=document.getElementById('regOtpCode').value.trim();
+  const err=document.getElementById('regOtpError');
+  err.style.display='none';
+  if(!window._regEmail){showLoginForm();return;}
+  try{
+    const r=await fetch('/auth/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:window._regEmail,otp_code})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=d.detail||'Incorrect code.';err.style.display='block';return;}
+    adminKey=d.token;agentName=d.name;agentRole=d.role;agentEmail=d.email||'';
+    save();
+    document.getElementById('registerScreen').classList.add('hidden');
+    history.replaceState({},'',window.location.pathname);
+    showApp();
+  }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
+}
+
+// ── Forgot password ───────────────────────────────────────────────────────
+let _forgotIdentifier=null;
+async function submitForgotPassword(){
+  const identifier=document.getElementById('forgotIdentifier').value.trim();
+  const err=document.getElementById('forgotError');
+  err.style.display='none';
+  if(!identifier){err.textContent='Please enter your email or WhatsApp number.';err.style.display='block';return;}
+  try{
+    const r=await fetch('/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email_or_phone:identifier})});
+    const d=await r.json().catch(()=>({}));
+    _forgotIdentifier=identifier;
+    document.getElementById('forgotRequestFields').classList.add('hidden');
+    document.getElementById('forgotResetFields').classList.remove('hidden');
+  }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
+}
+async function submitResetPassword(){
+  const otp_code=document.getElementById('forgotOtpCode').value.trim();
+  const new_password=document.getElementById('forgotNewPassword').value;
+  const confirm=document.getElementById('forgotNewPasswordConfirm').value;
+  const err=document.getElementById('forgotResetError');
+  err.style.display='none';
+  if(new_password.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
+  if(new_password!==confirm){err.textContent='Passwords do not match.';err.style.display='block';return;}
+  try{
+    const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email_or_phone:_forgotIdentifier,otp_code,new_password})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=d.detail||'Incorrect or expired code.';err.style.display='block';return;}
+    alert('Password reset — please sign in with your new password.');
+    showLoginForm();
+  }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
 }
 async function submitLoginChangePassword(){
   const email=document.getElementById('cpEmail').value.trim();
@@ -3809,13 +3977,23 @@ async function loadAgentList(){
     // roster, not managing other people's accounts.
     document.getElementById('addAgentForm').style.display=viewerIsAdmin?'':'none';
     const deptOpts='<option value="">— No department —</option>'+_departments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    const newDeptSel=document.getElementById('newAgentDept');
+    if(newDeptSel)newDeptSel.innerHTML=deptOpts;
     document.getElementById('agentTableBody').innerHTML=agents.length
       ?agents.map(a=>{
+          const rn=(a.name||'').replace(/'/g,"\\'");
+          if(!a.is_active){
+            // Pending invite — no working credentials yet, so the only
+            // sensible actions are resending the link or cancelling it.
+            const pendingBadge=`<span class="role-badge" style="background:var(--g100);color:var(--g500)">⏳ Pending Invite</span>`;
+            const resendBtn=viewerIsAdmin?`<button class="canned-row-edit" style="margin-right:4px" onclick="resendInvite(${a.id},'${rn}')">Resend</button>`:'';
+            const cancelBtn=viewerIsAdmin?`<button class="btn-danger" onclick="removeAgent(${a.id})">Cancel</button>`:'';
+            return `<tr style="opacity:.75"><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${pendingBadge}</td><td>${esc(a.department_name||'—')}</td><td style="white-space:nowrap">${resendBtn}${cancelBtn}</td></tr>`;
+          }
           const roleBadge=`<span class="role-badge ${a.role}">${PERM_ROLE_LABELS[a.role]||a.role}</span>`;
           const statusDot=`<span class="status-dot" style="position:static;display:inline-block;border:none;margin-right:5px;vertical-align:middle" title="${a.status||'offline'}"></span>`.replace('status-dot"','status-dot '+(a.status||'offline')+'"');
           const canManage=viewerIsAdmin&&a.role!=='super_admin'&&(isSuperAdmin||a.role!=='admin');
           const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
-          const rn=(a.name||'').replace(/'/g,"\\'");
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
           let promoteBtn='';
           if(isSuperAdmin&&a.role!=='super_admin'){
@@ -3853,15 +4031,40 @@ async function setRole(id,role){
   if(r&&r.ok)await loadAgentList();
   else alert('Failed to update role.');
 }
-async function addAgent(){
+async function inviteMember(){
   const name=document.getElementById('newAgentName').value.trim();
   const email=document.getElementById('newAgentEmail').value.trim();
-  const password=document.getElementById('newAgentPassword').value;
+  const phone_number=document.getElementById('newAgentPhone').value.trim();
   const role=document.getElementById('newAgentRole')?.value||'customer_success_agent';
-  if(!name||!email||!password){alert('Please fill in name, email and password.');return;}
-  const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password,role})}).catch(()=>null);
-  if(r&&r.ok){['newAgentName','newAgentEmail','newAgentPassword'].forEach(id=>document.getElementById(id).value='');await loadAgentList();}
-  else if(r){const e=await r.json().catch(()=>({}));alert(e.detail||'Failed to add member.');}
+  const deptVal=document.getElementById('newAgentDept')?.value;
+  const department_id=deptVal?parseInt(deptVal):null;
+  const resultEl=document.getElementById('inviteResult');
+  if(!name||!email||!phone_number){alert('Please fill in name, email and WhatsApp number.');return;}
+  if(resultEl){resultEl.textContent='Sending invite…';resultEl.style.color='var(--g400)';}
+  const r=await fetch(`/admin/invite-member?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone_number,role,department_id})}).catch(()=>null);
+  if(r&&r.ok){
+    const d=await r.json();
+    ['newAgentName','newAgentEmail','newAgentPhone'].forEach(id=>document.getElementById(id).value='');
+    if(resultEl){
+      resultEl.innerHTML=d.whatsapp_sent
+        ?`<span style="color:var(--green)">✓ Invite sent to ${esc(name)} on WhatsApp.</span>`
+        :`<span style="color:var(--red)">⚠ Couldn't deliver via WhatsApp — share this link with them manually: <a href="${esc(d.invite_link)}" target="_blank">${esc(d.invite_link)}</a></span>`;
+    }
+    await loadAgentList();
+  }else if(r){
+    const e=await r.json().catch(()=>({}));
+    if(resultEl){resultEl.textContent=e.detail||'Failed to send invite.';resultEl.style.color='var(--red)';}
+  }
+}
+async function resendInvite(id,name){
+  if(!confirm(`Resend the invite link to ${name}?`))return;
+  const r=await fetch(`/admin/agents/${id}/resend-invite?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>null);
+  if(r&&r.ok){
+    const d=await r.json();
+    alert(d.whatsapp_sent?`Invite resent to ${name} on WhatsApp.`:`Couldn't deliver via WhatsApp — share this link manually: ${d.invite_link}`);
+  }else{
+    alert('Failed to resend invite.');
+  }
 }
 async function removeAgent(id){
   if(!confirm('Remove this agent?'))return;
