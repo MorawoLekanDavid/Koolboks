@@ -160,6 +160,8 @@ async def broadcast_overview(
                 "responded": responded,
                 "failed": failed,
                 "pending": max(0, trackable - delivered - failed),
+                "delivery_rate": round(delivered / trackable * 100) if trackable else None,
+                "response_rate": round(responded / total * 100) if total else 0,
             }
         finally:
             db.close()
@@ -313,10 +315,17 @@ async def conversation_quality(
 
             if not rows:
                 return {"avg_score": None, "total_scored": 0, "lost_count": 0,
-                        "issue_counts": {}, "flagged": [], "trend": []}
+                        "issue_counts": {}, "flagged": [], "trend": [],
+                        "auto_resolution_rate": None, "handoff_rate": None,
+                        "trend_bot": [], "trend_human": []}
 
             avg_score = sum(r.quality_score for r in rows) / len(rows)
             lost_count = sum(1 for r in rows if r.likely_lost_customer)
+
+            bot_count = sum(1 for r in rows if r.responder_type == "bot")
+            handoff_count = sum(1 for r in rows if r.responder_type in ("agent", "mixed"))
+            auto_resolution_rate = round(bot_count / len(rows) * 100, 1)
+            handoff_rate = round(handoff_count / len(rows) * 100, 1)
 
             issue_counts: dict = {}
             for r in rows:
@@ -326,12 +335,26 @@ async def conversation_quality(
                         issue_counts[tag] = issue_counts.get(tag, 0) + 1
 
             trend_map: dict = {}
+            # "mixed" folds into "human" — an agent owned the outcome, which is
+            # the more actionable signal for coaching than a strict bot/not-bot split.
+            bot_trend_map: dict = {}
+            human_trend_map: dict = {}
             for r in rows:
                 day = r.scored_through.date().isoformat()
                 trend_map.setdefault(day, []).append(r.quality_score)
+                bucket = bot_trend_map if r.responder_type == "bot" else human_trend_map
+                bucket.setdefault(day, []).append(r.quality_score)
             trend = [
                 {"date": d, "avg_score": round(sum(v) / len(v), 2), "count": len(v)}
                 for d, v in sorted(trend_map.items())
+            ]
+            trend_bot = [
+                {"date": d, "avg_score": round(sum(v) / len(v), 2), "count": len(v)}
+                for d, v in sorted(bot_trend_map.items())
+            ]
+            trend_human = [
+                {"date": d, "avg_score": round(sum(v) / len(v), 2), "count": len(v)}
+                for d, v in sorted(human_trend_map.items())
             ]
 
             flagged_rows = [r for r in rows if r.likely_lost_customer][:50]
@@ -366,6 +389,10 @@ async def conversation_quality(
                 "issue_counts": issue_counts,
                 "flagged": flagged,
                 "trend": trend,
+                "auto_resolution_rate": auto_resolution_rate,
+                "handoff_rate": handoff_rate,
+                "trend_bot": trend_bot,
+                "trend_human": trend_human,
             }
         finally:
             db.close()

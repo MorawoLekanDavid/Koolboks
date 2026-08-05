@@ -401,6 +401,15 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .funnel-lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--g700);margin-bottom:4px;font-weight:600}
 .funnel-track{height:26px;background:var(--g100);border-radius:6px;overflow:hidden}
 .funnel-fill{height:100%;background:var(--orange);border-radius:6px;display:flex;align-items:center;padding-left:8px;color:#fff;font-size:11px;font-weight:700;transition:width .6s;min-width:30px}
+.an-filterbar{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;background:var(--surface);border-radius:12px;box-shadow:var(--sh)}
+.an-filter-group{display:flex;flex-direction:column;gap:4px}
+.an-filter-group label{font-size:10px;font-weight:700;color:var(--g400);text-transform:uppercase;letter-spacing:.04em}
+.an-filter-group select,.an-filter-group input[type=date]{font-size:12px;padding:6px 10px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit;background:#fff}
+.an-filter-group select:disabled{background:var(--g50);color:var(--g300);cursor:not-allowed}
+.an-apply-btn{font-size:12px;padding:7px 16px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;height:32px}
+.an-subnav{margin-bottom:18px}
+.an-section-lbl{font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.an-soon{color:var(--g400);font-size:13px}
 .ai-settings-layout{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
 @media(max-width:900px){.ai-settings-layout{grid-template-columns:1fr}}
 .ai-settings-left{display:flex;flex-direction:column;gap:16px}
@@ -689,6 +698,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .perm-role-chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--g100);color:var(--g500)}
 </style>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -1185,95 +1195,144 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 
   <!-- Analytics tab -->
   <div id="analyticsTab" class="tab-full hidden">
-    <div class="cards-grid">
-      <div class="card"><h3>Lead Funnel</h3><div class="stat-cards-row" id="funnelCards"></div><div id="funnelBars"></div></div>
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-          <h3 style="margin:0">Agent Performance</h3>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <input type="date" id="agentPerfFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-            <span style="font-size:12px;color:var(--g400)">to</span>
-            <input type="date" id="agentPerfTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-            <button onclick="loadAgentStats()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
-            <button onclick="downloadAgentPerf()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
+    <!-- Global filter bar -->
+    <div class="an-filterbar">
+      <div class="an-filter-group">
+        <label>Date Range</label>
+        <select id="anDateRangeSel" onchange="_anDateRangeChanged()">
+          <option value="today">Today</option>
+          <option value="7" selected>Last 7 Days</option>
+          <option value="30">Last 30 Days</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="an-filter-group hidden" id="anDateFromGroup">
+        <label>From</label>
+        <input type="date" id="anDateFrom">
+      </div>
+      <div class="an-filter-group hidden" id="anDateToGroup">
+        <label>To</label>
+        <input type="date" id="anDateTo">
+      </div>
+      <div class="an-filter-group">
+        <label>Agent</label>
+        <select id="anAgentFilter"><option value="">All Agents</option></select>
+      </div>
+      <div class="an-filter-group">
+        <label>Department</label>
+        <select id="anDeptFilter"><option value="">All Departments</option></select>
+      </div>
+      <button class="an-apply-btn" onclick="applyAnalyticsFilters()">Apply</button>
+    </div>
+
+    <!-- Sub-tab nav -->
+    <div class="bulk-tabs an-subnav">
+      <button class="bulk-tab active" data-subtab="overview" onclick="switchAnalyticsSubTab('overview')">Overview</button>
+      <button class="bulk-tab" data-subtab="shift" onclick="switchAnalyticsSubTab('shift')">Shift &amp; Login</button>
+      <button class="bulk-tab" data-subtab="agentPerf" onclick="switchAnalyticsSubTab('agentPerf')">Agent Performance</button>
+      <button class="bulk-tab" data-subtab="aiPerf" onclick="switchAnalyticsSubTab('aiPerf')">AI Performance</button>
+      <button class="bulk-tab" data-subtab="traffic" onclick="switchAnalyticsSubTab('traffic')">Traffic</button>
+      <button class="bulk-tab" data-subtab="campaigns" onclick="switchAnalyticsSubTab('campaigns')">Campaigns</button>
+    </div>
+
+    <!-- Overview panel: Lead Funnel + (temporary, pre-Stage-C) Agent Performance + Product Recommendations -->
+    <div id="anPanel-overview">
+      <div class="cards-grid">
+        <div class="card"><h3>Lead Funnel</h3><div class="stat-cards-row" id="funnelCards"></div><div id="funnelBars"></div></div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <h3 style="margin:0">Agent Performance <span style="font-size:10px;font-weight:500;color:var(--g300)">(see the new Agent Performance tab)</span></h3>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input type="date" id="agentPerfFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+              <span style="font-size:12px;color:var(--g400)">to</span>
+              <input type="date" id="agentPerfTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
+              <button onclick="loadAgentStats()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
+              <button onclick="downloadAgentPerf()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
+            </div>
           </div>
-        </div>
-        <div id="agentStatsContent"></div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:20px">
-      <h3>Product Recommendations <span style="font-size:11px;font-weight:500;color:var(--g400)">— what the bot recommends most</span></h3>
-      <div id="productRecContent"><p style="color:var(--g400);font-size:13px">Loading...</p></div>
-    </div>
-
-    <!-- Broadcast Analytics: single card -->
-    <div class="card" style="margin-top:20px">
-      <!-- Card header -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-        <div>
-          <h3 style="margin:0 0 2px">📤 Broadcast Analytics</h3>
-          <p style="font-size:12px;color:var(--g400);margin:0">Outbound campaign performance — funnel, history, and template rankings</p>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <input type="date" id="bcFromDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-          <span style="font-size:12px;color:var(--g400)">to</span>
-          <input type="date" id="bcToDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-          <button onclick="loadBroadcastAnalytics()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
+          <div id="agentStatsContent"></div>
         </div>
       </div>
-
-      <!-- Section 1: Funnel overview -->
-      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Overall Funnel</p>
-      <div id="bcOverviewFunnel"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-
-      <!-- Divider -->
-      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
-
-      <!-- Section 2: Campaigns + Templates in two columns -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
-        <div>
-          <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Recent Campaigns <span style="text-transform:none;font-weight:400;letter-spacing:0">— bulk sends only</span></p>
-          <div id="bcCampaignsTable" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-        </div>
-        <div>
-          <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Performance by Template</p>
-          <div id="bcTemplateChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-        </div>
+      <div class="card" style="margin-top:20px">
+        <h3>Product Recommendations <span style="font-size:11px;font-weight:500;color:var(--g400)">— what the bot recommends most</span></h3>
+        <div id="productRecContent"><p style="color:var(--g400);font-size:13px">Loading...</p></div>
       </div>
     </div>
 
-    <!-- AI Response Quality -->
-    <div class="card" style="margin-top:20px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-        <div>
-          <h3 style="margin:0 0 2px">🤖 AI Response Quality</h3>
+    <!-- Shift & Login Tracker (Stage D) -->
+    <div id="anPanel-shift" class="hidden">
+      <div class="card"><p class="an-soon">🚧 Shift &amp; Login Tracker is coming soon.</p></div>
+    </div>
+
+    <!-- Agent Performance (Stage C) -->
+    <div id="anPanel-agentPerf" class="hidden">
+      <div class="card"><p class="an-soon">🚧 The new Agent Performance dashboard (AHT, SLA, resolution rate, leaderboard) is coming soon — see the Overview tab for the current agent stats in the meantime.</p></div>
+    </div>
+
+    <!-- AI Performance & Conversational Quality -->
+    <div id="anPanel-aiPerf" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h3 style="margin:0 0 2px">🤖 AI Performance &amp; Conversational Quality</h3>
           <p style="font-size:12px;color:var(--g400);margin:0">How well the bot/agent handled customers — separate from lead qualification. Scored automatically once a conversation goes idle.</p>
           <p style="font-size:11px;color:var(--g300);margin:4px 0 0" title="An LLM reads each conversation and rates it 1-10 against these checks: did it repeat an already-answered question, ignore something the customer asked, accept a vague reply as an answer, recommend something irrelevant, reply unclearly, respond too slowly, or cause visible frustration? Any conversation flagged as likely losing the customer is automatically capped at 4/10.">ⓘ How this is scored — hover for details</p>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <input type="date" id="cqFromDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-          <span style="font-size:12px;color:var(--g400)">to</span>
-          <input type="date" id="cqToDate" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
-          <button onclick="loadConversationQuality()" style="font-size:12px;padding:5px 12px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">Apply</button>
+
+        <div class="stat-cards-row" id="aiPerfStatCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:28px" class="an-ai-grid">
+          <div>
+            <p class="an-section-lbl">Most Common Pitfalls</p>
+            <div id="aiPerfDonutWrap"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+          <div>
+            <p class="an-section-lbl">Bot vs. Human Quality Score Trend</p>
+            <div id="aiPerfTrendWrap"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">⚠ Flagged — Likely Lost Customers</p>
+        <div id="aiPerfFlaggedList" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      </div>
+    </div>
+
+    <!-- Chat & Traffic Telemetry (Stage B) -->
+    <div id="anPanel-traffic" class="hidden">
+      <div class="card"><p class="an-soon">🚧 Chat &amp; Traffic Telemetry is coming soon.</p></div>
+    </div>
+
+    <!-- Campaigns & Templates -->
+    <div id="anPanel-campaigns" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h3 style="margin:0 0 2px">📤 Campaigns &amp; Templates</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">Outbound campaign performance — funnel, history, and template rankings</p>
+        </div>
+
+        <div class="stat-cards-row" id="campaignsKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Delivery Funnel</p>
+        <div id="bcOverviewFunnel"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
+          <div>
+            <p class="an-section-lbl">Recent Campaigns <span style="text-transform:none;font-weight:400;letter-spacing:0">— bulk sends only</span></p>
+            <div id="bcCampaignsTable" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+          <div>
+            <p class="an-section-lbl">Performance by Template</p>
+            <div id="bcTemplateChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
         </div>
       </div>
-
-      <div class="stat-cards-row" id="cqStatCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-
-      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
-
-      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Score Trend</p>
-      <div id="cqTrendBars" style="overflow-x:auto;padding-bottom:2px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-
-      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
-
-      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">Most Common Issues</p>
-      <div id="cqIssueBars" style="max-width:480px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-
-      <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
-
-      <p style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px">⚠ Flagged — Likely Lost Customers</p>
-      <div id="cqFlaggedList" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
     </div>
   </div>
 
@@ -2741,9 +2800,7 @@ function switchTab(t){
   if(t==='leads')loadLeads();
   if(t==='contacts')loadContacts();
   if(t==='analytics'){
-    loadAnalytics();
-    clearInterval(bcPollInterval);
-    bcPollInterval=setInterval(loadBroadcastAnalytics,15000);
+    initAnalyticsConsole();
   }else{
     clearInterval(bcPollInterval);
   }
@@ -3847,7 +3904,113 @@ async function runAutoAssign(){
 // ── Analytics ──────────────────────────────────────────────────────────
 let _agentPerfData=[];  // last loaded rows — used by CSV download
 
-async function loadAnalytics(){await Promise.all([loadFunnel(),loadAgentStats(),loadProductRecs(),loadBroadcastAnalytics(),loadConversationQuality()]);}
+// ── Analytics Console: filter bar + sub-tab scaffold ──────────────────────────
+let _anActiveSubtab='overview';
+let allDepartments=[];
+let _anCharts={};
+const AN_SUBTABS=['overview','shift','agentPerf','aiPerf','traffic','campaigns'];
+// Tabs whose Agent/Department dropdowns are real filters — the rest (AI
+// Performance, Traffic, Campaigns) run on tables with no agent/department
+// dimension, so those filters are greyed out there rather than faked.
+const AN_DIMENSIONAL_SUBTABS=['shift','agentPerf'];
+
+function _anDrawChart(canvasId,config){
+  const el=document.getElementById(canvasId);
+  if(!el)return;
+  _anCharts[canvasId]?.destroy();
+  _anCharts[canvasId]=new Chart(el.getContext('2d'),config);
+}
+
+function _anGradient(c1,c2,i,n){
+  const p=n>1?i/(n-1):0;
+  const lerp=(a,b,t)=>Math.round(a+(b-a)*t);
+  const hex2rgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const[r1,g1,b1]=hex2rgb(c1),[r2,g2,b2]=hex2rgb(c2);
+  return`rgb(${lerp(r1,r2,p)},${lerp(g1,g2,p)},${lerp(b1,b2,p)})`;
+}
+
+function _anGetDateRange(){
+  const sel=document.getElementById('anDateRangeSel')?.value||'7';
+  if(sel==='custom'){
+    return{from:document.getElementById('anDateFrom').value||'',to:document.getElementById('anDateTo').value||''};
+  }
+  const fmt=dt=>dt.toISOString().slice(0,10);
+  const to=new Date();
+  const from=new Date();
+  if(sel==='7')from.setDate(from.getDate()-6);
+  else if(sel==='30')from.setDate(from.getDate()-29);
+  return{from:fmt(from),to:fmt(to)};
+}
+
+function _anDateRangeChanged(){
+  const isCustom=document.getElementById('anDateRangeSel').value==='custom';
+  document.getElementById('anDateFromGroup').classList.toggle('hidden',!isCustom);
+  document.getElementById('anDateToGroup').classList.toggle('hidden',!isCustom);
+}
+
+function _anQS(){
+  const qs=new URLSearchParams({key:adminKey});
+  const{from,to}=_anGetDateRange();
+  if(from)qs.set('date_from',from);
+  if(to)qs.set('date_to',to);
+  const dimensional=AN_DIMENSIONAL_SUBTABS.includes(_anActiveSubtab);
+  const agentId=dimensional?document.getElementById('anAgentFilter')?.value:'';
+  const deptId=dimensional?document.getElementById('anDeptFilter')?.value:'';
+  if(agentId)qs.set('agent_id',agentId);
+  if(deptId)qs.set('department_id',deptId);
+  return qs;
+}
+
+function applyAnalyticsFilters(){
+  switchAnalyticsSubTab(_anActiveSubtab);
+}
+
+function _anPopulateAgentFilter(){
+  const sel=document.getElementById('anAgentFilter');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Agents</option>'+allAgents.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  sel.value=cur;
+}
+
+function _anPopulateDeptFilter(){
+  const sel=document.getElementById('anDeptFilter');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Departments</option>'+allDepartments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  sel.value=cur;
+}
+
+async function initAnalyticsConsole(){
+  if(!allAgents.length){
+    try{const ar=await fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`);if(ar.ok)allAgents=await ar.json();}catch(e){}
+  }
+  _anPopulateAgentFilter();
+  if(!allDepartments.length){
+    try{const dr=await fetch(`/admin/departments/directory?key=${encodeURIComponent(adminKey)}`);if(dr.ok)allDepartments=await dr.json();}catch(e){}
+  }
+  _anPopulateDeptFilter();
+  switchAnalyticsSubTab(_anActiveSubtab);
+}
+
+function switchAnalyticsSubTab(name){
+  _anActiveSubtab=name;
+  AN_SUBTABS.forEach(k=>document.getElementById('anPanel-'+k)?.classList.toggle('hidden',k!==name));
+  document.querySelectorAll('.an-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===name));
+  const dimensional=AN_DIMENSIONAL_SUBTABS.includes(name);
+  const agentSel=document.getElementById('anAgentFilter'),deptSel=document.getElementById('anDeptFilter');
+  if(agentSel)agentSel.disabled=!dimensional;
+  if(deptSel)deptSel.disabled=!dimensional;
+
+  clearInterval(bcPollInterval);
+  if(name==='overview'){loadFunnel();loadAgentStats();loadProductRecs();}
+  if(name==='aiPerf')loadAiPerformanceTab();
+  if(name==='campaigns'){
+    loadCampaignsTab();
+    bcPollInterval=setInterval(loadCampaignsTab,15000);
+  }
+}
+// ── End Analytics Console scaffold ─────────────────────────────────────────
 
 async function loadFunnel(){
   try{
@@ -6113,26 +6276,27 @@ async function deleteContact(phone){
 }
 // ── End Contacts tab ──────────────────────────────────────────────────────────
 
-// ── Broadcast Analytics ──────────────────────────────────────────────────────
-async function loadBroadcastAnalytics(){
-  await Promise.all([loadBCOverview(),loadBCCampaigns(),loadBCTemplates()]);
+// ── Campaigns & Templates (Analytics Console Tab 5) ───────────────────────────
+async function loadCampaignsTab(){
+  await Promise.all([loadCampaignsOverview(),loadBCCampaigns(),loadCampaignsTemplateChart()]);
 }
 
-async function loadBCOverview(){
-  const from=document.getElementById('bcFromDate')?.value||'';
-  const to=document.getElementById('bcToDate')?.value||'';
-  const el=document.getElementById('bcOverviewFunnel');
-  if(!el)return;
+async function loadCampaignsOverview(){
+  const kpiEl=document.getElementById('campaignsKpiCards');
+  const funnelEl=document.getElementById('bcOverviewFunnel');
+  if(!kpiEl)return;
   try{
-    const qs=new URLSearchParams({key:adminKey});
-    if(from)qs.set('date_from',from);
-    if(to)qs.set('date_to',to);
-    const r=await fetch(`/admin/analytics/broadcast-overview?${qs}`);
-    if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
+    const r=await fetch(`/admin/analytics/broadcast-overview?${_anQS()}`);
+    if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const d=await r.json();
     const total=d.total_sent||0;
     const trackable=d.trackable||0;
     const untracked=d.untracked||0;
+    kpiEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n">${total.toLocaleString()}</div><div class="stat-l">Total Sent Broadcasts</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:#3b82f6">${d.delivery_rate!=null?d.delivery_rate+'%':'—'}</div><div class="stat-l">Delivery Success Rate</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--orange)">${d.response_rate}%</div><div class="stat-l">Avg Response Rate</div></div>
+    `;
     const fBar=(label,n,base,color)=>{
       const p=base?Math.round(n/base*100):0;
       return`<div style="margin-bottom:12px">
@@ -6147,21 +6311,17 @@ async function loadBCOverview(){
         </div>
       </div>`;
     };
-    el.innerHTML=`
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-        <div class="stat-c"><div class="stat-n">${total.toLocaleString()}</div><div class="stat-l">Total Sent</div></div>
-        <div class="stat-c"><div class="stat-n" style="color:#3b82f6">${d.delivered.toLocaleString()}</div><div class="stat-l">Delivered</div></div>
-        <div class="stat-c"><div class="stat-n" style="color:#8b5cf6">${d.read.toLocaleString()}</div><div class="stat-l">Read</div></div>
-        <div class="stat-c"><div class="stat-n" style="color:var(--orange)">${d.responded.toLocaleString()}</div><div class="stat-l">Responded</div></div>
-        <div class="stat-c"><div class="stat-n" style="color:#ef4444">${d.failed.toLocaleString()}</div><div class="stat-l">Failed</div></div>
-      </div>
+    funnelEl.innerHTML=`
       ${untracked?`<p style="font-size:11px;color:var(--g400);margin:0 0 16px">ⓘ Delivered/Read/Failed cover ${trackable.toLocaleString()} of ${total.toLocaleString()} sends — the other ${untracked.toLocaleString()} were sent before delivery tracking existed and have no status data (not the same as "not delivered"). Responded is unaffected — it's checked independently for every send.</p>`:''}
       ${fBar('📬 Delivered',d.delivered,trackable,'#3b82f6')}
       ${fBar('👁 Read',d.read,trackable,'#8b5cf6')}
       ${fBar('💬 Responded',d.responded,total,'var(--orange)')}
       ${fBar('❌ Failed',d.failed,trackable,'#ef4444')}
     `;
-  }catch(e){const el2=document.getElementById('bcOverviewFunnel');if(el2)el2.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load overview</p>';}
+  }catch(e){
+    kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load overview</p>';
+    if(funnelEl)funnelEl.innerHTML='';
+  }
 }
 
 async function loadBCCampaigns(){
@@ -6202,7 +6362,7 @@ async function loadBCCampaigns(){
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load campaigns</p>';}
 }
 
-async function loadBCTemplates(){
+async function loadCampaignsTemplateChart(){
   const el=document.getElementById('bcTemplateChart');
   if(!el)return;
   try{
@@ -6210,26 +6370,23 @@ async function loadBCTemplates(){
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
     const data=await r.json();
     if(!data.length){el.innerHTML='<p style="color:var(--g400);font-size:13px;margin:0">0 templates — response rates will appear here once template messages are sent</p>';return;}
-    const maxRate=Math.max(...data.map(t=>t.response_rate),1);
-    el.innerHTML=data.map(t=>{
-      const clr=t.response_rate>=20?'#10b981':t.response_rate>=10?'var(--orange)':'#ef4444';
-      const barW=maxRate>0?Math.round(t.response_rate/maxRate*100):0;
-      return`<div style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
-          <span style="font-size:12px;font-weight:700;color:var(--g800);max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.template)}</span>
-          <span style="font-size:14px;font-weight:800;color:${clr}">${t.response_rate}% <span style="font-size:10px;font-weight:400;color:var(--g400)">responded</span></span>
-        </div>
-        <div style="height:10px;background:var(--g100);border-radius:99px;overflow:hidden;margin-bottom:5px">
-          <div style="height:100%;width:${barW}%;background:${clr};border-radius:99px;transition:width .5s ease;min-width:${t.response_rate>0?'3px':'0'}"></div>
-        </div>
-        <div style="font-size:11px;color:var(--g400)">${t.total_sent} sent &middot; ${t.responded} replied${t.delivery_rate===null?' &middot; no delivery tracking (sent before tracking existed)':` &middot; ${t.delivered} delivered (${t.delivery_rate}% of ${t.trackable} tracked)`}${t.failed?` &middot; <span style="color:var(--red)">${t.failed} failed</span>`:''}</div>
-      </div>`;
-    }).join('');
+    el.innerHTML=`<canvas id="campaignsTemplateChart" height="${Math.max(160,data.length*44)}"></canvas>`;
+    _anDrawChart('campaignsTemplateChart',{
+      type:'bar',
+      data:{
+        labels:data.map(t=>t.template),
+        datasets:[
+          {label:'Sent',data:data.map(t=>t.total_sent),backgroundColor:'#A78BFA'},
+          {label:'Response',data:data.map(t=>t.responded),backgroundColor:'#6D28D9'},
+        ],
+      },
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}},
+    });
   }catch(e){if(el)el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load template stats</p>';}
 }
-// ── End Broadcast Analytics ──────────────────────────────────────────────────
+// ── End Campaigns & Templates ─────────────────────────────────────────────────
 
-// ── AI Response Quality ────────────────────────────────────────────────────
+// ── AI Performance & Conversational Quality (Analytics Console Tab 3) ────────
 const CQ_ISSUE_LABELS={
   repeated_question:'Repeated an answered question',
   ignored_customer_question:"Ignored customer's question",
@@ -6241,70 +6398,68 @@ const CQ_ISSUE_LABELS={
   no_response_at_all:'Never replied',
 };
 
-async function loadConversationQuality(){
-  const from=document.getElementById('cqFromDate')?.value||'';
-  const to=document.getElementById('cqToDate')?.value||'';
-  const statsEl=document.getElementById('cqStatCards');
-  const issuesEl=document.getElementById('cqIssueBars');
-  const trendEl=document.getElementById('cqTrendBars');
-  const flaggedEl=document.getElementById('cqFlaggedList');
+async function loadAiPerformanceTab(){
+  const statsEl=document.getElementById('aiPerfStatCards');
+  const donutEl=document.getElementById('aiPerfDonutWrap');
+  const trendEl=document.getElementById('aiPerfTrendWrap');
+  const flaggedEl=document.getElementById('aiPerfFlaggedList');
   if(!statsEl)return;
+  statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
   try{
-    const qs=new URLSearchParams({key:adminKey});
-    if(from)qs.set('date_from',from);
-    if(to)qs.set('date_to',to);
-    const r=await fetch(`/admin/analytics/conversation-quality?${qs}`);
+    const r=await fetch(`/admin/analytics/conversation-quality?${_anQS()}`);
     if(!r.ok){
       statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';
-      issuesEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
+      donutEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
       return;
     }
     const d=await r.json();
     if(!d.total_scored){
       statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">No conversations scored yet — scoring runs automatically once a conversation goes idle.</p>';
-      issuesEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
+      donutEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
       return;
     }
 
     const scoreColor=d.avg_score>=7?'var(--green)':d.avg_score>=5?'var(--orange)':'#ef4444';
     statsEl.innerHTML=`
-      <div class="stat-c"><div class="stat-n" style="color:${scoreColor}">${d.avg_score}</div><div class="stat-l">Avg Quality Score /10</div></div>
-      <div class="stat-c"><div class="stat-n">${d.total_scored}</div><div class="stat-l">Conversations Scored</div></div>
-      <div class="stat-c"><div class="stat-n" style="color:#ef4444">${d.lost_count}</div><div class="stat-l">Likely Lost Customers</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:${scoreColor}">${d.avg_score}/10</div><div class="stat-l">Global Bot Score</div></div>
+      <div class="stat-c"><div class="stat-n">${d.auto_resolution_rate!=null?d.auto_resolution_rate+'%':'—'}</div><div class="stat-l">Auto-Resolution Rate</div></div>
+      <div class="stat-c"><div class="stat-n">${d.handoff_rate!=null?d.handoff_rate+'%':'—'}</div><div class="stat-l">Handoff Rate</div></div>
     `;
 
     const issueEntries=Object.entries(d.issue_counts||{}).sort((a,b)=>b[1]-a[1]);
     if(!issueEntries.length){
-      issuesEl.innerHTML='<p style="color:var(--g400);font-size:13px">No issues flagged 🎉</p>';
+      donutEl.innerHTML='<p style="color:var(--g400);font-size:13px">No issues flagged 🎉</p>';
     } else {
-      const maxIssue=Math.max(...issueEntries.map(e=>e[1]));
-      issuesEl.innerHTML=issueEntries.map(([tag,count])=>{
-        const pct=Math.round((count/maxIssue)*100);
-        return `<div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span style="color:var(--g600)">${esc(CQ_ISSUE_LABELS[tag]||tag)}</span>
-            <span style="font-weight:700;color:var(--g700)">${count}</span>
-          </div>
-          <div style="height:8px;background:var(--g100);border-radius:4px;overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:#ef4444;border-radius:4px"></div>
-          </div>
-        </div>`;
-      }).join('');
+      donutEl.innerHTML='<canvas id="aiPerfDonut" height="220"></canvas>';
+      const n=issueEntries.length;
+      _anDrawChart('aiPerfDonut',{
+        type:'doughnut',
+        data:{
+          labels:issueEntries.map(([tag])=>CQ_ISSUE_LABELS[tag]||tag),
+          datasets:[{data:issueEntries.map(([,c])=>c),backgroundColor:issueEntries.map((_,i)=>_anGradient('#6366F1','#EF4444',i,n)),borderWidth:0}],
+        },
+        options:{plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}}},
+      });
     }
 
-    if(!d.trend||!d.trend.length){
+    if((!d.trend_bot||!d.trend_bot.length)&&(!d.trend_human||!d.trend_human.length)){
       trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
     } else {
-      // Fixed-width bars (not flex:1) so a long date range scrolls horizontally
-      // within its own container instead of squeezing every bar unreadably thin.
-      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
-        const h=Math.max(4,Math.round((t.avg_score/10)*100));
-        const c=t.avg_score>=7?'var(--green)':t.avg_score>=5?'var(--orange)':'#ef4444';
-        return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.avg_score}/10 (${t.count} scored)">
-          <div style="width:100%;height:${h}px;background:${c};border-radius:3px 3px 0 0"></div>
-          <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
-        </div>`;
-      }).join('')}</div>`;
+      trendEl.innerHTML='<canvas id="aiPerfTrendChart" height="220"></canvas>';
+      const days=[...new Set([...(d.trend_bot||[]).map(t=>t.date),...(d.trend_human||[]).map(t=>t.date)])].sort();
+      const botMap=Object.fromEntries((d.trend_bot||[]).map(t=>[t.date,t.avg_score]));
+      const humanMap=Object.fromEntries((d.trend_human||[]).map(t=>[t.date,t.avg_score]));
+      _anDrawChart('aiPerfTrendChart',{
+        type:'line',
+        data:{
+          labels:days.map(dt=>dt.slice(5)),
+          datasets:[
+            {label:'Bot',data:days.map(dt=>botMap[dt]??null),borderColor:'#6366F1',backgroundColor:'#6366F1',tension:.3,spanGaps:true},
+            {label:'Human',data:days.map(dt=>humanMap[dt]??null),borderColor:'#EF4444',backgroundColor:'#EF4444',tension:.3,spanGaps:true},
+          ],
+        },
+        options:{scales:{y:{min:0,max:10}},plugins:{legend:{position:'bottom'}}},
+      });
     }
 
     if(!d.flagged||!d.flagged.length){
@@ -6327,9 +6482,9 @@ async function loadConversationQuality(){
         }).join('')}</tbody>
       </table>`;
     }
-  }catch(e){console.error(e);}
+  }catch(e){console.error(e);statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
 }
-// ── End AI Response Quality ────────────────────────────────────────────────
+// ── End AI Performance & Conversational Quality ───────────────────────────────
 
 // ── Usage & Cost ───────────────────────────────────────────────────────────
 const US_PURPOSE_LABELS={

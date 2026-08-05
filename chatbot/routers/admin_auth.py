@@ -185,6 +185,22 @@ async def list_departments(ctx: dict = Depends(require_tab_permission("team"))):
     return await run_in_threadpool(_fetch)
 
 
+@router.get("/departments/directory")
+async def departments_directory(ctx: dict = Depends(get_admin_ctx)):
+    """Minimal department list (id/name only) for every logged-in user,
+    regardless of "team" permission — used to populate filter dropdowns like
+    Analytics, which roles such as bi_analyst/team_lead can reach without
+    having the Team tab enabled."""
+    def _fetch():
+        db = get_db()
+        try:
+            depts = db.query(Department).order_by(Department.name.asc()).all()
+            return [{"id": d.id, "name": d.name} for d in depts]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
 @router.post("/departments")
 async def create_department(body: DepartmentIn, ctx: dict = Depends(require_admin)):
     name = body.name.strip()
