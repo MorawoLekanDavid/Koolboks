@@ -11,6 +11,7 @@ from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import BroadcastRecipient, Message
 from chatbot.services.lead_service import save_lead
+from chatbot.services.routing_service import auto_assign_conversation
 from chatbot.services.whatsapp_service import mark_whatsapp_read, save_message_db
 from chatbot.utils.phone import extract_valid_phone, normalize_phone
 from chatbot.workers.bot_response import delayed_bot_response
@@ -128,6 +129,11 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                     # Save inbound message to DB
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text)
+
+                    # Round-robin a brand-new conversation to an agent — no-ops
+                    # once the phone already has an owner, so this only ever
+                    # fires on that contact's first-ever inbound message.
+                    background_tasks.add_task(auto_assign_conversation, wa_from)
 
                     # Mark broadcast campaign as responded if this phone was a recipient
                     background_tasks.add_task(_mark_broadcast_responded, wa_from)
