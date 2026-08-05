@@ -100,8 +100,9 @@ async def send_whatsapp_template(to: str, template_name: str, variables: list[st
 
 async def send_whatsapp_otp_template(to: str, template_name: str, code: str, language: str = "en") -> bool:
     """Send an AUTHENTICATION-category template. Meta renders fixed wording for
-    these — no free-text body params — and requires a copy-code BUTTON
-    component alongside the BODY component, both carrying the same code."""
+    these — no free-text body params — and represents the OTP button as a URL
+    button (the code fills the {{1}} placeholder in the button's link), so
+    both the BODY and BUTTON components need the same code as a text param."""
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         log.warning("WhatsApp credentials not configured")
         return False
@@ -116,9 +117,9 @@ async def send_whatsapp_otp_template(to: str, template_name: str, code: str, lan
                 {"type": "body", "parameters": [{"type": "text", "text": code}]},
                 {
                     "type": "button",
-                    "sub_type": "copy_code",
+                    "sub_type": "url",
                     "index": "0",
-                    "parameters": [{"type": "coupon_code", "coupon_code": code}],
+                    "parameters": [{"type": "text", "text": code}],
                 },
             ],
         },
