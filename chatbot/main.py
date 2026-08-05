@@ -18,6 +18,7 @@ from chatbot.routers import (
     misc,
     permissions,
     products,
+    routing,
     tags,
     templates,
     usage,
@@ -69,3 +70,4 @@ app.include_router(followup.router)
 app.include_router(tags.router)
 app.include_router(ai_settings.router)
 app.include_router(usage.router)
+app.include_router(routing.router)

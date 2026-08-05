@@ -8,6 +8,21 @@ from chatbot.models import Agent, ConversationOwner
 # leads/contacts access, so they aren't meant to inherit inbound support chats.
 ROBIN_ROLES = ("agent", "customer_success_agent")
 ROBIN_INDEX_KEY = "koolbuy:routing:robin_index"
+ROUTING_ENABLED_KEY = "koolbuy:routing:enabled"
+
+
+async def is_routing_enabled() -> bool:
+    """Defaults to enabled when the key has never been set, so shipping this
+    toggle doesn't silently turn off routing that's already live."""
+    if not redis_client.client:
+        return True
+    val = await redis_client.client.get(ROUTING_ENABLED_KEY)
+    return val != "0"
+
+
+async def set_routing_enabled(enabled: bool) -> None:
+    if redis_client.client:
+        await redis_client.client.set(ROUTING_ENABLED_KEY, "1" if enabled else "0")
 
 
 async def auto_assign_conversation(phone: str) -> None:
@@ -17,6 +32,8 @@ async def auto_assign_conversation(phone: str) -> None:
     not on every inbound message. Never touches the bot/handoff state; this
     only fills in "who owns this," same as manually picking from the
     Assign to... dropdown would."""
+    if not await is_routing_enabled():
+        return
     db = get_db()
     try:
         existing = db.query(ConversationOwner).filter(ConversationOwner.phone == phone).first()

@@ -1200,6 +1200,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
       <button class="bulk-tab active" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -1400,6 +1401,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
     </div>
     <div class="card">
       <h3>Team Members</h3>
@@ -1426,6 +1428,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="bulk-tab active" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
     </div>
     <div class="card" id="rolePermCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -1448,6 +1451,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab active" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
     </div>
     <div class="ai-settings-layout">
 
@@ -1558,6 +1562,32 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <button onclick="clearTestChat()" style="margin-top:8px;font-size:11px;background:none;border:none;color:var(--g400);cursor:pointer;text-align:left">Clear chat</button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- Auto-Routing tab -->
+  <div id="routingTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavRouting">
+      <button class="bulk-tab" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab active" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+    </div>
+    <div class="card" style="max-width:600px">
+      <h3>Auto-Routing</h3>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:20px">When a new customer messages in for the first time, automatically assign the conversation to an agent instead of leaving it unowned until someone claims it.</p>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--g50);border-radius:10px;border:1px solid var(--g200)">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--g800)">Round-robin new conversations</div>
+          <div style="font-size:12px;color:var(--g400);margin-top:2px">Distributes new chats evenly across Customer Success / Agent roles, in rotation. Telesales/Sales roles aren't included — they're outbound-focused.</div>
+        </div>
+        <label class="perm-sw" style="flex-shrink:0;margin-left:16px">
+          <input type="checkbox" id="routingEnabledToggle" onchange="toggleRoutingConfig(this.checked)">
+          <span class="perm-sw-slider"></span>
+        </label>
+      </div>
+      <div id="routingConfigStatus" style="font-size:12px;color:var(--g400);margin-top:10px"></div>
     </div>
   </div>
 
@@ -2353,10 +2383,10 @@ async function headerAssignOwner(ownerName){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage'};
+const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings'};
 const MESSAGING_TABS=['broadcast','canned'];
-const SETTINGS_TABS=['team','rolePerm','templates','aiSettings'];
+const SETTINGS_TABS=['team','rolePerm','templates','aiSettings','routing'];
 let _lastMessagingTab='broadcast';
 let _lastSettingsTab='team';
 function switchTab(t){
@@ -2386,6 +2416,7 @@ function switchTab(t){
   if(t==='products')loadProducts();
   if(t==='aiSettings')loadAISettings();
   if(t==='usage')loadUsage();
+  if(t==='routing')loadRoutingConfig();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
@@ -3651,7 +3682,8 @@ let _permMatrix={};
 
 const PERM_TAB_LABELS={
   leads:'Leads',contacts:'Contacts',products:'Products',canned:'Canned Replies',
-  analytics:'Analytics',team:'Team',templates:'Templates',aiSettings:'AI Settings',usage:'Usage & Cost'
+  analytics:'Analytics',team:'Team',templates:'Templates',aiSettings:'AI Settings',usage:'Usage & Cost',
+  routing:'Auto-Routing'
 };
 const PERM_ROLE_LABELS={
   super_admin:'Super Admin',admin:'Admin',
@@ -3673,13 +3705,13 @@ function _applyPerms(perms){
   });
   document.getElementById('inavTeam')?.classList.toggle('hidden',perms.team===false);
   // Sub-nav buttons duplicated across Messaging/Settings host tabs — gate every copy at once
-  ['canned','templates','aiSettings','team'].forEach(tab=>{
+  ['canned','templates','aiSettings','team','routing'].forEach(tab=>{
     const show=perms[tab]!==false;
     document.querySelectorAll(`[data-permtab="${tab}"]`).forEach(el=>el.classList.toggle('hidden',!show));
   });
   // Group buttons show if any child tab is allowed
   const messagingOn=perms.templates!==false||perms.canned!==false;
-  const settingsOn=perms.team!==false||perms.templates!==false||perms.aiSettings!==false;
+  const settingsOn=perms.team!==false||perms.templates!==false||perms.aiSettings!==false||perms.routing!==false;
   document.getElementById('htabMessaging')?.classList.toggle('hidden',!messagingOn);
   document.getElementById('htabSettings')?.classList.toggle('hidden',!settingsOn);
   if(!perms.leads)setTimeout(()=>setConvView('mine'),0);
@@ -3693,11 +3725,11 @@ async function applyNavPermissions(role){
   }catch(e){
     // Fallback defaults if API unreachable
     if(role==='super_admin'||role==='admin'){
-      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:true,team:true,templates:true,aiSettings:true,usage:true});
+      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:true,team:true,templates:true,aiSettings:true,usage:true,routing:true});
     } else if(role==='telesales_agent'||role==='sales_agent'){
-      _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:false,team:false,templates:true,aiSettings:false,usage:false});
+      _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:false,team:false,templates:true,aiSettings:false,usage:false,routing:false});
     } else {
-      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:false,team:false,templates:false,aiSettings:false,usage:false});
+      _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:false,team:false,templates:false,aiSettings:false,usage:false,routing:false});
     }
   }
 }
@@ -3756,6 +3788,45 @@ async function togglePerm(role,tab,checkbox){
     alert('Failed to save this change — please try again.');
   }finally{
     checkbox.disabled=false;
+  }
+}
+
+// ── Auto-Routing ──────────────────────────────────────────────────────
+async function loadRoutingConfig(){
+  const status=document.getElementById('routingConfigStatus');
+  const toggle=document.getElementById('routingEnabledToggle');
+  if(!toggle)return;
+  toggle.disabled=true;
+  if(status)status.textContent='Loading…';
+  try{
+    const r=await fetch(`/admin/routing/config?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok){if(status){status.textContent='Failed to load — you may not have access to this setting.';status.style.color='var(--red)';}return;}
+    const data=await r.json();
+    toggle.checked=!!data.enabled;
+    if(status){status.textContent=data.enabled?'New conversations are being distributed automatically.':'Auto-routing is off — new conversations stay unassigned until someone claims them.';status.style.color='var(--g400)';}
+  }catch(e){
+    if(status){status.textContent='Error loading setting.';status.style.color='var(--red)';}
+  }finally{
+    toggle.disabled=false;
+  }
+}
+async function toggleRoutingConfig(checked){
+  const status=document.getElementById('routingConfigStatus');
+  const toggle=document.getElementById('routingEnabledToggle');
+  toggle.disabled=true;
+  if(status){status.textContent='Saving…';status.style.color='var(--g400)';}
+  try{
+    const r=await fetch(`/admin/routing/config?key=${encodeURIComponent(adminKey)}`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({enabled:checked})
+    });
+    if(!r.ok)throw new Error();
+    if(status){status.textContent=checked?'✓ New conversations are being distributed automatically.':'✓ Auto-routing is off — new conversations stay unassigned until someone claims them.';status.style.color='var(--green)';}
+  }catch(e){
+    toggle.checked=!checked;
+    if(status){status.textContent='⚠ Failed to save — please try again.';status.style.color='var(--red)';}
+  }finally{
+    toggle.disabled=false;
   }
 }
 
