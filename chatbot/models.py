@@ -72,8 +72,26 @@ class Agent(Base):
     name = Column(String(255))
     email = Column(String(255), unique=True, index=True)
     password_hash = Column(String(255), nullable=True)
-    role = Column(String(50), default="agent")  # agent | customer_success_agent | telesales_agent | sales_agent | admin | super_admin
+    role = Column(String(50), default="customer_success_agent")  # customer_success_agent | telesales_agent | admin | super_admin | bi_analyst | team_lead
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    department = relationship("Department", back_populates="agents")
+
+
+class Department(Base):
+    """Groups agents for Team Lead-scoped reassignment."""
+    __tablename__ = "departments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    # Not a real FK — agents.department_id already FKs the other direction,
+    # and a mutual FK cycle between these two tables breaks create_all()'s
+    # table-creation ordering. Resolved in application code instead.
+    team_lead_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    agents = relationship("Agent", back_populates="department", foreign_keys="Agent.department_id")
 
 
 class CannedResponse(Base):

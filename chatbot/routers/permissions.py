@@ -16,8 +16,13 @@ ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "tem
 # Roles whose permissions are configurable via the Team tab UI
 CONFIGURABLE_ROLES = [
     "super_admin", "admin",
-    "agent", "customer_success_agent", "telesales_agent", "sales_agent",
+    "customer_success_agent", "telesales_agent", "bi_analyst", "team_lead",
 ]
+
+# Roles that only ever get read access to Conversations — no send/take-over/
+# tag/reassign, regardless of what the tab matrix says. Not part of the
+# per-tab matrix since it's a property of the role itself, not a toggle.
+READ_ONLY_CONVERSATION_ROLES = ("bi_analyst",)
 
 # Default permissions used as fallback when no DB row exists
 DEFAULTS: Dict[str, Dict[str, bool]] = {
@@ -29,10 +34,6 @@ DEFAULTS: Dict[str, Dict[str, bool]] = {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True, "routing": True,
     },
-    "agent": {
-        "leads": True, "contacts": True, "products": True, "canned": True,
-        "analytics": False, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
-    },
     "customer_success_agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": False, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
@@ -41,9 +42,13 @@ DEFAULTS: Dict[str, Dict[str, bool]] = {
         "leads": False, "contacts": False, "products": False, "canned": False,
         "analytics": False, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
     },
-    "sales_agent": {
+    "bi_analyst": {
         "leads": False, "contacts": False, "products": False, "canned": False,
-        "analytics": False, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
+        "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": True, "routing": False,
+    },
+    "team_lead": {
+        "leads": True, "contacts": True, "products": True, "canned": True,
+        "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
     },
 }
 
@@ -78,6 +83,16 @@ def require_tab_permission(tab: str):
             raise HTTPException(403, f"Your role does not have access to {tab}")
         return ctx
     return _check
+
+
+async def require_conversation_write(ctx: dict = Depends(get_admin_ctx)) -> dict:
+    """Blocks READ_ONLY_CONVERSATION_ROLES (bi_analyst) from any endpoint that
+    mutates a conversation — reply, handoff, tag, template send, reassign.
+    Conversations itself has no tab permission gate (always visible to
+    everyone), so this is enforced by role rather than by the tab matrix."""
+    if ctx.get("role") in READ_ONLY_CONVERSATION_ROLES:
+        raise HTTPException(403, "Your role has read-only access to conversations")
+    return ctx
 
 
 def require_any_tab_permission(tabs: list[str]):

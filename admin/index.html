@@ -77,6 +77,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .sb-user-info{flex:1;min-width:0}
 .user-name{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .user-role-lbl{font-size:10px;color:var(--sidebar-text)}
+.status-dot{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:#94a3b8;border:2px solid var(--sidebar-bg);cursor:pointer}
+.status-dot.online{background:#22c55e}
+.status-dot.away{background:#f59e0b}
+#statusSelect{flex-shrink:0;background:var(--sidebar-hover);color:var(--sidebar-text);border:1px solid rgba(255,255,255,.12);border-radius:6px;font-size:10px;padding:3px 4px;font-family:inherit;cursor:pointer;max-width:74px}
 .sb-notif{display:flex;align-items:center;justify-content:space-between;padding:4px 8px}
 .notif-wrap{position:relative;cursor:pointer;display:inline-flex}
 .notif-icon{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px}
@@ -216,6 +220,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .send-btn{width:40px;height:40px;background:var(--orange);color:#fff;border:none;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .send-btn:hover{background:var(--orange-d)}
 .reply-disabled{padding:12px;background:var(--g50);border-top:1px solid var(--g200);text-align:center;font-size:13px;color:var(--g400);flex-shrink:0}
+/* BI Analyst read-only lock — beats whatever mode-based show/hide logic
+   (updateChatUI etc.) is doing, since IDs always outrank classes here. */
+body.read-only-chat #replyArea{display:none!important}
+body.read-only-chat #replyDisabled{display:flex!important;align-items:center;justify-content:center;gap:6px}
+body.read-only-chat #handoffBtn,
+body.read-only-chat #chatTagActions,
+body.read-only-chat #newConvBtn,
+body.read-only-chat .tag-remove-btn{display:none!important}
+body.read-only-chat #headerOwnerSelect,
+body.read-only-chat #dAssignSel,
+body.read-only-chat #dStatusSel,
+body.read-only-chat #assignOwnerSelect,
+body.read-only-chat #saveConvOwnerBtn,
+body.read-only-chat #noteInput,
+body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .img-attach-badge{display:none;align-items:center;gap:6px;padding:5px 14px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px;color:#92400e;font-weight:600}
 .img-attach-badge button{background:none;border:none;cursor:pointer;font-size:13px;color:#92400e;padding:0 2px;line-height:1}
 
@@ -466,8 +485,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .role-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
 .role-badge.super_admin{background:#fef3c7;color:#92400e}
 .role-badge.admin{background:var(--orange-s);color:var(--orange)}
-.role-badge.agent,.role-badge.customer_success_agent{background:#dbeafe;color:#1d4ed8}
-.role-badge.sales_agent,.role-badge.telesales_agent{background:#ede9fe;color:#7c3aed}
+.role-badge.customer_success_agent{background:#dbeafe;color:#1d4ed8}
+.role-badge.telesales_agent{background:#ede9fe;color:#7c3aed}
+.role-badge.bi_analyst{background:#f1f5f9;color:#475569}
+.role-badge.team_lead{background:#dcfce7;color:#15803d}
 /* View filter */
 .view-filter-row{display:flex;gap:4px;padding:0 12px 8px}
 .vf-btn{flex:1;padding:5px 4px;border:1.5px solid var(--g200);background:#fff;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g600);transition:all .15s}
@@ -652,6 +673,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   .cards-grid{flex-direction:column}
 }
 /* ── Role-permission matrix ── */
+.routing-rule-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;background:var(--g50);border-radius:10px;border:1px solid var(--g200);margin-bottom:12px}
+.routing-rule-title{font-size:14px;font-weight:700;color:var(--g800)}
+.routing-rule-desc{font-size:12px;color:var(--g400);margin-top:2px;max-width:440px}
 .perm-sw{position:relative;display:inline-block;width:36px;height:20px}
 .perm-sw input{opacity:0;width:0;height:0;position:absolute}
 .perm-sw-slider{position:absolute;inset:0;background:var(--g300);border-radius:20px;cursor:pointer;transition:.2s}
@@ -728,12 +752,20 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
           <span class="notif-badge hidden" id="notifCount">0</span>
         </div>
       </div>
-      <div class="sb-user" onclick="openProfileModal()" title="View profile">
-        <div class="user-av" id="userAv">A</div>
-        <div class="sb-user-info">
+      <div class="sb-user">
+        <div style="position:relative;flex-shrink:0" onclick="openProfileModal()" title="View profile">
+          <div class="user-av" id="userAv">A</div>
+          <span class="status-dot" id="statusDot" title="Status"></span>
+        </div>
+        <div class="sb-user-info" onclick="openProfileModal()" title="View profile">
           <div class="user-name" id="agentNameDisplay"></div>
           <div class="user-role-lbl" id="agentRoleDisplay">Agent</div>
         </div>
+        <select id="statusSelect" onchange="updateMyStatus(this.value)" onclick="event.stopPropagation()" title="Set your availability">
+          <option value="online">🟢 Online</option>
+          <option value="away">🟡 Away</option>
+          <option value="offline">⚪ Offline</option>
+        </select>
       </div>
       <button class="sb-logout" onclick="logout()">Sign Out</button>
     </div>
@@ -759,7 +791,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         </div>
         <div class="conv-search-wrap" style="display:flex;gap:6px;align-items:center">
           <input class="conv-search-input" id="searchInput" placeholder="Search name or phone..." oninput="onConvSearch()" style="flex:1"/>
-          <button onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
+          <button id="newConvBtn" onclick="openOutreachModal()" title="Start new conversation" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1">＋</button>
         </div>
         <!-- Filter trigger -->
         <div class="cfilter-trigger-row">
@@ -812,7 +844,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <!-- Tag bar -->
         <div id="chatTagBar" style="padding:6px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-height:36px;background:var(--surface)">
           <div id="chatTagPills" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>
-          <div style="display:flex;gap:5px;flex-shrink:0;position:relative">
+          <div id="chatTagActions" style="display:flex;gap:5px;flex-shrink:0;position:relative">
             <button onclick="toggleTagDropdown()" style="font-size:11px;padding:3px 9px;border:1px dashed var(--g300);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap">＋ Tag</button>
             <button onclick="runAutoTag()" id="autoTagBtn" style="font-size:11px;padding:3px 9px;border:1px solid var(--g200);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap">✨ Auto-tag</button>
             <div id="tagDropdown" style="display:none;position:absolute;top:28px;right:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:50;min-width:160px;max-height:220px;overflow-y:auto;padding:4px 0"></div>
@@ -904,7 +936,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
               <select id="assignOwnerSelect" style="flex:1;padding:6px 8px;border:1px solid var(--g200);border-radius:8px;font-size:12px;font-family:inherit;color:var(--g700);outline:none">
                 <option value="">— Unassigned —</option>
               </select>
-              <button onclick="saveConvOwner()" style="padding:6px 12px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Assign</button>
+              <button id="saveConvOwnerBtn" onclick="saveConvOwner()" style="padding:6px 12px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Assign</button>
             </div>
             <div id="assignOwnerStatus" style="font-size:11px;color:var(--green);margin-top:4px;display:none">Saved</div>
           </div>
@@ -1406,7 +1438,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
     <div class="card">
       <h3>Team Members</h3>
       <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Everyone logs in with email and password. Admins and super admin can add members. Only the super admin can promote or demote roles.</p>
-      <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
+      <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
       <div class="add-agent-form" id="addAgentForm" style="margin-top:18px;display:none">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
         <input type="email"    id="newAgentEmail"    placeholder="Email address"/>
@@ -1414,9 +1446,23 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
         <select id="newAgentRole" style="padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g700);outline:none;min-width:160px">
           <option value="customer_success_agent">Customer Success Agent</option>
           <option value="telesales_agent">Telesales Agent</option>
+          <option value="bi_analyst">BI Analyst</option>
+          <option value="team_lead">Team Lead</option>
           <option value="admin">Admin</option>
         </select>
         <button class="btn-primary" onclick="addAgent()">+ Add Member</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px" id="departmentsCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <h3 style="margin:0">Departments</h3>
+      </div>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Group agents so a Team Lead can reassign conversations within their own team, rather than across the whole company.</p>
+      <table class="agt-table"><thead><tr><th>Name</th><th>Team Lead</th><th>Members</th><th></th></tr></thead><tbody id="deptTableBody"></tbody></table>
+      <div class="add-agent-form" id="addDeptForm" style="margin-top:18px;display:none">
+        <input type="text" id="newDeptName" placeholder="Department name"/>
+        <button class="btn-primary" onclick="createDepartment()">+ Add Department</button>
       </div>
     </div>
   </div>
@@ -1574,20 +1620,50 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab active" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
     </div>
-    <div class="card" style="max-width:600px">
+    <div class="card" style="max-width:640px">
       <h3>Auto-Routing</h3>
-      <p style="font-size:13px;color:var(--g400);margin-bottom:20px">When a new customer messages in for the first time, automatically assign the conversation to an agent instead of leaving it unowned until someone claims it.</p>
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--g50);border-radius:10px;border:1px solid var(--g200)">
+      <p style="font-size:13px;color:var(--g400);margin-bottom:20px">When a new customer messages in for the first time, automatically assign the conversation to an agent instead of leaving it unowned until someone claims it. Rules run in order — Sticky first, then Round Robin (filtered by Capacity, if on).</p>
+
+      <div class="routing-rule-row">
         <div>
-          <div style="font-size:14px;font-weight:700;color:var(--g800)">Round-robin new conversations</div>
-          <div style="font-size:12px;color:var(--g400);margin-top:2px">Distributes new chats evenly across Customer Success / Agent roles, in rotation. Telesales/Sales roles aren't included — they're outbound-focused.</div>
+          <div class="routing-rule-title">1 · Sticky Ownership</div>
+          <div class="routing-rule-desc">If this customer was originally added by a specific agent (via Contacts) and that agent is currently Online, route back to them instead of round-robining to someone new.</div>
         </div>
-        <label class="perm-sw" style="flex-shrink:0;margin-left:16px">
-          <input type="checkbox" id="routingEnabledToggle" onchange="toggleRoutingConfig(this.checked)">
+        <label class="perm-sw">
+          <input type="checkbox" id="stickyEnabledToggle" onchange="toggleRoutingField('sticky_enabled',this.checked)">
           <span class="perm-sw-slider"></span>
         </label>
       </div>
-      <div id="routingConfigStatus" style="font-size:12px;color:var(--g400);margin-top:10px"></div>
+
+      <div class="routing-rule-row">
+        <div>
+          <div class="routing-rule-title">2 · Round-Robin New Conversations</div>
+          <div class="routing-rule-desc">Distributes new chats evenly across Customer Success agents, in rotation. Telesales isn't included — that role is outbound-focused.</div>
+        </div>
+        <label class="perm-sw">
+          <input type="checkbox" id="routingEnabledToggle" onchange="toggleRoutingField('round_robin_enabled',this.checked)">
+          <span class="perm-sw-slider"></span>
+        </label>
+      </div>
+
+      <div class="routing-rule-row" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="routing-rule-title">Capacity Guard</div>
+            <div class="routing-rule-desc">Skip an agent in the round-robin rotation if they're Online but already at their max active chats.</div>
+          </div>
+          <label class="perm-sw" style="flex-shrink:0">
+            <input type="checkbox" id="capacityEnabledToggle" onchange="toggleRoutingField('capacity_enabled',this.checked)">
+            <span class="perm-sw-slider"></span>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:12px;color:var(--g600);font-weight:600">Max active chats per agent</label>
+          <input type="number" id="maxChatsInput" min="1" max="50" style="width:64px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;font-size:13px;font-family:inherit" onchange="toggleRoutingField('max_chats',parseInt(this.value)||5)">
+        </div>
+      </div>
+
+      <div id="routingConfigStatus" style="font-size:12px;color:var(--g400);margin-top:14px"></div>
     </div>
   </div>
 
@@ -2003,7 +2079,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────
-let adminKey='', agentName='', agentRole='agent', agentEmail='';
+let adminKey='', agentName='', agentRole='customer_success_agent', agentEmail='';
+let myAgentId=null, myDepartmentId=null, myStatus='offline';
 let selectedPhone=null, selectedMode='bot';
 let allAgents=[];
 let allConversations=[], currentFilter='all';
@@ -2023,7 +2100,8 @@ window.onload=async()=>{
       const r=await fetch(`/admin/me?key=${encodeURIComponent(d.key)}`).catch(()=>null);
       if(r&&r.ok){
         const me=await r.json();
-        adminKey=d.key;agentName=me.name||d.name;agentRole=me.role||'agent';agentEmail=me.email||d.email||'';
+        adminKey=d.key;agentName=me.name||d.name;agentRole=me.role||'customer_success_agent';agentEmail=me.email||d.email||'';
+        myAgentId=me.agent_id||null;myDepartmentId=me.department_id||null;myStatus=me.status||'offline';
         save();showApp();
       }else if(r&&r.status===403){
         // Session genuinely invalid/expired — back to login
@@ -2032,7 +2110,7 @@ window.onload=async()=>{
         // Network error or transient server issue (e.g. Redis restarting) —
         // keep the cached session and proceed; polling will recover once
         // the backend is reachable again.
-        adminKey=d.key;agentName=d.name;agentRole=d.role||'agent';agentEmail=d.email||'';
+        adminKey=d.key;agentName=d.name;agentRole=d.role||'customer_success_agent';agentEmail=d.email||'';
         showApp();
       }
     }catch{localStorage.removeItem('koolbot_agent');}
@@ -2061,29 +2139,79 @@ async function login(){
 }
 function save(){localStorage.setItem('koolbot_agent',JSON.stringify({key:adminKey,name:agentName,role:agentRole,email:agentEmail}));}
 function showErr(m){const e=document.getElementById('loginError');e.textContent=m;e.style.display='block';}
-function showApp(){
+async function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   const a=document.getElementById('appScreen');a.classList.remove('hidden');a.style.display='flex';
   document.getElementById('agentNameDisplay').textContent=agentName;
-  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success','customer_success_agent':'Customer Success','sales_agent':'Telesales','telesales_agent':'Telesales'};
-  document.getElementById('agentRoleDisplay').textContent=roleLabels[agentRole]||'Agent';
+  document.getElementById('agentRoleDisplay').textContent=PERM_ROLE_LABELS[agentRole]||agentRole;
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   applyNavPermissions(agentRole);
+  applyReadOnlyRole();
   // Nav visibility is handled dynamically via applyNavPermissions
   requestNotificationPermission();isFirstLoad=true;
   convOffset=0;loadConversations();loadAllTags();
   // Pre-load agent list so conversation owner dropdown is ready immediately
   fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`).then(r=>r.ok?r.json():[]).then(a=>{allAgents=a;}).catch(()=>{});
+  // Fresh logins don't have agent_id/department_id/status yet (agent-login
+  // doesn't return them) — fetch /me once to fill those in.
+  if(myAgentId===null){
+    try{
+      const mr=await fetch(`/admin/me?key=${encodeURIComponent(adminKey)}`);
+      if(mr.ok){const me=await mr.json();myAgentId=me.agent_id||null;myDepartmentId=me.department_id||null;myStatus=me.status||'offline';}
+    }catch(e){}
+  }
+  syncStatusDropdown();
   pollInterval=setInterval(loadConversations,15000);
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);clearInterval(bcPollInterval);
   localStorage.removeItem('koolbot_agent');
-  adminKey='';agentName='';agentRole='agent';agentEmail='';selectedPhone=null;allConversations=[];isFirstLoad=true;
+  adminKey='';agentName='';agentRole='customer_success_agent';agentEmail='';selectedPhone=null;allConversations=[];isFirstLoad=true;
+  myAgentId=null;myDepartmentId=null;myStatus='offline';
   document.getElementById('appScreen').classList.add('hidden');document.getElementById('appScreen').style.display='none';
   document.getElementById('loginScreen').classList.remove('hidden');
   showLoginForm();
   ['loginEmail','loginPassword','loginKey'].forEach(id=>document.getElementById(id).value='');
+}
+
+// ── Read-only roles (BI Analyst) ─────────────────────────────────────────
+const READ_ONLY_CONV_ROLES=['bi_analyst'];
+function applyReadOnlyRole(){
+  const readOnly=READ_ONLY_CONV_ROLES.includes(agentRole);
+  document.body.classList.toggle('read-only-chat',readOnly);
+  if(readOnly){
+    const rd=document.getElementById('replyDisabled');
+    if(rd)rd.textContent='🔒 Read-only access — BI Analyst role cannot send messages or modify conversations';
+  }
+}
+
+// ── Presence ───────────────────────────────────────────────────────────
+function syncStatusDropdown(){
+  const sel=document.getElementById('statusSelect');
+  const dot=document.getElementById('statusDot');
+  if(sel)sel.value=myStatus;
+  if(dot)dot.className='status-dot '+myStatus;
+  // Super admin sessions via the master key have no agent_id, so there's
+  // no row to store a status against — hide the control rather than let
+  // it silently fail on change.
+  if(sel)sel.style.display=myAgentId?'':'none';
+}
+async function updateMyStatus(status){
+  const prev=myStatus;
+  myStatus=status;
+  const dot=document.getElementById('statusDot');
+  if(dot)dot.className='status-dot '+status;
+  try{
+    const r=await fetch(`/admin/my-status?key=${encodeURIComponent(adminKey)}`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})
+    });
+    if(!r.ok)throw new Error();
+  }catch(e){
+    myStatus=prev;
+    if(dot)dot.className='status-dot '+prev;
+    const sel=document.getElementById('statusSelect');if(sel)sel.value=prev;
+    alert('Failed to update status — please try again.');
+  }
 }
 
 // ── Login-screen change password ────────────────────────────────────────
@@ -2126,8 +2254,7 @@ async function submitLoginChangePassword(){
 function openProfileModal(){
   document.getElementById('profileName').textContent=agentName;
   document.getElementById('profileEmail').textContent=agentEmail||'—';
-  const roleLabels={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success Agent','customer_success_agent':'Customer Success Agent','sales_agent':'Telesales Agent','telesales_agent':'Telesales Agent'};
-  document.getElementById('profileRole').textContent=roleLabels[agentRole]||agentRole;
+  document.getElementById('profileRole').textContent=PERM_ROLE_LABELS[agentRole]||agentRole;
   document.getElementById('profileModal').classList.remove('hidden');
 }
 function closeProfileModal(){
@@ -2760,7 +2887,7 @@ function renderChatTagPills(){
   if(!_convTags.length){el.innerHTML='<span style="font-size:11px;color:var(--g400)">No tags</span>';return;}
   el.innerHTML=_convTags.map(t=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;background:${t.color}22;border:1px solid ${t.color};font-size:11px;font-weight:600;color:${t.color}">
     ${esc(t.name)}${t.tagged_by==='AI ✨'?'<span title="AI tagged" style="opacity:.7"> ✨</span>':''}
-    <button onclick="removeConvTag(${t.tag_id})" style="background:none;border:none;color:${t.color};cursor:pointer;font-size:12px;padding:0;margin-left:2px;line-height:1" title="Remove">×</button>
+    <button class="tag-remove-btn" onclick="removeConvTag(${t.tag_id})" style="background:none;border:none;color:${t.color};cursor:pointer;font-size:12px;padding:0;margin-left:2px;line-height:1" title="Remove">×</button>
   </span>`).join('');
 }
 function renderTagDropdown(){
@@ -3190,14 +3317,19 @@ function restoreChatPanel(){
 function _populateOwnerSelect(phone){
   const conv=allConversations.find(c=>c.phone===phone);
   const currentOwner=conv?.owner?.name||'';
-  const _rl={'super_admin':'Super Admin','admin':'Admin','agent':'CS','customer_success_agent':'CS','sales_agent':'Telesales','telesales_agent':'Telesales'};
-  const opts='<option value="">— Unassigned —</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${_rl[a.role]||a.role})</option>`).join('');
+  const _rl={'super_admin':'Super Admin','admin':'Admin','customer_success_agent':'CS','telesales_agent':'Telesales','bi_analyst':'BI','team_lead':'Lead'};
+  // Team Lead can only hand a chat to someone in their own department —
+  // everyone else keeps the existing unrestricted assign-to-anyone list.
+  const assignable=agentRole==='team_lead'&&myDepartmentId
+    ?(allAgents||[]).filter(a=>a.department_id===myDepartmentId)
+    :(allAgents||[]);
+  const opts='<option value="">— Unassigned —</option>'+assignable.map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${_rl[a.role]||a.role})</option>`).join('');
   const sel=document.getElementById('assignOwnerSelect');
   if(sel){sel.innerHTML=opts;sel.value=currentOwner;}
   // Sync header assign dropdown
   const hSel=document.getElementById('headerOwnerSelect');
   if(hSel){
-    hSel.innerHTML='<option value="">Assign to…</option>'+(allAgents||[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+    hSel.innerHTML='<option value="">Assign to…</option>'+assignable.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
     hSel.value=currentOwner;
   }
   const status=document.getElementById('assignOwnerStatus');
@@ -3619,23 +3751,28 @@ async function loadProductRecs(){
 }
 
 // ── Team ───────────────────────────────────────────────────────────────
+let _agentList=[];
 async function loadAgentList(){
   try{
-    const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`);if(!r.ok)return;
+    const r=await fetch(`/admin/agents?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
     const agents=await r.json();
+    _agentList=agents;
+    // Department table's Team Lead dropdown reads _agentList, so it must be
+    // populated first — this can't run in parallel with the fetch above.
+    await loadDepartments();
     const isSuperAdmin=agentRole==='super_admin';
     const viewerIsAdmin=agentRole==='admin'||isSuperAdmin;
     // Adding/removing/resetting passwords stays admin-only even if a role has
     // been granted "team" permission — that toggle only unlocks viewing the
     // roster, not managing other people's accounts.
     document.getElementById('addAgentForm').style.display=viewerIsAdmin?'':'none';
+    const deptOpts='<option value="">— No department —</option>'+_departments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
     document.getElementById('agentTableBody').innerHTML=agents.length
       ?agents.map(a=>{
-          const _rl={'super_admin':'Super Admin','admin':'Admin','agent':'Customer Success','customer_success_agent':'Customer Success','sales_agent':'Telesales','telesales_agent':'Telesales'};
-          const roleBadge=`<span class="role-badge ${a.role}">${_rl[a.role]||a.role}</span>`;
-          const isAgentRole=a.role==='agent'||a.role==='customer_success_agent';
-          const isTelRole=a.role==='telesales_agent'||a.role==='sales_agent';
-          const canManage=viewerIsAdmin&&(a.role!=='super_admin')&&(isSuperAdmin||(isAgentRole||isTelRole));
+          const roleBadge=`<span class="role-badge ${a.role}">${PERM_ROLE_LABELS[a.role]||a.role}</span>`;
+          const statusDot=`<span class="status-dot" style="position:static;display:inline-block;border:none;margin-right:5px;vertical-align:middle" title="${a.status||'offline'}"></span>`.replace('status-dot"','status-dot '+(a.status||'offline')+'"');
+          const canManage=viewerIsAdmin&&a.role!=='super_admin'&&(isSuperAdmin||a.role!=='admin');
           const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
           const rn=(a.name||'').replace(/'/g,"\\'");
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
@@ -3643,18 +3780,32 @@ async function loadAgentList(){
           if(isSuperAdmin&&a.role!=='super_admin'){
             promoteBtn=`<select onchange="setRole(${a.id},this.value);this.value='${a.role}'" style="padding:4px 8px;border:1.5px solid var(--g200);border-radius:6px;font-size:12px;font-family:inherit;color:var(--g700);cursor:pointer;background:#fff;outline:none;margin-right:4px">
               <option value="${a.role}" selected disabled>Change role…</option>
-              <option value="customer_success_agent" ${a.role==='customer_success_agent'||a.role==='agent'?'disabled':''}>Customer Success</option>
-              <option value="telesales_agent" ${isTelRole?'disabled':''}>Telesales Agent</option>
+              <option value="customer_success_agent" ${a.role==='customer_success_agent'?'disabled':''}>Customer Success</option>
+              <option value="telesales_agent" ${a.role==='telesales_agent'?'disabled':''}>Telesales Agent</option>
+              <option value="bi_analyst" ${a.role==='bi_analyst'?'disabled':''}>BI Analyst</option>
+              <option value="team_lead" ${a.role==='team_lead'?'disabled':''}>Team Lead</option>
               <option value="admin" ${a.role==='admin'?'disabled':''}>Admin</option>
             </select>`;
           }
-          return `<tr><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
+          const deptSel=viewerIsAdmin?`<select onchange="setAgentDepartment(${a.id},this.value)" style="padding:4px 6px;border:1.5px solid var(--g200);border-radius:6px;font-size:12px;font-family:inherit;color:var(--g700);cursor:pointer;background:#fff;outline:none">${deptOpts}</select>`:esc(a.department_name||'—');
+          return `<tr><td>${statusDot}${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td>${deptSel}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
         }).join('')
-      :'<tr><td colspan="4" style="color:var(--g400);font-size:13px;padding:12px 0">No team members yet</td></tr>';
+      :'<tr><td colspan="5" style="color:var(--g400);font-size:13px;padding:12px 0">No team members yet</td></tr>';
+    _agentList.forEach(a=>{
+      const sel=document.querySelector(`#agentTableBody select[onchange^="setAgentDepartment(${a.id},"]`);
+      if(sel)sel.value=a.department_id||'';
+    });
   }catch(e){console.error(e);}
 }
+async function setAgentDepartment(agentId,deptId){
+  const r=await fetch(`/admin/agents/${agentId}/department?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({department_id:deptId?parseInt(deptId):null})
+  }).catch(()=>null);
+  if(!r||!r.ok){alert('Failed to update department.');loadAgentList();}
+}
 async function setRole(id,role){
-  const _rl={'admin':'promote to Admin','customer_success_agent':'set as Customer Success','telesales_agent':'set as Telesales','agent':'set as Customer Success'};
+  const _rl={'admin':'promote to Admin','customer_success_agent':'set as Customer Success','telesales_agent':'set as Telesales','bi_analyst':'set as BI Analyst','team_lead':'set as Team Lead'};
   const label=_rl[role]||`set role to ${role}`;
   if(!confirm(`Are you sure you want to ${label} this person?`))return;
   const r=await fetch(`/admin/agents/${id}/role?key=${encodeURIComponent(adminKey)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})}).catch(()=>null);
@@ -3677,6 +3828,62 @@ async function removeAgent(id){
   await loadAgentList();
 }
 
+// ── Departments ───────────────────────────────────────────────────────
+let _departments=[];
+async function loadDepartments(){
+  try{
+    const r=await fetch(`/admin/departments?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok){_departments=[];return;}
+    _departments=await r.json();
+    renderDepartmentTable();
+  }catch(e){_departments=[];}
+}
+function renderDepartmentTable(){
+  const body=document.getElementById('deptTableBody');
+  const form=document.getElementById('addDeptForm');
+  if(!body)return;
+  const viewerIsAdmin=agentRole==='admin'||agentRole==='super_admin';
+  if(form)form.style.display=viewerIsAdmin?'':'none';
+  const leadOpts=(names)=>'<option value="">— No lead —</option>'+
+    (_agentList.filter(a=>a.role==='team_lead'||a.role==='admin'||a.role==='super_admin')
+      .map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join(''));
+  body.innerHTML=_departments.length
+    ?_departments.map(d=>{
+        const leadSel=viewerIsAdmin
+          ?`<select onchange="setDeptTeamLead(${d.id},this.value)" style="padding:4px 6px;border:1.5px solid var(--g200);border-radius:6px;font-size:12px;font-family:inherit;color:var(--g700);cursor:pointer;background:#fff;outline:none">${leadOpts()}</select>`
+          :esc(d.team_lead_name||'—');
+        const delBtn=viewerIsAdmin?`<button class="btn-danger" onclick="deleteDepartment(${d.id})">Remove</button>`:'';
+        return `<tr><td>${esc(d.name)}</td><td>${leadSel}</td><td>${d.member_count}</td><td>${delBtn}</td></tr>`;
+      }).join('')
+    :'<tr><td colspan="4" style="color:var(--g400);font-size:13px;padding:12px 0">No departments yet</td></tr>';
+  _departments.forEach(d=>{
+    const sel=document.querySelector(`#deptTableBody select[onchange^="setDeptTeamLead(${d.id},"]`);
+    if(sel)sel.value=d.team_lead_id||'';
+  });
+}
+async function createDepartment(){
+  const name=document.getElementById('newDeptName').value.trim();
+  if(!name){alert('Please enter a department name.');return;}
+  const r=await fetch(`/admin/departments?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}).catch(()=>null);
+  if(r&&r.ok){document.getElementById('newDeptName').value='';await loadDepartments();}
+  else if(r){const e=await r.json().catch(()=>({}));alert(e.detail||'Failed to add department.');}
+}
+async function setDeptTeamLead(deptId,agentId){
+  const dept=_departments.find(d=>d.id===deptId);
+  const r=await fetch(`/admin/departments/${deptId}?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:dept?.name||'',team_lead_id:agentId?parseInt(agentId):null})
+  }).catch(()=>null);
+  if(!r||!r.ok){alert('Failed to update team lead.');}
+  await loadDepartments();
+}
+async function deleteDepartment(id){
+  if(!confirm('Remove this department? Members will become unassigned, not deleted.'))return;
+  await fetch(`/admin/departments/${id}?key=${encodeURIComponent(adminKey)}`,{method:'DELETE'}).catch(()=>{});
+  await loadDepartments();
+  await loadAgentList();
+}
+
 // ── Role Permissions ───────────────────────────────────────────────────
 let _permMatrix={};
 
@@ -3687,8 +3894,8 @@ const PERM_TAB_LABELS={
 };
 const PERM_ROLE_LABELS={
   super_admin:'Super Admin',admin:'Admin',
-  agent:'Agent',customer_success_agent:'Customer Success',
-  telesales_agent:'Telesales',sales_agent:'Sales'
+  customer_success_agent:'Customer Success',telesales_agent:'Telesales',
+  bi_analyst:'BI Analyst',team_lead:'Team Lead'
 };
 
 function _applyPerms(perms){
@@ -3726,8 +3933,10 @@ async function applyNavPermissions(role){
     // Fallback defaults if API unreachable
     if(role==='super_admin'||role==='admin'){
       _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:true,team:true,templates:true,aiSettings:true,usage:true,routing:true});
-    } else if(role==='telesales_agent'||role==='sales_agent'){
+    } else if(role==='telesales_agent'){
       _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:false,team:false,templates:true,aiSettings:false,usage:false,routing:false});
+    } else if(role==='bi_analyst'){
+      _applyPerms({leads:false,contacts:false,products:false,canned:false,analytics:true,team:false,templates:false,aiSettings:false,usage:true,routing:false});
     } else {
       _applyPerms({leads:true,contacts:true,products:true,canned:true,analytics:false,team:false,templates:false,aiSettings:false,usage:false,routing:false});
     }
@@ -3792,41 +4001,47 @@ async function togglePerm(role,tab,checkbox){
 }
 
 // ── Auto-Routing ──────────────────────────────────────────────────────
+function _routingStatusMsg(cfg){
+  const parts=[];
+  if(cfg.sticky_enabled)parts.push('sticky ownership');
+  if(cfg.round_robin_enabled)parts.push('round robin'+(cfg.capacity_enabled?` (capacity-guarded at ${cfg.max_chats}/agent)`:''));
+  return parts.length?`Active: ${parts.join(' → ')}.`:'All routing rules are off — new conversations stay unassigned until someone claims them.';
+}
 async function loadRoutingConfig(){
   const status=document.getElementById('routingConfigStatus');
   const toggle=document.getElementById('routingEnabledToggle');
   if(!toggle)return;
-  toggle.disabled=true;
+  [toggle,document.getElementById('stickyEnabledToggle'),document.getElementById('capacityEnabledToggle'),document.getElementById('maxChatsInput')].forEach(el=>{if(el)el.disabled=true;});
   if(status)status.textContent='Loading…';
   try{
     const r=await fetch(`/admin/routing/config?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok){if(status){status.textContent='Failed to load — you may not have access to this setting.';status.style.color='var(--red)';}return;}
-    const data=await r.json();
-    toggle.checked=!!data.enabled;
-    if(status){status.textContent=data.enabled?'New conversations are being distributed automatically.':'Auto-routing is off — new conversations stay unassigned until someone claims them.';status.style.color='var(--g400)';}
+    const cfg=await r.json();
+    document.getElementById('routingEnabledToggle').checked=!!cfg.round_robin_enabled;
+    document.getElementById('stickyEnabledToggle').checked=!!cfg.sticky_enabled;
+    document.getElementById('capacityEnabledToggle').checked=!!cfg.capacity_enabled;
+    document.getElementById('maxChatsInput').value=cfg.max_chats||5;
+    if(status){status.textContent=_routingStatusMsg(cfg);status.style.color='var(--g400)';}
   }catch(e){
     if(status){status.textContent='Error loading setting.';status.style.color='var(--red)';}
   }finally{
-    toggle.disabled=false;
+    [toggle,document.getElementById('stickyEnabledToggle'),document.getElementById('capacityEnabledToggle'),document.getElementById('maxChatsInput')].forEach(el=>{if(el)el.disabled=false;});
   }
 }
-async function toggleRoutingConfig(checked){
+async function toggleRoutingField(field,value){
   const status=document.getElementById('routingConfigStatus');
-  const toggle=document.getElementById('routingEnabledToggle');
-  toggle.disabled=true;
   if(status){status.textContent='Saving…';status.style.color='var(--g400)';}
   try{
     const r=await fetch(`/admin/routing/config?key=${encodeURIComponent(adminKey)}`,{
       method:'PUT',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({enabled:checked})
+      body:JSON.stringify({[field]:value})
     });
     if(!r.ok)throw new Error();
-    if(status){status.textContent=checked?'✓ New conversations are being distributed automatically.':'✓ Auto-routing is off — new conversations stay unassigned until someone claims them.';status.style.color='var(--green)';}
+    const cfg=await r.json();
+    if(status){status.textContent='✓ '+_routingStatusMsg(cfg);status.style.color='var(--green)';}
   }catch(e){
-    toggle.checked=!checked;
     if(status){status.textContent='⚠ Failed to save — please try again.';status.style.color='var(--red)';}
-  }finally{
-    toggle.disabled=false;
+    await loadRoutingConfig();
   }
 }
 

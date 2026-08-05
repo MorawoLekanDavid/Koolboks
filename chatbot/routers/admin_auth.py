@@ -12,15 +12,37 @@ from chatbot.core import redis_client
 from chatbot.core.security import hash_password, verify_password
 from chatbot.database import get_db
 from chatbot.dependencies import AGENT_SESSION_TTL, get_admin_ctx, require_admin, require_super_admin
-from chatbot.models import Agent
+from chatbot.models import Agent, Department
 from chatbot.routers.permissions import require_tab_permission
+from chatbot.services.presence_service import get_status, get_statuses, set_status
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
 
 @router.get("/me")
 async def get_me(ctx: dict = Depends(get_admin_ctx)):
-    return {"role": ctx.get("role", "agent"), "name": ctx.get("name", ""), "email": ctx.get("email", "")}
+    agent_id = ctx.get("agent_id")
+    department_id = None
+    status = "offline"
+    if agent_id:
+        def _fetch():
+            db = get_db()
+            try:
+                return db.query(Agent).filter(Agent.id == agent_id).first()
+            finally:
+                db.close()
+        agent = await run_in_threadpool(_fetch)
+        if agent:
+            department_id = agent.department_id
+        status = await get_status(agent_id)
+    return {
+        "role": ctx.get("role", "customer_success_agent"),
+        "name": ctx.get("name", ""),
+        "email": ctx.get("email", ""),
+        "agent_id": agent_id,
+        "department_id": department_id,
+        "status": status,
+    }
 
 
 class AgentLoginRequest(BaseModel):
@@ -87,7 +109,7 @@ async def agent_login(body: AgentLoginRequest):
 
 # ── Agent Management ──────────────────────────────────────────────────────────
 
-AGENT_ROLES = ("agent", "customer_success_agent", "telesales_agent", "admin", "sales_agent")
+AGENT_ROLES = ("customer_success_agent", "telesales_agent", "admin", "bi_analyst", "team_lead")
 
 
 class AgentCreate(BaseModel):
@@ -103,11 +125,16 @@ async def list_agents(ctx: dict = Depends(require_tab_permission("team"))):
         db = get_db()
         try:
             agents = db.query(Agent).order_by(Agent.created_at.asc()).all()
-            return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
-                     "created_at": a.created_at.isoformat() if a.created_at else None} for a in agents]
+            depts = {d.id: d.name for d in db.query(Department).all()}
+            return agents, depts
         finally:
             db.close()
-    return await run_in_threadpool(_fetch)
+    agents, depts = await run_in_threadpool(_fetch)
+    statuses = await get_statuses([a.id for a in agents])
+    return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
+             "department_id": a.department_id, "department_name": depts.get(a.department_id),
+             "status": statuses.get(a.id, "offline"),
+             "created_at": a.created_at.isoformat() if a.created_at else None} for a in agents]
 
 
 @router.get("/agents/directory")
@@ -120,10 +147,132 @@ async def agents_directory(ctx: dict = Depends(get_admin_ctx)):
         db = get_db()
         try:
             agents = db.query(Agent).order_by(Agent.name.asc()).all()
-            return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role} for a in agents]
+            return [{"id": a.id, "name": a.name, "email": a.email, "role": a.role,
+                     "department_id": a.department_id} for a in agents]
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
+
+
+class StatusUpdate(BaseModel):
+    status: str  # online | away | offline
+
+
+@router.put("/my-status")
+async def update_my_status(body: StatusUpdate, ctx: dict = Depends(get_admin_ctx)):
+    """Self-service presence toggle — any logged-in agent sets their own
+    status. Feeds Sticky Ownership and Capacity Guard routing."""
+    if body.status not in ("online", "away", "offline"):
+        raise HTTPException(400, "status must be online, away, or offline")
+    agent_id = ctx.get("agent_id")
+    if not agent_id:
+        raise HTTPException(400, "Super admin sessions don't have a presence status.")
+    await set_status(agent_id, body.status)
+    return {"status": body.status}
+
+
+# ── Departments ─────────────────────────────────────────────────────────────
+
+class DepartmentIn(BaseModel):
+    name: str
+    team_lead_id: Optional[int] = None
+
+
+@router.get("/departments")
+async def list_departments(ctx: dict = Depends(require_tab_permission("team"))):
+    def _fetch():
+        db = get_db()
+        try:
+            depts = db.query(Department).order_by(Department.name.asc()).all()
+            agent_names = {a.id: a.name for a in db.query(Agent).all()}
+            member_counts = {}
+            for a in db.query(Agent).filter(Agent.department_id.isnot(None)).all():
+                member_counts[a.department_id] = member_counts.get(a.department_id, 0) + 1
+            return [
+                {"id": d.id, "name": d.name, "team_lead_id": d.team_lead_id,
+                 "team_lead_name": agent_names.get(d.team_lead_id),
+                 "member_count": member_counts.get(d.id, 0)}
+                for d in depts
+            ]
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+@router.post("/departments")
+async def create_department(body: DepartmentIn, ctx: dict = Depends(require_admin)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Department name is required")
+    db = get_db()
+    try:
+        existing = db.query(Department).filter(Department.name == name).first()
+        if existing:
+            raise HTTPException(409, "A department with this name already exists")
+        dept = Department(name=name, team_lead_id=body.team_lead_id)
+        db.add(dept)
+        db.commit()
+        db.refresh(dept)
+        return {"id": dept.id, "name": dept.name, "team_lead_id": dept.team_lead_id}
+    finally:
+        db.close()
+
+
+@router.patch("/departments/{dept_id}")
+async def update_department(dept_id: int, body: DepartmentIn, ctx: dict = Depends(require_admin)):
+    db = get_db()
+    try:
+        dept = db.query(Department).filter(Department.id == dept_id).first()
+        if not dept:
+            raise HTTPException(404, "Department not found")
+        name = body.name.strip()
+        if name and name != dept.name:
+            clash = db.query(Department).filter(Department.name == name).first()
+            if clash:
+                raise HTTPException(409, "A department with this name already exists")
+            dept.name = name
+        dept.team_lead_id = body.team_lead_id
+        db.commit()
+        return {"id": dept.id, "name": dept.name, "team_lead_id": dept.team_lead_id}
+    finally:
+        db.close()
+
+
+@router.delete("/departments/{dept_id}")
+async def delete_department(dept_id: int, ctx: dict = Depends(require_admin)):
+    db = get_db()
+    try:
+        dept = db.query(Department).filter(Department.id == dept_id).first()
+        if not dept:
+            raise HTTPException(404, "Department not found")
+        db.query(Agent).filter(Agent.department_id == dept_id).update({"department_id": None})
+        db.delete(dept)
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+class AgentDepartmentIn(BaseModel):
+    department_id: Optional[int] = None
+
+
+@router.patch("/agents/{agent_id}/department")
+async def set_agent_department(agent_id: int, body: AgentDepartmentIn, ctx: dict = Depends(require_admin)):
+    db = get_db()
+    try:
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        if body.department_id is not None:
+            dept = db.query(Department).filter(Department.id == body.department_id).first()
+            if not dept:
+                raise HTTPException(404, "Department not found")
+        agent.department_id = body.department_id
+        db.commit()
+        return {"id": agent.id, "department_id": agent.department_id}
+    finally:
+        db.close()
 
 
 @router.post("/agents")
@@ -153,13 +302,13 @@ async def register_agent(body: AgentCreate, ctx: dict = Depends(require_admin)):
 
 
 class RoleUpdate(BaseModel):
-    role: str  # "admin" or "agent"
+    role: str
 
 
 @router.patch("/agents/{agent_id}/role")
 async def update_agent_role(agent_id: int, body: RoleUpdate, ctx: dict = Depends(require_super_admin)):
-    if body.role not in ("admin", "agent", "customer_success_agent", "telesales_agent", "sales_agent"):
-        raise HTTPException(400, "Role must be one of: admin, customer_success_agent, telesales_agent, agent")
+    if body.role not in AGENT_ROLES:
+        raise HTTPException(400, f"Role must be one of: {', '.join(AGENT_ROLES)}")
     db = get_db()
     try:
         agent = db.query(Agent).filter(Agent.id == agent_id).first()

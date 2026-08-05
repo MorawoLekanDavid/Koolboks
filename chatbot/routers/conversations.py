@@ -17,8 +17,8 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, Tag
-from chatbot.routers.permissions import require_tab_permission
+from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, Tag
+from chatbot.routers.permissions import require_conversation_write, require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
 
@@ -389,7 +389,7 @@ class AgentReply(BaseModel):
 
 
 @router.post("/conversations/{phone}/reply")
-async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(get_admin_ctx)):
+async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(require_conversation_write)):
     session_id = f"wa_{phone}"
     display_name = ctx.get("name") or body.agent_name or "Agent"
 
@@ -440,10 +440,19 @@ class OwnerUpdate(BaseModel):
 
 
 @router.patch("/conversations/{phone}/owner")
-async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(get_admin_ctx)):
+async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(require_conversation_write)):
     def _upsert():
         db = get_db()
         try:
+            # Team Lead can reassign broadly, but only to agents in their own
+            # department — not a company-wide free-for-all.
+            if ctx.get("role") == "team_lead" and body.owner_email:
+                caller = db.query(Agent).filter(Agent.id == ctx.get("agent_id")).first()
+                target = db.query(Agent).filter(Agent.email == body.owner_email).first()
+                if not caller or not target or caller.department_id is None \
+                        or target.department_id != caller.department_id:
+                    raise HTTPException(403, "You can only reassign within your own department")
+
             norm = normalize_phone(phone)
             existing = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
             if existing:
@@ -466,7 +475,7 @@ class HandoffRequest(BaseModel):
 async def toggle_handoff(
     phone: str,
     body: HandoffRequest = HandoffRequest(),
-    ctx: dict = Depends(get_admin_ctx),
+    ctx: dict = Depends(require_conversation_write),
 ):
     if not redis_client.client:
         raise HTTPException(status_code=503, detail="Redis unavailable")

@@ -12,6 +12,7 @@ from chatbot.config import GROQ_MODEL, log
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
 from chatbot.models import ConversationTag, Message, Tag
+from chatbot.routers.permissions import require_conversation_write
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
 
@@ -125,7 +126,7 @@ async def get_conversation_tags(phone: str, ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.post("/conversations/{phone}/tags/{tag_id}")
-async def add_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(get_admin_ctx)):
+async def add_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(require_conversation_write)):
     agent = ctx.get("name", "Agent")
 
     def _add():
@@ -153,7 +154,7 @@ async def add_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(get_
 
 
 @router.delete("/conversations/{phone}/tags/{tag_id}")
-async def remove_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(get_admin_ctx)):
+async def remove_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(require_conversation_write)):
     def _remove():
         db = get_db()
         try:
@@ -176,7 +177,7 @@ async def remove_conversation_tag(phone: str, tag_id: int, ctx: dict = Depends(g
 # ── AI auto-tagging ───────────────────────────────────────────────────────────
 
 @router.post("/conversations/{phone}/auto-tag")
-async def auto_tag_conversation(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def auto_tag_conversation(phone: str, ctx: dict = Depends(require_conversation_write)):
     def _fetch_data():
         db = get_db()
         try:
