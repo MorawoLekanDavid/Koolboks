@@ -43,8 +43,14 @@ async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx), _acc
                 ).where(Message.phone == norm)
             ).first()
             owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+            # Show the customer's actual WhatsApp name — an agent recognizes
+            # them by that, not whatever name got captured during
+            # qualification (can genuinely differ: nicknames, test personas).
+            wa_name = db.execute(
+                select(func.max(Message.name)).where(Message.phone == norm, Message.direction == "inbound")
+            ).scalar()
             return {
-                "name": lead.name, "phone": lead.phone,
+                "name": wa_name or lead.name, "phone": lead.phone,
                 "business": lead.business, "product_interest": lead.product_interest,
                 "amount": lead.amount, "payment_plan": lead.payment_plan,
                 "address": lead.address, "active_duration": lead.active_duration,
@@ -289,6 +295,16 @@ async def list_leads(
             owners = {o.phone: o for o in db.query(ConversationOwner).all()}
             scope = get_conversation_scope(db, ctx)
 
+            # Display the customer's actual WhatsApp name, not whatever name
+            # got captured into the Lead record during qualification — an
+            # agent recognizes a customer by their WhatsApp handle, and the
+            # two can genuinely differ (test personas, nicknames, etc.).
+            # Same source Drop-offs already use for this.
+            wa_names = dict(db.execute(
+                select(Message.phone, func.max(case((Message.direction == "inbound", Message.name), else_=None)))
+                .group_by(Message.phone)
+            ).all())
+
             def _visible(owner):
                 if scope["unrestricted"]:
                     return True
@@ -298,11 +314,12 @@ async def list_leads(
 
             result = []
             for l in leads:
-                owner = owners.get(normalize_phone(l.phone))
+                norm = normalize_phone(l.phone)
+                owner = owners.get(norm)
                 if not _visible(owner):
                     continue
                 result.append({
-                    "id": l.id, "name": l.name, "phone": l.phone,
+                    "id": l.id, "name": wa_names.get(l.phone) or wa_names.get(norm) or l.name, "phone": l.phone,
                     "whatsapp_phone": l.whatsapp_phone,
                     "product_interest": l.product_interest,
                     "business": l.business, "amount": l.amount,
