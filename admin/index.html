@@ -806,10 +806,13 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <button id="inavAnalytics" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;opacity:0" onclick="switchTab('analytics')"></button>
     <button id="inavTeam"      style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;opacity:0" onclick="switchTab('team')"></button>
     <div class="sb-footer">
-      <div class="sb-notif">
+      <div class="sb-notif" style="gap:8px">
         <div class="notif-wrap">
           <div class="notif-icon">🔔</div>
           <span class="notif-badge hidden" id="notifCount">0</span>
+        </div>
+        <div class="notif-wrap" onclick="toggleSound()" title="Sound notifications on — click to mute">
+          <div class="notif-icon" id="soundToggleBtn">🔊</div>
         </div>
       </div>
       <div class="sb-user">
@@ -2343,7 +2346,7 @@ async function showApp(){
   applyNavPermissions(agentRole);
   applyReadOnlyRole();
   // Nav visibility is handled dynamically via applyNavPermissions
-  requestNotificationPermission();isFirstLoad=true;
+  requestNotificationPermission();_unlockAudio();_syncSoundToggleUI();isFirstLoad=true;
   convOffset=0;loadConversations();loadAllTags();
   // Pre-load agent list so conversation owner dropdown is ready immediately
   fetch(`/admin/agents/directory?key=${encodeURIComponent(adminKey)}`).then(r=>r.ok?r.json():[]).then(a=>{allAgents=a;}).catch(()=>{});
@@ -2906,7 +2909,10 @@ async function loadConversations(append=false){
       if(!isFirstLoad){
         data.forEach(c=>{
           const p=allConversations.find(x=>x.phone===c.phone);
-          if(p&&c.total_messages>p.total_messages&&c.phone!==selectedPhone)fireNotification(c.name||'Customer',`New message from ${c.name||c.phone}`);
+          if(p&&c.total_messages>p.total_messages&&c.phone!==selectedPhone){
+            fireNotification(c.name||'Customer',`New message from ${c.name||c.phone}`);
+            playNewMessageSound();
+          }
         });
       }
       // Refresh loaded set without truncating load-more items
@@ -3314,6 +3320,7 @@ async function selectConv(phone,name,mode,agent){
   const conv=allConversations.find(c=>c.phone===phone);if(conv){conv.unread=0;renderConversations();}
   msgPollInterval=setInterval(loadMessages,7000);
 }
+let _lastDeliveryStatus={};
 async function loadMessages(){
   if(!selectedPhone)return;
   const phone=selectedPhone; // capture now — selectedPhone may change while awaiting
@@ -3322,6 +3329,17 @@ async function loadMessages(){
     if(selectedPhone!==phone)return; // conversation switched while fetching — discard
     const msgs=await r.json();
     if(selectedPhone!==phone)return; // switched again during JSON parse — discard
+    // A message going sent -> delivered/read is a genuine transition worth a
+    // sound; a message we've never seen before just gets its status recorded
+    // silently (it's history, not a delivery that just happened).
+    msgs.forEach(m=>{
+      if(m.direction!=='outbound')return;
+      const prev=_lastDeliveryStatus[m.id];
+      if(prev!==undefined&&prev!=='delivered'&&prev!=='read'&&(m.delivery_status==='delivered'||m.delivery_status==='read')){
+        playDeliveredSound();
+      }
+      _lastDeliveryStatus[m.id]=m.delivery_status;
+    });
     const box=document.getElementById('messages');
     const atBottom=box.scrollHeight-box.scrollTop<=box.clientHeight+60;
     const now=new Date();
@@ -5012,6 +5030,53 @@ function resetFileUpload(){
 // ── Notifications ──────────────────────────────────────────────────────
 function requestNotificationPermission(){if('Notification'in window&&Notification.permission==='default')Notification.requestPermission();}
 function fireNotification(title,body){if('Notification'in window&&Notification.permission==='granted')new Notification(title,{body});}
+
+// ── Sound notifications ───────────────────────────────────────────────────
+// Synthesized via Web Audio (no external sound file to ship/host) — a rising
+// two-tone chime for a new message, a soft single tick for delivery.
+let soundEnabled=localStorage.getItem('koolbot_sound_enabled')!=='0';
+let _audioCtx=null;
+function _unlockAudio(){
+  // Browsers block audio until a user gesture — the login click counts, so
+  // warm the context up right away instead of waiting for the first sound.
+  try{
+    _audioCtx=_audioCtx||new(window.AudioContext||window.webkitAudioContext)();
+    if(_audioCtx.state==='suspended')_audioCtx.resume();
+  }catch(e){}
+}
+function _playTone(freq,startTime,duration,gain,type){
+  if(!_audioCtx)return;
+  const osc=_audioCtx.createOscillator();
+  const g=_audioCtx.createGain();
+  osc.type=type||'sine';
+  osc.frequency.value=freq;
+  const t0=_audioCtx.currentTime+startTime;
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(gain,t0+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+duration);
+  osc.connect(g);g.connect(_audioCtx.destination);
+  osc.start(t0);osc.stop(t0+duration+0.02);
+}
+function playNewMessageSound(){
+  if(!soundEnabled)return;
+  try{_unlockAudio();_playTone(740,0,0.12,0.18);_playTone(988,0.10,0.16,0.18);}catch(e){}
+}
+function playDeliveredSound(){
+  if(!soundEnabled)return;
+  try{_unlockAudio();_playTone(880,0,0.07,0.09);}catch(e){}
+}
+function toggleSound(){
+  soundEnabled=!soundEnabled;
+  localStorage.setItem('koolbot_sound_enabled',soundEnabled?'1':'0');
+  if(soundEnabled)_unlockAudio();
+  _syncSoundToggleUI();
+}
+function _syncSoundToggleUI(){
+  const btn=document.getElementById('soundToggleBtn');
+  const wrap=btn?.closest('.notif-wrap');
+  if(btn)btn.textContent=soundEnabled?'🔊':'🔇';
+  if(wrap)wrap.title=soundEnabled?'Sound notifications on — click to mute':'Sound notifications muted — click to unmute';
+}
 
 // ── Templates ──────────────────────────────────────────────────────────
 let allTemplates=[];
