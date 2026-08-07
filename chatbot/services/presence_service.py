@@ -5,14 +5,19 @@ from chatbot.core import redis_client
 #   heartbeat alive + away      -> away
 #   heartbeat dead (any away)   -> offline
 # The heartbeat key is the source of truth for "is the dashboard tab even
-# open" — it's refreshed by a periodic ping from the frontend and cleared
-# instantly by a sendBeacon on tab close, so it self-heals within one TTL
-# window (45s) even if the tab crashes or the network drops without a clean
-# close. "Away" is a pure manual override on top of that, for "I'm here but
-# stepped out" without closing the tab.
+# open" — it's refreshed by a periodic ping from the frontend (every 20s,
+# including while backgrounded — see admin/index.html's sendHeartbeat) and
+# cleared instantly by a sendBeacon on tab close, so it self-heals within
+# one TTL window even if the tab crashes or the network drops without a
+# clean close. "Away" is a pure manual override on top of that, for "I'm
+# here but stepped out" without closing the tab.
 HEARTBEAT_PREFIX = "koolbuy:agent_presence:"
 AWAY_PREFIX = "koolbuy:agent_status:"
-HEARTBEAT_TTL = 45  # seconds — outlasts a couple of missed 20s heartbeats
+# 90s, not just 2x the 20s ping interval — Chrome throttles background-tab
+# timers, so a backgrounded-but-open tab can see pings land several times
+# slower than foreground cadence. A tight TTL would flip agents to offline
+# (and out of routing) just from switching tabs, not from actually leaving.
+HEARTBEAT_TTL = 90
 
 
 def _hb_key(agent_id: int) -> str:

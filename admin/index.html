@@ -2401,7 +2401,11 @@ function syncPresenceUI(){
   if(wrap)wrap.style.display=myAgentId?'':'none';
 }
 async function sendHeartbeat(){
-  if(!myAgentId||document.hidden)return;
+  // Deliberately pings even while the tab is backgrounded — an agent
+  // checking another tab is still at their desk and should stay eligible
+  // for routing. Only a genuinely closed tab (beforeunload) or the TTL
+  // lapsing (crash/network drop) should ever drop someone offline.
+  if(!myAgentId)return;
   try{
     const r=await fetch(`/admin/presence/heartbeat?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
     if(r.ok){myStatus=_myAway?'away':'online';syncPresenceUI();}
@@ -2412,10 +2416,10 @@ function startPresenceHeartbeat(){
   sendHeartbeat();
   clearInterval(_presenceInterval);
   _presenceInterval=setInterval(sendHeartbeat,HEARTBEAT_MS);
-  // Backgrounding a tab shouldn't instantly drop someone offline (routing
-  // would flicker every time they glance at another tab) — just pause pings
-  // and let the 45s TTL be the real "have they actually gone" signal. Coming
-  // back into view pings immediately instead of waiting for the next tick.
+  // Regular pings continue in the background (see sendHeartbeat) — this
+  // just fires an extra immediate one on returning to the tab instead of
+  // waiting up to 20s for the next scheduled tick, so status flips back
+  // to online without a visible lag.
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)sendHeartbeat();});
   window.addEventListener('beforeunload',()=>{
     if(myAgentId)navigator.sendBeacon(`/admin/presence/offline?key=${encodeURIComponent(adminKey)}`);
