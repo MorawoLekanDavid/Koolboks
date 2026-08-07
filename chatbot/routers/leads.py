@@ -4,19 +4,19 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
-from chatbot.models import ContactStage, ConversationTag, Lead, LeadNote, Message, Tag
-from chatbot.routers.permissions import require_any_tab_permission, require_tab_permission
+from chatbot.models import Agent, ContactStage, ConversationTag, Lead, LeadNote, Message, Tag
+from chatbot.routers.permissions import get_lead_scope, lead_guard, require_any_tab_permission, require_tab_permission
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/leads", tags=["leads"])
 
 
 @router.get("/by-phone/{phone}")
-async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
     def _fetch():
         db = get_db()
         try:
@@ -63,7 +63,7 @@ async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx)):
 
 
 @router.get("/{phone}/notes")
-async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx)):
+async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
     def _fetch():
         db = get_db()
         try:
@@ -124,7 +124,7 @@ class NoteIn(BaseModel):
 
 
 @router.post("/{phone}/notes")
-async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_ctx)):
+async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
     if not body.content.strip():
         raise HTTPException(400, "Note content cannot be empty")
     def _create():
@@ -283,6 +283,17 @@ async def list_leads(
                 q = q.filter(Lead.created_at >= datetime.fromisoformat(date_from))
             if date_to:
                 q = q.filter(Lead.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+
+            scope = get_lead_scope(db, ctx)
+            if not scope["unrestricted"]:
+                if scope["team_lead"]:
+                    cond = Lead.assigned_to.in_(scope["dept_names"])
+                    if scope["include_unassigned"]:
+                        cond = or_(cond, Lead.assigned_to == None)
+                    q = q.filter(cond)
+                else:
+                    q = q.filter(Lead.assigned_to == scope["own_name"])
+
             leads = q.order_by(Lead.created_at.desc()).all()
             return [
                 {
@@ -310,6 +321,13 @@ async def list_dropoffs(
     def _fetch():
         db = get_db()
         try:
+            scope = get_lead_scope(db, ctx)
+            if not scope["unrestricted"] and not scope["team_lead"]:
+                # Drop-offs never became a Lead row, so there's nothing to
+                # assign — a regular agent's scope is always "what's assigned
+                # to me", which for this list is always nothing.
+                return []
+
             q = select(
                 Message.phone,
                 func.max(case((Message.direction == "inbound", Message.name), else_=None)).label("name"),
@@ -345,9 +363,21 @@ async def list_dropoffs(
 
 @router.patch("/{phone}/assign")
 async def assign_lead(phone: str, body: AssignIn, ctx: dict = Depends(get_admin_ctx)):
+    if ctx.get("role") not in ("admin", "super_admin", "team_lead"):
+        raise HTTPException(403, "Only admins and team leads can assign leads")
+
     def _update():
         db = get_db()
         try:
+            # Team Lead can reassign broadly, but only within their own
+            # department — matching the same rule for conversation reassignment.
+            if ctx.get("role") == "team_lead" and body.assign_to:
+                caller = db.query(Agent).filter(Agent.id == ctx.get("agent_id")).first()
+                target = db.query(Agent).filter(Agent.name == body.assign_to).first()
+                if not caller or not target or caller.department_id is None \
+                        or target.department_id != caller.department_id:
+                    raise HTTPException(403, "You can only assign within your own department")
+
             norm = normalize_phone(phone)
             lead = db.query(Lead).filter(Lead.phone == norm).first()
             if not lead:
@@ -361,7 +391,7 @@ async def assign_lead(phone: str, body: AssignIn, ctx: dict = Depends(get_admin_
 
 
 @router.patch("/{phone}/status")
-async def update_lead_status(phone: str, body: StatusIn, ctx: dict = Depends(get_admin_ctx)):
+async def update_lead_status(phone: str, body: StatusIn, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
     valid = {"new", "interested", "follow_up", "drop_off", "converted"}
     if body.status not in valid:
         raise HTTPException(400, f"Invalid status. Must be one of: {', '.join(sorted(valid))}")

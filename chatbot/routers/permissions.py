@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
-from chatbot.models import Agent, ConversationOwner, RolePermission
+from chatbot.models import Agent, ConversationOwner, Lead, RolePermission
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/role-permissions", tags=["permissions"])
@@ -195,6 +195,59 @@ def conversation_guard(write: bool = False, claim: bool = False):
                 db.close()
         if not await run_in_threadpool(_fetch):
             raise HTTPException(403, "You don't have access to this conversation")
+        return ctx
+    return _check
+
+
+def get_lead_scope(db, ctx: dict) -> dict:
+    """Computes what a role is allowed to see in the Leads tab (Interested +
+    Drop-off), same philosophy as get_conversation_scope.
+    - admin/super_admin/bi_analyst: unrestricted.
+    - team_lead: leads assigned to their own department's agents, plus
+      unassigned ones (so they can hand them out).
+    - everyone else: only leads assigned to them personally — unassigned
+      leads are invisible, same as an unassigned conversation."""
+    role = ctx.get("role")
+    if role in CONVERSATION_UNRESTRICTED_ROLES:
+        return {"unrestricted": True}
+    if role == "team_lead":
+        agent_id = ctx.get("agent_id")
+        me = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
+        dept_names = set()
+        if me and me.department_id is not None:
+            dept_names = {a.name for a in db.query(Agent).filter(Agent.department_id == me.department_id).all()}
+        return {"unrestricted": False, "team_lead": True, "dept_names": dept_names, "include_unassigned": True}
+    return {"unrestricted": False, "team_lead": False, "own_name": ctx.get("name"), "include_unassigned": False}
+
+
+def _lead_allowed(db, scope: dict, phone: str) -> bool:
+    if scope["unrestricted"]:
+        return True
+    norm = normalize_phone(phone)
+    lead = db.query(Lead).filter(Lead.phone == norm).first()
+    if not lead:
+        # No Lead row at all (e.g. a Drop-off — chatted but never captured a
+        # phone/became a qualified lead) — nothing assigned, nothing to see.
+        return False
+    if scope["team_lead"]:
+        return lead.assigned_to in scope["dept_names"] or (scope["include_unassigned"] and not lead.assigned_to)
+    return lead.assigned_to == scope["own_name"]
+
+
+def lead_guard():
+    """Dependency factory for any Leads endpoint keyed by a {phone} path
+    param — read/write access follows get_lead_scope exactly (only the
+    assigned agent, their team lead, or admin can view/act on a lead)."""
+    async def _check(phone: str, ctx: dict = Depends(get_admin_ctx)) -> dict:
+        def _fetch():
+            db = get_db()
+            try:
+                scope = get_lead_scope(db, ctx)
+                return _lead_allowed(db, scope, phone)
+            finally:
+                db.close()
+        if not await run_in_threadpool(_fetch):
+            raise HTTPException(403, "You don't have access to this lead")
         return ctx
     return _check
 
