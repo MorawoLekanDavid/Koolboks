@@ -32,10 +32,6 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     def _blurb(p):
         return f"🛒 *{p.name}*\n💰 N{float(p.price):,.0f}"
 
-    # Keep the admin transcript readable as one combined message, even though
-    # multiple products get sent as separate WhatsApp messages below.
-    transcript_text = chat_resp.response + "".join(f"\n\n{_blurb(p)}" for p in chat_resp.products)
-
     if chat_resp.products:
         first = chat_resp.products[0]
         wamid = await send_whatsapp_message(
@@ -43,16 +39,26 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
             first.original_image_url,  # raw S3/CDN URL — WhatsApp fetches directly
             image_caption=_blurb(first),
         )
+        save_message_db(session_id, wa_from, "KoolBot", "outbound", chat_resp.response, wamid=wamid)
+        # One [image]...[/image] row per product actually sent to WhatsApp —
+        # without this, bot-sent pictures were invisible in the admin
+        # transcript (only the agent-sent-image path recorded that marker),
+        # making it look like the bot never sends pictures at all even
+        # though delivery to the customer was working the whole time.
+        if first.original_image_url:
+            save_message_db(session_id, wa_from, "KoolBot", "outbound", f"[image]{first.original_image_url}[/image]")
+
         # Every recommended product gets its own image + caption, not just the first —
         # a customer comparing several options should see all of them, not just one.
         for product in chat_resp.products[1:]:
             await send_whatsapp_message(
                 wa_from, "", product.original_image_url, image_caption=_blurb(product)
             )
+            if product.original_image_url:
+                save_message_db(session_id, wa_from, "KoolBot", "outbound", f"[image]{product.original_image_url}[/image]")
     else:
         wamid = await send_whatsapp_message(wa_from, chat_resp.response)
-
-    save_message_db(session_id, wa_from, "KoolBot", "outbound", transcript_text, wamid=wamid)
+        save_message_db(session_id, wa_from, "KoolBot", "outbound", chat_resp.response, wamid=wamid)
 
     # Run background tasks queued by chat_handler (save_lead, update_lead_address, etc.)
     for task in bg.tasks:
