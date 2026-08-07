@@ -4,19 +4,19 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, select
 
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx, require_admin
-from chatbot.models import Agent, ContactStage, ConversationTag, Lead, LeadNote, Message, Tag
-from chatbot.routers.permissions import get_lead_scope, lead_guard, require_any_tab_permission, require_tab_permission
+from chatbot.models import Agent, ContactStage, ConversationOwner, ConversationTag, Lead, LeadNote, Message, Tag
+from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_any_tab_permission, require_tab_permission
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin/leads", tags=["leads"])
 
 
 @router.get("/by-phone/{phone}")
-async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
+async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(conversation_guard())):
     def _fetch():
         db = get_db()
         try:
@@ -42,13 +42,14 @@ async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx), _acc
                     func.count(Message.id).label("total_messages"),
                 ).where(Message.phone == norm)
             ).first()
+            owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
             return {
                 "name": lead.name, "phone": lead.phone,
                 "business": lead.business, "product_interest": lead.product_interest,
                 "amount": lead.amount, "payment_plan": lead.payment_plan,
                 "address": lead.address, "active_duration": lead.active_duration,
                 "created_at": lead.created_at.isoformat() if lead.created_at else None,
-                "assigned_to": lead.assigned_to,
+                "assigned_to": owner.owner_name if owner else None,
                 "status": lead.status or "new",
                 "score": score, "interest": interest,
                 "activity": {
@@ -63,7 +64,7 @@ async def get_lead_by_phone(phone: str, ctx: dict = Depends(get_admin_ctx), _acc
 
 
 @router.get("/{phone}/notes")
-async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
+async def get_lead_notes(phone: str, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(conversation_guard())):
     def _fetch():
         db = get_db()
         try:
@@ -110,10 +111,6 @@ class LeadImportIn(BaseModel):
     status: str = "new"
 
 
-class AssignIn(BaseModel):
-    assign_to: Optional[str] = None   # None = unassign
-
-
 class StatusIn(BaseModel):
     status: str
 
@@ -124,7 +121,7 @@ class NoteIn(BaseModel):
 
 
 @router.post("/{phone}/notes")
-async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
+async def add_lead_note(phone: str, body: NoteIn, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(conversation_guard(write=True))):
     if not body.content.strip():
         raise HTTPException(400, "Note content cannot be empty")
     def _create():
@@ -283,30 +280,37 @@ async def list_leads(
                 q = q.filter(Lead.created_at >= datetime.fromisoformat(date_from))
             if date_to:
                 q = q.filter(Lead.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
-
-            scope = get_lead_scope(db, ctx)
-            if not scope["unrestricted"]:
-                if scope["team_lead"]:
-                    cond = Lead.assigned_to.in_(scope["dept_names"])
-                    if scope["include_unassigned"]:
-                        cond = or_(cond, Lead.assigned_to == None)
-                    q = q.filter(cond)
-                else:
-                    q = q.filter(Lead.assigned_to == scope["own_name"])
-
             leads = q.order_by(Lead.created_at.desc()).all()
-            return [
-                {
+
+            # Lead qualification (Interested/Drop-off) is just a filtered
+            # view of the same conversation — ownership always comes from
+            # ConversationOwner (same source the Conversations tab uses),
+            # not a separate per-lead assignment field.
+            owners = {o.phone: o for o in db.query(ConversationOwner).all()}
+            scope = get_conversation_scope(db, ctx)
+
+            def _visible(owner):
+                if scope["unrestricted"]:
+                    return True
+                if scope["team_lead"]:
+                    return (owner and owner.owner_email in scope["dept_emails"]) or (not owner and scope["include_unassigned"])
+                return owner is not None and owner.owner_email == scope["own_email"]
+
+            result = []
+            for l in leads:
+                owner = owners.get(normalize_phone(l.phone))
+                if not _visible(owner):
+                    continue
+                result.append({
                     "id": l.id, "name": l.name, "phone": l.phone,
                     "whatsapp_phone": l.whatsapp_phone,
                     "product_interest": l.product_interest,
                     "business": l.business, "amount": l.amount,
                     "created_at": l.created_at.isoformat() if l.created_at else None,
-                    "assigned_to": l.assigned_to,
+                    "assigned_to": owner.owner_name if owner else None,
                     "status": l.status or "new",
-                }
-                for l in leads
-            ]
+                })
+            return result
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
@@ -321,13 +325,6 @@ async def list_dropoffs(
     def _fetch():
         db = get_db()
         try:
-            scope = get_lead_scope(db, ctx)
-            if not scope["unrestricted"] and not scope["team_lead"]:
-                # Drop-offs never became a Lead row, so there's nothing to
-                # assign — a regular agent's scope is always "what's assigned
-                # to me", which for this list is always nothing.
-                return []
-
             q = select(
                 Message.phone,
                 func.max(case((Message.direction == "inbound", Message.name), else_=None)).label("name"),
@@ -347,51 +344,42 @@ async def list_dropoffs(
                     lead_phones_norm.add(normalize_phone(l.phone))
                 if l.whatsapp_phone:
                     lead_phones_norm.add(normalize_phone(l.whatsapp_phone))
-            return [
-                {
+
+            # Same ownership source as Interested leads and Conversations —
+            # a Drop-off is still just a conversation, it just never
+            # captured a phone number / became a qualified Lead row.
+            owners = {o.phone: o for o in db.query(ConversationOwner).all()}
+            scope = get_conversation_scope(db, ctx)
+
+            def _visible(owner):
+                if scope["unrestricted"]:
+                    return True
+                if scope["team_lead"]:
+                    return (owner and owner.owner_email in scope["dept_emails"]) or (not owner and scope["include_unassigned"])
+                return owner is not None and owner.owner_email == scope["own_email"]
+
+            result = []
+            for r in msg_rows:
+                norm = normalize_phone(r.phone)
+                if norm in lead_phones_norm:
+                    continue
+                owner = owners.get(norm)
+                if not _visible(owner):
+                    continue
+                result.append({
                     "phone": r.phone, "name": r.name,
                     "last_message": r.last_message.isoformat() if r.last_message else None,
                     "message_count": r.message_count,
-                }
-                for r in msg_rows
-                if normalize_phone(r.phone) not in lead_phones_norm
-            ]
+                    "assigned_to": owner.owner_name if owner else None,
+                })
+            return result
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
 
 
-@router.patch("/{phone}/assign")
-async def assign_lead(phone: str, body: AssignIn, ctx: dict = Depends(get_admin_ctx)):
-    if ctx.get("role") not in ("admin", "super_admin", "team_lead"):
-        raise HTTPException(403, "Only admins and team leads can assign leads")
-
-    def _update():
-        db = get_db()
-        try:
-            # Team Lead can reassign broadly, but only within their own
-            # department — matching the same rule for conversation reassignment.
-            if ctx.get("role") == "team_lead" and body.assign_to:
-                caller = db.query(Agent).filter(Agent.id == ctx.get("agent_id")).first()
-                target = db.query(Agent).filter(Agent.name == body.assign_to).first()
-                if not caller or not target or caller.department_id is None \
-                        or target.department_id != caller.department_id:
-                    raise HTTPException(403, "You can only assign within your own department")
-
-            norm = normalize_phone(phone)
-            lead = db.query(Lead).filter(Lead.phone == norm).first()
-            if not lead:
-                raise HTTPException(404, "Lead not found")
-            lead.assigned_to = body.assign_to or None
-            db.commit()
-            return {"ok": True, "assigned_to": lead.assigned_to}
-        finally:
-            db.close()
-    return await run_in_threadpool(_update)
-
-
 @router.patch("/{phone}/status")
-async def update_lead_status(phone: str, body: StatusIn, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(lead_guard())):
+async def update_lead_status(phone: str, body: StatusIn, ctx: dict = Depends(get_admin_ctx), _access: dict = Depends(conversation_guard(write=True))):
     valid = {"new", "interested", "follow_up", "drop_off", "converted"}
     if body.status not in valid:
         raise HTTPException(400, f"Invalid status. Must be one of: {', '.join(sorted(valid))}")

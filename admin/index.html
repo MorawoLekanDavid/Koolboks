@@ -3831,13 +3831,14 @@ function showLeadGroup(g){
     const rn=(l.name||'Customer').replace(/'/g,"\\'");
     const ph=(l.whatsapp_phone||l.phone).replace(/'/g,"\\'");
     const meta=isInt?[l.phone,l.product_interest,l.business,l.amount].filter(Boolean).join(' · '):`Last seen ${timeAgo(l.last_message)} · ${l.message_count} msg${l.message_count!==1?'s':''}`;
+    // A lead/drop-off's "assigned to" IS the underlying conversation's owner
+    // — there's no separate lead-level assignment, so both lists share the
+    // exact same assign UI wired to the conversation-owner endpoint.
     const canAssign=['admin','super_admin','team_lead'].includes(agentRole);
-    const agentOpts=isInt?'<option value="">Unassigned</option>'+allAgents.map(a=>`<option value="${esc(a.name)}" ${l.assigned_to===a.name?'selected':''}>${esc(a.name)}</option>`).join(''):'';
-    const assignCol=isInt
-      ?(canAssign
-        ?`<select class="assign-sel ${l.assigned_to?'':'unassigned'}" onchange="assignLead('${ph}',this.value,this)">${agentOpts}</select>`
-        :`<span style="font-size:12px;color:var(--g500);font-weight:600">${esc(l.assigned_to||'Unassigned')}</span>`)
-      :'';
+    const agentOpts='<option value="">Unassigned</option>'+allAgents.map(a=>`<option value="${esc(a.name)}" ${l.assigned_to===a.name?'selected':''}>${esc(a.name)}</option>`).join('');
+    const assignCol=canAssign
+      ?`<select class="assign-sel ${l.assigned_to?'':'unassigned'}" onchange="assignLead('${ph}',this.value,this)">${agentOpts}</select>`
+      :`<span style="font-size:12px;color:var(--g500);font-weight:600">${esc(l.assigned_to||'Unassigned')}</span>`;
     const statusCol=isInt?`<span class="status-badge ${l.status||'new'}">${(l.status||'new').replace('_',' ')}</span>`:'';
     return `<div class="lead-row">
       <div class="lead-av-sm">${init}</div>
@@ -3861,16 +3862,18 @@ function viewLeadChat(phone,name){
   selectConv(phone,name,conv?conv.mode:'bot',conv?(conv.agent||''):'');
 }
 
-// ── Lead Assignment ─────────────────────────────────────────────────────
+// ── Lead Assignment — a lead's "owner" IS the conversation's owner, so this
+// writes through the same ConversationOwner record the Conversations tab uses.
 async function assignLead(phone,agentName,selEl){
+  const agent=agentName?(allAgents||[]).find(a=>a.name===agentName):null;
   try{
-    const r=await fetch(`/admin/leads/${encodeURIComponent(phone)}/assign?key=${encodeURIComponent(adminKey)}`,{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({assign_to:agentName||null})
+      body:JSON.stringify({owner_name:agentName||null,owner_email:agent?agent.email:null})
     });
     if(!r.ok)throw new Error();
     if(selEl){selEl.className='assign-sel '+(agentName?'':'unassigned');}
-  }catch(e){alert('Failed to assign lead. Please try again.');}
+  }catch(e){alert('Failed to assign — you may not have permission to reassign this conversation.');}
 }
 async function assignLeadFromDetail(agentName){
   if(!currentDetailPhone)return;
