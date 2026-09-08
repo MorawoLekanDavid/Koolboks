@@ -3364,7 +3364,7 @@ async function loadMessages(){
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 Itura');
       const imgMatch=m.content.match(/^\[image\](.*)\[\/image\]$/);
       const bodyHtml=imgMatch
-        ?`<img src="${esc(imgMatch[1])}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
+        ?`<img src="${esc(mediaSrc(imgMatch[1]))}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
         :esc(m.content);
       const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
       let statusHtml='';
@@ -7154,6 +7154,14 @@ async function submitSendTemplate(){
 
 // ── Helpers ────────────────────────────────────────────────────────────
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+// [image] markers pointing at our own media-proxy route need the current agent's
+// session key attached (that endpoint is admin-auth gated same as every other
+// admin API call) — external URLs (product images on S3) don't need it and must
+// be left alone.
+function mediaSrc(url){
+  if(url && url.startsWith('/admin/media-proxy/'))return `${url}${url.includes('?')?'&':'?'}key=${encodeURIComponent(adminKey)}`;
+  return url;
+}
 function emptyState(icon,title,sub,actionHtml){
   return `<div class="ui-empty"><div class="ui-empty-icon">${icon}</div><div class="ui-empty-title">${esc(title)}</div>${sub?`<div class="ui-empty-sub">${esc(sub)}</div>`:''}${actionHtml||''}</div>`;
 }
