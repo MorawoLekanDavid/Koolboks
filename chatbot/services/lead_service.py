@@ -93,7 +93,7 @@ async def save_lead(user_name: str, phone: str, history: list, session_id: str =
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0,
-            reasoning_effort="low",
+            extra_body={"reasoning_effort": "low"},
         )
         log_groq_usage(completion, "lead_extraction", GROQ_MODEL)
         raw = (completion.choices[0].message.content or "").strip()

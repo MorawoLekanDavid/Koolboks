@@ -357,7 +357,7 @@ async def test_chat(body: TestChatMessage, ctx: dict = Depends(require_tab_permi
             messages=messages,
             max_tokens=500,
             temperature=0.4,
-            reasoning_effort="low",
+            extra_body={"reasoning_effort": "low"},
         )
         log_groq_usage(completion, "test_chat", GROQ_MODEL)
         reply = completion.choices[0].message.content or "No response"
