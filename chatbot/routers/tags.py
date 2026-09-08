@@ -218,6 +218,7 @@ async def auto_tag_conversation(phone: str, ctx: dict = Depends(conversation_gua
             messages=[{"role": "user", "content": prompt}],
             max_tokens=80,
             temperature=0.1,
+            reasoning_effort="low",
         )
         log_groq_usage(completion, "auto_tag", GROQ_MODEL)
         raw = completion.choices[0].message.content.strip()

@@ -80,6 +80,7 @@ async def score_conversation(messages: List[Message]) -> Optional[dict]:
             messages=[{"role": "user", "content": prompt}],
             max_tokens=250,
             temperature=0,
+            reasoning_effort="low",
         )
         log_groq_usage(completion, "conversation_scoring", GROQ_MODEL)
         raw = (completion.choices[0].message.content or "").strip()

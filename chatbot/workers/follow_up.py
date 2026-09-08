@@ -81,6 +81,7 @@ async def run_follow_ups():
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=180,
                     temperature=0.75,
+                    reasoning_effort="low",
                 )
                 log_groq_usage(completion, "follow_up", GROQ_MODEL)
                 follow_up_text = (completion.choices[0].message.content or "").strip()

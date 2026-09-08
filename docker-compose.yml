@@ -54,7 +54,7 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - DATABASE_URL=postgresql://koolbuy:${DB_PASSWORD:-koolbuy_secure_password_2026}@postgres:5432/koolbuy
       - REDIS_URL=redis://redis:6379
-      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
       - CHAT_TTL=${CHAT_TTL:-3600}
       - MAX_HISTORY_MESSAGES=${MAX_HISTORY_MESSAGES:-20}
       - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}

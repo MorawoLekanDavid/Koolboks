@@ -21,6 +21,7 @@ async def call_groq(messages: list, max_tokens: int = 600) -> str:
         completion = await groq_client.chat.completions.create(
             model=GROQ_MODEL, messages=messages,
             max_tokens=max_tokens, temperature=0.7,
+            reasoning_effort="low",
         )
         log_groq_usage(completion, "chat_reply", GROQ_MODEL)
         text = (completion.choices[0].message.content or "").strip()
