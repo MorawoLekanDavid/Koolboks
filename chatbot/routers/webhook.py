@@ -264,8 +264,31 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                                 log.info(f"Session {session_id} complete but recent — letting the "
                                          f"conversation continue instead of resetting it")
 
+                    # Debounce: record this message in a per-session pending buffer so
+                    # that if another message arrives while we're waiting to reply, only
+                    # the task scheduled by the LAST one actually generates a reply,
+                    # combining everything sent during the burst into one turn. Without
+                    # this, two quick messages ("I have nepa" / "But not good enough")
+                    # each independently spawned their own reply, producing two
+                    # overlapping bot messages back to back — confirmed happening in
+                    # production. `my_seq` is minted here (not inside the delayed task)
+                    # so its value reflects the exact moment this message was scheduled,
+                    # not whatever the counter happens to read once the task finally runs.
+                    my_seq = None
+                    if redis_client.client:
+                        try:
+                            seq_key = f"koolbuy:pending_seq:{session_id}"
+                            msgs_key = f"koolbuy:pending_msgs:{session_id}"
+                            my_seq = str(await redis_client.client.incr(seq_key))
+                            await redis_client.client.expire(seq_key, 300)
+                            await redis_client.client.rpush(msgs_key, llm_text)
+                            await redis_client.client.expire(msgs_key, 300)
+                        except Exception as _e:
+                            log.warning(f"Debounce buffer write failed for {session_id}: {_e}")
+                            my_seq = None
+
                     # Fire delayed response — gives agents BOT_RESPONSE_DELAY seconds to take over
-                    asyncio.create_task(delayed_bot_response(session_id, wa_from, name, llm_text))
+                    asyncio.create_task(delayed_bot_response(session_id, wa_from, name, llm_text, my_seq))
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
     return Response(content="OK", status_code=200)

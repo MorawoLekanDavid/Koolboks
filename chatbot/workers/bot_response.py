@@ -8,10 +8,28 @@ from chatbot.services.chat_service import ChatRequest, chat_handler
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 
 
-async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str):
-    """Wait for the agent takeover window, then respond if no agent claimed the session."""
+async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str, my_seq: str = None):
+    """Wait for the agent takeover window, then respond if no agent claimed the session.
+
+    `my_seq` is this message's debounce ticket (see webhook.py). If a newer message
+    arrived for this session while we were asleep, the pending-seq counter will have
+    moved past `my_seq` — that means a later task now owns replying to this whole
+    burst (it will pick up everything from the pending buffer, this message
+    included), so we bail out silently instead of sending a second, overlapping
+    reply. `my_seq is None` means debounce wasn't available (e.g. Redis was down
+    when this was scheduled) — in that case we just reply to `text` as before."""
     if BOT_RESPONSE_DELAY > 0:
         await asyncio.sleep(BOT_RESPONSE_DELAY)
+
+    if redis_client.client and my_seq is not None:
+        try:
+            current_seq = await redis_client.client.get(f"koolbuy:pending_seq:{session_id}")
+            if current_seq is not None and current_seq != my_seq:
+                log.info(f"[delay] {session_id} superseded by a newer message — skipping, "
+                         f"the latest task will reply to the whole burst")
+                return
+        except Exception as e:
+            log.warning(f"[delay] pending-seq check failed for {session_id}: {e}")
 
     # Re-check handoff — agent may have taken over during the delay
     handoff_key = f"koolbuy:handoff:{session_id}"
@@ -19,6 +37,19 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     if in_handoff:
         log.info(f"[delay] {session_id} claimed by agent during window — bot silent")
         return
+
+    # We're the winning task — fold every message received during this burst
+    # (this one included) into a single combined turn instead of replying to
+    # just the last one and silently dropping earlier ones from the same burst.
+    if redis_client.client and my_seq is not None:
+        try:
+            msgs_key = f"koolbuy:pending_msgs:{session_id}"
+            pending = await redis_client.client.lrange(msgs_key, 0, -1)
+            if pending:
+                text = "\n".join(pending)
+            await redis_client.client.delete(msgs_key)
+        except Exception as e:
+            log.warning(f"[delay] pending-msgs read failed for {session_id}: {e}")
 
     # Generate bot response
     bg = BackgroundTasks()
