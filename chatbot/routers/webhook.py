@@ -136,11 +136,18 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         # record at all. `text` stays a short, clean marker for the DB
                         # and logs; `llm_text` is what the bot actually responds to, so
                         # customers who send media at least get engaged instead of
-                        # silence (real vision understanding is a separate feature).
+                        # silence. Images additionally get a real, viewable marker (see
+                        # media_id handling below) so agents can actually see them in
+                        # the admin transcript — the bot itself still can't "see" it,
+                        # that's a separate feature.
                         media = msg.get(msg_type) or {}
                         caption = (media.get("caption") or "").strip()
+                        media_id = media.get("id")
                         article = "an" if msg_type in ("image", "audio") else "a"
-                        text = f"[Customer sent {article} {msg_type}]" + (f' — caption: "{caption}"' if caption else "")
+                        if msg_type == "image" and media_id:
+                            text = f"[image]/admin/media-proxy/{media_id}[/image]"
+                        else:
+                            text = f"[Customer sent {article} {msg_type}]" + (f' — caption: "{caption}"' if caption else "")
                         llm_text = (
                             f"[Customer sent {article} {msg_type}"
                             + (f' with caption "{caption}"' if caption else "")
@@ -162,6 +169,11 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                     # Save inbound message to DB
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text)
+                    # An image's caption gets its own row, same convention already used
+                    # for outbound product sends — [image]...[/image] stays a pure image
+                    # marker, caption text is a separate readable line in the transcript.
+                    if msg_type == "image" and caption:
+                        background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", caption)
 
                     # Round-robin a brand-new conversation to an agent — no-ops
                     # once the phone already has an owner, so this only ever
