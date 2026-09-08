@@ -270,7 +270,8 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         state_summary += (
             f"✓ FIRST MESSAGE — this is {request.user_name}'s very first message in this "
             f"conversation (or they just asked to restart). Start your reply with a short, "
-            f"warm one-clause greeting using their name before asking Step 1's question.\n"
+            f"warm welcome using their name that also briefly introduces Koolbuy as Nigeria's "
+            f"solar freezer company, before asking Step 1's question.\n"
         )
     if already_captured:
         if phone_redis:
