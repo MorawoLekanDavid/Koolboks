@@ -19,6 +19,14 @@ from chatbot.services.groq_service import call_groq
 from chatbot.services.lead_service import save_lead, update_lead_address
 from chatbot.utils.phone import SESSION_ID_RE, extract_valid_phone, phone_from_history
 
+# Customer explicitly asking to reset the conversation — "let's start from scratch",
+# "start over", "restart", etc. Distinct from FILLER_ACK_RE in webhook.py, which
+# handles the opposite case (a bare "ok"/"thanks" that should NOT reset anything).
+RESTART_RE = re.compile(
+    r'\b(start\s*(over|again|afresh|from\s*scratch)|restart|reset\s*(this\s*|the\s*)?conversation)\b',
+    re.IGNORECASE,
+)
+
 
 class ChatRequest(BaseModel):
     session_id:    str = Field(...)
@@ -218,6 +226,18 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
 
     # Normal chat
     history = await redis_client.get_history(request.session_id)
+
+    # Explicit customer request to restart — the CRITICAL MEMORY RULE in the system
+    # prompt otherwise makes the model plow through the existing flow no matter what
+    # the customer says, so this has to be handled here rather than left to the LLM.
+    if history and RESTART_RE.search(request.message):
+        history = []
+        if redis_client.client:
+            await redis_client.client.delete(f"koolbuy:chat:{request.session_id}")
+            await redis_client.client.delete(f"koolbuy:phone:{request.session_id}")
+            await redis_client.client.delete(f"koolbuy:delivery:{request.session_id}")
+        log.info(f"Session {request.session_id} restarted by customer request")
+
     if history and history[0].get("role") == "assistant":
         history = [{"role": "user", "content": "[conversation started]",
                     "ts": history[0].get("ts", "")}] + history
@@ -244,6 +264,12 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
 
     # Build state summary for clarity
     state_summary = "─── CAPTURED STATE ───\n"
+    if not history:
+        state_summary += (
+            f"✓ FIRST MESSAGE — this is {request.user_name}'s very first message in this "
+            f"conversation (or they just asked to restart). Start your reply with a short, "
+            f"warm one-clause greeting using their name before asking Step 1's question.\n"
+        )
     if already_captured:
         if phone_redis:
             extracted_phone = phone_redis

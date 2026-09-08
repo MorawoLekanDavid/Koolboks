@@ -27,6 +27,14 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         chat_resp = await chat_handler(chat_req, bg)
     except Exception as e:
         log.error(f"[delay] chat_handler failed for {session_id}: {e}")
+        # Without this, the customer sees total silence — no error, no retry
+        # prompt, nothing — whenever the AI backend has a hiccup.
+        try:
+            fallback_text = "Sorry, I had trouble processing that — could you try sending your message again?"
+            wamid = await send_whatsapp_message(wa_from, fallback_text)
+            save_message_db(session_id, wa_from, "KoolBot", "outbound", fallback_text, wamid=wamid)
+        except Exception as e2:
+            log.error(f"[delay] fallback message also failed for {session_id}: {e2}")
         return
 
     def _blurb(p):
