@@ -15,7 +15,7 @@ from chatbot.config import (
 from chatbot.services.ai_settings_service import get_live_content
 from chatbot.core import redis_client
 from chatbot.database import get_db
-from chatbot.models import Product
+from chatbot.models import Message, Product
 from chatbot.services.groq_service import call_groq
 from chatbot.services.lead_service import save_lead, update_lead_address
 from chatbot.utils.phone import SESSION_ID_RE, extract_valid_phone, phone_from_history
@@ -282,6 +282,28 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
             f"warm welcome using their name that also briefly introduces Koolbuy, before asking "
             f"Step 1's question. See STEP 1 for how to rotate the intro's angle.\n"
         )
+        # A real WhatsApp session with genuinely empty history is either a brand-new
+        # contact or one that legitimately restarted — but if this phone already has
+        # prior outbound messages in the DB, an empty history here means something
+        # reset it unexpectedly. There's a confirmed occurrence of this we couldn't
+        # trace after the fact (no logs survived); this makes any recurrence visible
+        # immediately instead of only discoverable by re-reading a transcript later.
+        if request.session_id.startswith("wa_"):
+            try:
+                _db = get_db()
+                phone = request.session_id[3:]
+                prior = _db.query(Message).filter(
+                    Message.phone == phone, Message.direction == "outbound"
+                ).first()
+                _db.close()
+                if prior:
+                    log.warning(
+                        f"Session {request.session_id} has empty history but {phone} has "
+                        f"prior outbound messages in the DB — likely an unexpected session "
+                        f"reset, not a genuinely new contact."
+                    )
+            except Exception as e:
+                log.warning(f"First-message reset diagnostic check failed: {e}")
     if already_captured:
         if phone_redis:
             extracted_phone = phone_redis
