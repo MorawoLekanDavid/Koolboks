@@ -127,10 +127,29 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                 messages = value.get("messages", [])
                 for msg in messages:
-                    if msg.get("type") != "text":
-                        continue
+                    msg_type = msg.get("type")
+                    if msg_type == "text":
+                        text = msg["text"]["body"]
+                        llm_text = text
+                    elif msg_type in ("image", "video", "document", "audio", "sticker"):
+                        # Previously silently skipped — no reply, no acknowledgment, no
+                        # record at all. `text` stays a short, clean marker for the DB
+                        # and logs; `llm_text` is what the bot actually responds to, so
+                        # customers who send media at least get engaged instead of
+                        # silence (real vision understanding is a separate feature).
+                        media = msg.get(msg_type) or {}
+                        caption = (media.get("caption") or "").strip()
+                        article = "an" if msg_type in ("image", "audio") else "a"
+                        text = f"[Customer sent {article} {msg_type}]" + (f' — caption: "{caption}"' if caption else "")
+                        llm_text = (
+                            f"[Customer sent {article} {msg_type}"
+                            + (f' with caption "{caption}"' if caption else "")
+                            + f". You cannot view {msg_type}s yet — acknowledge that warmly "
+                            f"in one clause and continue the conversation naturally.]"
+                        )
+                    else:
+                        continue  # location, contacts, reactions, interactive replies, etc. — out of scope for now
                     wa_from = normalize_phone(msg["from"])
-                    text = msg["text"]["body"]
                     contacts = value.get("contacts", [{}])
                     name = contacts[0].get("profile", {}).get("name", "Customer") if contacts else "Customer"
                     session_id = f"wa_{wa_from}"
@@ -246,7 +265,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                                          f"conversation continue instead of resetting it")
 
                     # Fire delayed response — gives agents BOT_RESPONSE_DELAY seconds to take over
-                    asyncio.create_task(delayed_bot_response(session_id, wa_from, name, text))
+                    asyncio.create_task(delayed_bot_response(session_id, wa_from, name, llm_text))
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
     return Response(content="OK", status_code=200)
