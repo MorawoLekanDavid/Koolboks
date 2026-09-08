@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KoolBot Admin</title>
+<title>Itura Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -706,7 +706,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
     <div class="login-logo">🤖</div>
-    <h2>KoolBot Admin</h2>
+    <h2>Itura Admin</h2>
     <p>Sign in to manage conversations</p>
     <div id="loginFields">
       <input type="email"    id="loginEmail"    placeholder="Email address" autocomplete="email"/>
@@ -788,7 +788,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <aside class="sidebar" id="appSidebar">
     <div class="sb-brand">
       <div class="brand-logo">🤖</div>
-      <span class="sb-brand-name">KoolBot</span>
+      <span class="sb-brand-name">Itura</span>
       <button class="sb-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
     </div>
     <nav class="sb-nav">
@@ -3359,9 +3359,9 @@ async function loadMessages(){
         else label=d.toLocaleDateString([],{day:'numeric',month:'numeric',year:'numeric'});
         parts.push(`<div class="msg-date-sep"><span>${label}</span></div>`);
       }
-      const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot';
+      const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot'&&m.name!=='Itura';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
-      const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 KoolBot');
+      const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 Itura');
       const imgMatch=m.content.match(/^\[image\](.*)\[\/image\]$/);
       const bodyHtml=imgMatch
         ?`<img src="${esc(imgMatch[1])}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
@@ -6317,7 +6317,7 @@ async function openContactDetail(phone){
     if(!hist)return; // drawer closed before fetch resolved
     if(!msgs.length){hist.innerHTML=emptyState('💬','No messages yet','This contact hasn\'t messaged your WhatsApp number.');return;}
     hist.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">${msgs.slice(-30).map(m=>{
-      const who=m.direction==='inbound'?esc(m.name||'Customer'):(m.name&&m.name!=='KoolBot'?`👤 ${esc(m.name)}`:'🤖 KoolBot');
+      const who=m.direction==='inbound'?esc(m.name||'Customer'):(m.name&&m.name!=='KoolBot'&&m.name!=='Itura'?`👤 ${esc(m.name)}`:'🤖 Itura');
       const t=formatTime(m.timestamp);
       return `<div style="background:${m.direction==='inbound'?'var(--g50)':'var(--orange-s)'};border-radius:8px;padding:8px 10px;font-size:12px">
         <div style="font-weight:700;color:var(--g500);font-size:10px;margin-bottom:2px">${who} · ${t}</div>

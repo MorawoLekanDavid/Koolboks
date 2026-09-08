@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import BackgroundTasks
 
-from chatbot.config import BOT_RESPONSE_DELAY, log
+from chatbot.config import BOT_NAME, BOT_RESPONSE_DELAY, log
 from chatbot.core import redis_client
 from chatbot.services.chat_service import ChatRequest, chat_handler
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
@@ -32,7 +32,7 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         try:
             fallback_text = "Sorry, I had trouble processing that — could you try sending your message again?"
             wamid = await send_whatsapp_message(wa_from, fallback_text)
-            save_message_db(session_id, wa_from, "KoolBot", "outbound", fallback_text, wamid=wamid)
+            save_message_db(session_id, wa_from, BOT_NAME, "outbound", fallback_text, wamid=wamid)
         except Exception as e2:
             log.error(f"[delay] fallback message also failed for {session_id}: {e2}")
         return
@@ -47,14 +47,14 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
             first.original_image_url,  # raw S3/CDN URL — WhatsApp fetches directly
             image_caption=_blurb(first),
         )
-        save_message_db(session_id, wa_from, "KoolBot", "outbound", chat_resp.response, wamid=wamid)
+        save_message_db(session_id, wa_from, BOT_NAME, "outbound", chat_resp.response, wamid=wamid)
         # One [image]...[/image] row per product actually sent to WhatsApp —
         # without this, bot-sent pictures were invisible in the admin
         # transcript (only the agent-sent-image path recorded that marker),
         # making it look like the bot never sends pictures at all even
         # though delivery to the customer was working the whole time.
         if first.original_image_url:
-            save_message_db(session_id, wa_from, "KoolBot", "outbound", f"[image]{first.original_image_url}[/image]")
+            save_message_db(session_id, wa_from, BOT_NAME, "outbound", f"[image]{first.original_image_url}[/image]")
 
         # Every recommended product gets its own image + caption, not just the first —
         # a customer comparing several options should see all of them, not just one.
@@ -63,10 +63,10 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
                 wa_from, "", product.original_image_url, image_caption=_blurb(product)
             )
             if product.original_image_url:
-                save_message_db(session_id, wa_from, "KoolBot", "outbound", f"[image]{product.original_image_url}[/image]")
+                save_message_db(session_id, wa_from, BOT_NAME, "outbound", f"[image]{product.original_image_url}[/image]")
     else:
         wamid = await send_whatsapp_message(wa_from, chat_resp.response)
-        save_message_db(session_id, wa_from, "KoolBot", "outbound", chat_resp.response, wamid=wamid)
+        save_message_db(session_id, wa_from, BOT_NAME, "outbound", chat_resp.response, wamid=wamid)
 
     # Run background tasks queued by chat_handler (save_lead, update_lead_address, etc.)
     for task in bg.tasks:

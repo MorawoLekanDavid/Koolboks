@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy import and_, func, select
 
 from chatbot.config import (
+    BOT_NAME,
     REENGAGEMENT_TEMPLATE,
     REENGAGEMENT_TEMPLATE_LANG,
     WHATSAPP_API_TOKEN,
@@ -83,7 +84,7 @@ async def reengagement_worker():
                         )
                     if r.is_success:
                         await redis_client.client.set(f"koolbuy:reengaged:{phone}", "1", ex=7 * 86400)
-                        save_message_db(session_id, phone, "KoolBot", "outbound", f"[Auto re-engagement: {tmpl_name}]")
+                        save_message_db(session_id, phone, BOT_NAME, "outbound", f"[Auto re-engagement: {tmpl_name}]")
                         sent += 1
                         log.info(f"Re-engagement template sent to {phone}")
                     else:

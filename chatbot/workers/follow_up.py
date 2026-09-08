@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 
 from chatbot.config import (
+    BOT_NAME,
     FOLLOW_UP_ENABLED,
     FOLLOW_UP_HOURS,
     FOLLOW_UP_MESSAGE,
@@ -54,7 +55,7 @@ async def run_follow_ups():
             ).scalars().all()
             lines = []
             for m in msgs[-12:]:
-                role = "Customer" if m.direction == "inbound" else "KoolBot"
+                role = "Customer" if m.direction == "inbound" else BOT_NAME
                 lines.append(f"{role}: {m.content[:200]}")
             transcript = "\n".join(lines) or "No prior messages."
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, case, func, select, text
 
+from chatbot.config import BOT_SENDER_NAMES
 from chatbot.database import get_db
 from chatbot.routers.permissions import get_analytics_scope, require_org_wide_analytics, require_tab_permission
 from chatbot.models import Agent, AgentHeartbeatLog, AgentLoginEvent, ConversationScore, Department, HandoffEvent, Lead, Message
@@ -25,7 +26,7 @@ async def conversations_handled(
         try:
             filters = [
                 Message.direction == "outbound",
-                Message.name != "KoolBot",
+                Message.name.notin_(BOT_SENDER_NAMES),
                 Message.name.isnot(None),
                 Message.name != "",
             ]
@@ -566,7 +567,7 @@ async def agent_performance(
 
             # Total conversations per agent — same aggregation /conversations-handled
             # already does, reused in-process rather than re-derived.
-            conv_filters = [Message.direction == "outbound", Message.name != "KoolBot",
+            conv_filters = [Message.direction == "outbound", Message.name.notin_(BOT_SENDER_NAMES),
                              Message.name.isnot(None), Message.name != ""]
             if date_from:
                 conv_filters.append(Message.created_at >= datetime.fromisoformat(date_from))

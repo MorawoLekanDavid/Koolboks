@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
 
+from chatbot.config import BOT_SENDER_NAMES
 from chatbot.database import get_db
 from chatbot.models import ApiUsageLog, Message
 from chatbot.routers.permissions import require_tab_permission
@@ -94,8 +95,8 @@ async def whatsapp_usage(
                 q = q.filter(Message.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
             rows = q.all()
 
-            sent_bot = sum(1 for m in rows if m.direction == "outbound" and m.name == "KoolBot")
-            sent_agent = sum(1 for m in rows if m.direction == "outbound" and m.name != "KoolBot")
+            sent_bot = sum(1 for m in rows if m.direction == "outbound" and m.name in BOT_SENDER_NAMES)
+            sent_agent = sum(1 for m in rows if m.direction == "outbound" and m.name not in BOT_SENDER_NAMES)
             received = sum(1 for m in rows if m.direction == "inbound")
 
             trend_map: dict = {}

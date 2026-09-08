@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, case, exists, func, or_, select
 
 from chatbot.config import (
+    BOT_SENDER_NAMES,
     WHATSAPP_API_TOKEN,
     WHATSAPP_API_URL,
     WHATSAPP_PHONE_NUMBER_ID,
@@ -108,7 +109,7 @@ async def list_conversations(
                         and_(
                             Message.phone.in_(phones),
                             Message.direction == "outbound",
-                            Message.name != "KoolBot",
+                            Message.name.notin_(BOT_SENDER_NAMES),
                             Message.name.isnot(None),
                             Message.name != "",
                         )

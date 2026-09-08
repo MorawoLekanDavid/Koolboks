@@ -539,7 +539,7 @@
         <div class="header">
             <div class="header-logo">❄️</div>
             <div class="header-text">
-                <h3>KoolBot</h3>
+                <h3>Itura</h3>
                 <span><span class="dot"></span>Online · Koolbuy Assistant</span>
             </div>
             <div class="header-actions">
@@ -563,7 +563,7 @@
         </div>
     </div>
 
-    <button id="chat-bubble" onclick="openChat()" title="Chat with KoolBot">💬</button>
+    <button id="chat-bubble" onclick="openChat()" title="Chat with Itura">💬</button>
 
     <script>
         const API = window.location.origin;
@@ -736,15 +736,15 @@
 
         function appendProductCards(products) {
             if (!products || !products.length) {
-                console.log('[KoolBot] No products to display');
+                console.log('[Itura] No products to display');
                 return;
             }
-            console.log('[KoolBot] Rendering product cards:', JSON.stringify(products, null, 2));
+            console.log('[Itura] Rendering product cards:', JSON.stringify(products, null, 2));
             const box = document.getElementById('messages');
             const strip = document.createElement('div');
             strip.className = 'product-strip';
             products.forEach(q => {
-                console.log(`[KoolBot] Card: name=${q.name}, price=${q.price}, image_url=${q.image_url}`);
+                console.log(`[Itura] Card: name=${q.name}, price=${q.price}, image_url=${q.image_url}`);
                 const card = document.createElement('div');
                 card.className = 'product-card';
 
@@ -764,12 +764,12 @@
                     imgEl.loading = 'lazy';
                     // On success — hide the fallback emoji
                     imgEl.onload = function() {
-                        console.log('[KoolBot] Image loaded OK:', q.image_url);
+                        console.log('[Itura] Image loaded OK:', q.image_url);
                         fallback.style.display = 'none';
                     };
                     // On error — hide the broken img, fallback emoji stays visible
                     imgEl.onerror = function() {
-                        console.warn('[KoolBot] Image FAILED to load:', q.image_url);
+                        console.warn('[Itura] Image FAILED to load:', q.image_url);
                         this.classList.add('img-hidden');
                     };
                     

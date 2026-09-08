@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional
 
-from chatbot.config import GROQ_MODEL, log
+from chatbot.config import BOT_SENDER_NAMES, GROQ_MODEL, log
 from chatbot.models import Message
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
@@ -26,9 +26,9 @@ def _responder_type(messages: List[Message]) -> Optional[str]:
     responders = {m.name for m in messages if m.direction == "outbound"}
     if not responders:
         return None
-    if responders == {"KoolBot"}:
+    if responders <= BOT_SENDER_NAMES:
         return "bot"
-    if "KoolBot" not in responders:
+    if not (responders & BOT_SENDER_NAMES):
         return "agent"
     return "mixed"
 
@@ -42,7 +42,7 @@ async def score_conversation(messages: List[Message]) -> Optional[dict]:
     lines = []
     for m in messages:
         role = "Customer" if m.direction == "inbound" else (
-            "Bot" if m.name == "KoolBot" else f"Agent({m.name})"
+            "Bot" if m.name in BOT_SENDER_NAMES else f"Agent({m.name})"
         )
         ts = m.created_at.strftime("%H:%M") if m.created_at else "?"
         lines.append(f"[{ts}] {role}: {(m.content or '')[:300]}")

@@ -5,7 +5,7 @@ from datetime import datetime
 import httpx
 from sqlalchemy import and_
 
-from chatbot.config import GROQ_MODEL, IDLE_THRESHOLD, ZAPIER_WEBHOOK, log
+from chatbot.config import BOT_NAME, GROQ_MODEL, IDLE_THRESHOLD, ZAPIER_WEBHOOK, log
 from chatbot.database import get_db
 from chatbot.models import Lead
 from chatbot.services.groq_service import groq_client
@@ -54,7 +54,7 @@ async def save_lead(user_name: str, phone: str, history: list, session_id: str =
     wa_phone = session_id[3:] if session_id and session_id.startswith("wa_") else None
     lines = []
     for msg in history:
-        role = "Customer" if msg.get("role") == "user" else "KoolBot"
+        role = "Customer" if msg.get("role") == "user" else BOT_NAME
         content = re.sub(r'\[[^\]]*\]', '', msg.get("content", "")).strip()
         if content:
             lines.append(f"{role}: {content}")

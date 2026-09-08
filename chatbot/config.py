@@ -18,6 +18,10 @@ CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
 MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")
 WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
+# The bot's persona name. Renamed from "KoolBot" to "Itura" — BOT_SENDER_NAMES keeps
+# both so analytics/scoring still classify pre-rename messages as bot-sent, not agent-sent.
+BOT_NAME = "Itura"
+BOT_SENDER_NAMES = {"KoolBot", BOT_NAME}
 ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "KoolbotAdmin2026")
 BOT_RESPONSE_DELAY = int(os.environ.get("BOT_RESPONSE_DELAY_SECONDS", "10"))
