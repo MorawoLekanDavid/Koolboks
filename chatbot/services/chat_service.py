@@ -350,6 +350,8 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
                 f"{request.message}\n\n"
                 f"[DELIVERY confirmed: {request.message.strip()}. "
                 f"Address captured successfully. Do not ask for delivery location again. "
+                f"If this message ALSO contains a genuine question — not just the address — "
+                f"answer it briefly first. Don't drop it just because the address was captured. "
                 f"Proceed to closing message.]"
             )
     elif looks_like_phone and not already_captured:
