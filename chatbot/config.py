@@ -57,6 +57,12 @@ RATE_LIMIT = int(os.environ.get("RATE_LIMIT_MESSAGES", "50"))
 
 HANDOFF_AUTO_RESET_HOURS = int(os.environ.get("HANDOFF_AUTO_RESET_HOURS", "8"))
 
+# A "complete" session (phone + delivery both captured) only resets to a fresh
+# conversation once it's been idle this long — otherwise a customer who keeps
+# chatting right after finishing (a question, a clarification, an objection)
+# gets treated as a brand-new lead and loses everything they just gave.
+COMPLETE_SESSION_RESET_HOURS = int(os.environ.get("COMPLETE_SESSION_RESET_HOURS", "24"))
+
 CONVERSATION_SCORING_ENABLED = os.environ.get("CONVERSATION_SCORING_ENABLED", "true").lower() == "true"
 CONVERSATION_SCORE_IDLE_MINUTES = int(os.environ.get("CONVERSATION_SCORE_IDLE_MINUTES", "20"))
 

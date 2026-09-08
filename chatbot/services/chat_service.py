@@ -78,6 +78,15 @@ def inventory_text(products: List[Product]) -> str:
     return "\n".join(lines)
 
 
+def bnpl_breakdown(price: float) -> str:
+    """20% down, zero-interest balance over up to 23 months. Computed here rather than
+    left to the model — a wrong monthly figure quoted to a customer is a real trust
+    problem, and this is simple arithmetic that doesn't belong in free-form generation."""
+    down = round(price * 0.20)
+    monthly = round((price - down) / 23)
+    return f"Payment plan: N{down:,.0f} down (20%), then N{monthly:,.0f}/month for up to 23 months at zero interest."
+
+
 def proxy_image_url(original_url: Optional[str]) -> Optional[str]:
     """Rewrite an S3 image URL to go through our /img-proxy endpoint.
     This avoids CORS / direct-access errors in the browser."""
@@ -372,6 +381,20 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
             log.info(f"PRODUCT CARD → name={c.name} | price={c.price} | image_url={c.image_url}")
     else:
         log.info("NO product cards matched for this response")
+
+    # Attach an accurate payment-plan breakdown whenever a single product is being
+    # priced — computed here instead of trusting the model's mental math, and shown
+    # proactively rather than only after the customer objects to the price. Skipped
+    # for multi-product comparisons (too cluttered) and if the model already wrote
+    # its own breakdown (defensive — the prompt asks it not to, but this avoids a
+    # duplicate/conflicting figure on the rare turn it does anyway).
+    if len(cards) == 1 and "23 months" not in raw:
+        try:
+            price_val = float(cards[0].price)
+            if price_val > 0:
+                raw = f"{raw}\n\n{bnpl_breakdown(price_val)}"
+        except (ValueError, TypeError):
+            pass
 
     clean = re.sub(r'PRODUCTS:\s*.+\n?', '', raw, flags=re.IGNORECASE).strip()
 

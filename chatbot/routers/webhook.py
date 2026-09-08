@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import and_, func, select
 
-from chatbot.config import HANDOFF_AUTO_RESET_HOURS, LEAD_TTL, WHATSAPP_VERIFY_TOKEN, log
+from chatbot.config import COMPLETE_SESSION_RESET_HOURS, HANDOFF_AUTO_RESET_HOURS, LEAD_TTL, WHATSAPP_VERIFY_TOKEN, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import BroadcastRecipient, Message
@@ -204,7 +204,13 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                             continue
 
-                    # Check session state and reset completed sessions
+                    # Check session state and reset completed sessions — but only once
+                    # they've gone idle, not on the very next message. A customer who
+                    # keeps chatting right after finishing (a clarification, a new
+                    # objection, another question) is still mid-conversation, not
+                    # starting a new inquiry — resetting on the immediate next message
+                    # wiped their captured phone/delivery and re-greeted them from
+                    # scratch, which is exactly what this staleness check prevents.
                     if redis_client.client:
                         history_key = f"koolbuy:chat:{session_id}"
                         raw_history = await redis_client.client.get(history_key)
@@ -215,10 +221,29 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                             log.info(f"Session {session_id} complete but '{text}' looks like a filler "
                                      f"acknowledgment — not restarting the script")
                         elif is_complete:
-                            await redis_client.client.delete(history_key)
-                            await redis_client.client.delete(f"koolbuy:phone:{session_id}")
-                            await redis_client.client.delete(f"koolbuy:delivery:{session_id}")
-                            log.info(f"Session {session_id} reset for new conversation")
+                            stale = False
+                            try:
+                                _db = get_db()
+                                last_out = _db.execute(
+                                    select(func.max(Message.created_at))
+                                    .where(and_(Message.phone == wa_from,
+                                                Message.direction == "outbound"))
+                                ).scalar()
+                                _db.close()
+                                if last_out is None or \
+                                   (datetime.utcnow() - last_out).total_seconds() > COMPLETE_SESSION_RESET_HOURS * 3600:
+                                    stale = True
+                            except Exception as _e:
+                                log.warning(f"Complete-session stale-check failed: {_e}")
+                            if stale:
+                                await redis_client.client.delete(history_key)
+                                await redis_client.client.delete(f"koolbuy:phone:{session_id}")
+                                await redis_client.client.delete(f"koolbuy:delivery:{session_id}")
+                                log.info(f"Session {session_id} reset for new conversation "
+                                         f"(idle {COMPLETE_SESSION_RESET_HOURS}h+ since last reply)")
+                            else:
+                                log.info(f"Session {session_id} complete but recent — letting the "
+                                         f"conversation continue instead of resetting it")
 
                     # Fire delayed response — gives agents BOT_RESPONSE_DELAY seconds to take over
                     asyncio.create_task(delayed_bot_response(session_id, wa_from, name, text))
