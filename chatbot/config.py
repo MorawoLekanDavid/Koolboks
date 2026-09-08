@@ -18,9 +18,13 @@ CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
 MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")
 WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
-# The bot's persona name. Renamed from "KoolBot" to "Itura" — BOT_SENDER_NAMES keeps
-# both so analytics/scoring still classify pre-rename messages as bot-sent, not agent-sent.
-BOT_NAME = "Itura"
+# The bot's persona name — single source of truth, also usable as a {bot_name}
+# placeholder in system_prompt.txt / the live AI instruction. Change this one value
+# (or the BOT_NAME env var) and every prompt, saved message, and admin display picks
+# it up. BOT_SENDER_NAMES keeps prior names too, so analytics/scoring still classify
+# messages sent under an old name as bot-sent, not agent-sent — extend that set (not
+# this line) if the name changes again, so old messages keep classifying correctly.
+BOT_NAME = os.environ.get("BOT_NAME", "Itura")
 BOT_SENDER_NAMES = {"KoolBot", BOT_NAME}
 ZAPIER_WEBHOOK = os.environ.get("ZAPIER_WEBHOOK", "")
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "KoolbotAdmin2026")

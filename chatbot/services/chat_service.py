@@ -6,6 +6,7 @@ from fastapi import BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from chatbot.config import (
+    BOT_NAME,
     LEAD_TTL,
     RATE_LIMIT,
     WHATSAPP_CONTACT,
@@ -178,7 +179,8 @@ def auto_detect_products(products: List[Product], raw_text: str, product_hint: s
 
 async def build_system_prompt(user_name: str, inv: str) -> dict:
     instruction, kb = await get_live_content()
-    content = instruction.replace("{user_name}", user_name).replace("{knowledge_base}", kb).replace("{inventory}", inv)
+    content = (instruction.replace("{bot_name}", BOT_NAME).replace("{user_name}", user_name)
+               .replace("{knowledge_base}", kb).replace("{inventory}", inv))
     return {"role": "system", "content": content}
 
 

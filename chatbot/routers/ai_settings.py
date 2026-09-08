@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
-from chatbot.config import GROQ_MODEL, log
+from chatbot.config import BOT_NAME, GROQ_MODEL, log
 from chatbot.database import get_db
 from chatbot.dependencies import require_super_admin
 from chatbot.models import AIInstruction, KBDocument
@@ -343,7 +343,8 @@ async def test_chat(body: TestChatMessage, ctx: dict = Depends(require_tab_permi
         raise HTTPException(400, "Message cannot be empty")
 
     instruction, kb = await get_draft_content()
-    system_content = instruction.replace("{knowledge_base}", kb).replace("{user_name}", "Tester").replace("{inventory}", "")
+    system_content = (instruction.replace("{bot_name}", BOT_NAME).replace("{knowledge_base}", kb)
+                       .replace("{user_name}", "Tester").replace("{inventory}", ""))
 
     messages = [{"role": "system", "content": system_content}]
     for m in (body.history or [])[-10:]:
