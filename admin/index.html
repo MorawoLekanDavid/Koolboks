@@ -1726,7 +1726,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
             <div>
               <h3 style="margin:0">Knowledge Base</h3>
-              <p style="font-size:12px;color:var(--g400);margin:4px 0 0">Upload documents. The bot uses all <em>Live</em> documents combined.</p>
+              <p style="font-size:12px;color:var(--g400);margin:4px 0 0">Upload documents or pull pages in from your website. The bot picks whichever <em>Live</em> documents are actually relevant to each message, not all of them every time.</p>
             </div>
             <label class="btn-primary" style="cursor:pointer;padding:7px 16px;font-size:13px">
               + Upload File
@@ -1734,6 +1734,15 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             </label>
           </div>
           <p style="font-size:11px;color:var(--g400);margin:-8px 0 14px">Supported: .txt .md .pdf .docx .xlsx — max 10 MB each</p>
+
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;padding:12px;background:var(--g50);border-radius:10px">
+            <input id="kbUrlInput" placeholder="https://koolbuystore.com/faq" type="url"
+              style="flex:1;min-width:220px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--surface);color:var(--text)"
+              onkeydown="if(event.key==='Enter')ingestKBUrl()"/>
+            <button onclick="ingestKBUrl()" id="kbIngestBtn" class="btn-cancel" style="padding:7px 14px;font-size:13px;flex-shrink:0">+ Add Page</button>
+            <button onclick="crawlKBSite()" id="kbCrawlBtn" class="btn-cancel" style="padding:7px 14px;font-size:13px;flex-shrink:0" title="Follows links on the same site, up to 20 pages">+ Crawl Site</button>
+          </div>
+          <p id="kbUrlStatus" style="font-size:12px;margin:0 0 14px;min-height:16px"></p>
 
           <div id="kbLiveSection">
             <div class="kb-section-lbl">✅ Live</div>
@@ -4725,6 +4734,53 @@ async function uploadKBDoc(input){
     if(!r.ok){alert(data.detail||'Upload failed');return;}
     await loadKBDocs();
   }catch(e){console.error(e);alert('Upload error');}
+}
+
+function _setKBUrlStatus(msg,color){
+  const el=document.getElementById('kbUrlStatus');
+  el.style.color=color;el.textContent=msg;
+}
+
+async function ingestKBUrl(){
+  const url=document.getElementById('kbUrlInput').value.trim();
+  if(!url)return;
+  const btn=document.getElementById('kbIngestBtn');
+  btn.disabled=true;_setKBUrlStatus('Fetching page…','var(--g400)');
+  try{
+    const r=await fetch(`/admin/ai-settings/kb/ingest-url?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}),
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Failed to fetch that page');
+    _setKBUrlStatus(`Added as draft: ${d.name} — review below, then Go Live to publish.`,'#16a34a');
+    document.getElementById('kbUrlInput').value='';
+    await loadKBDocs();
+  }catch(e){
+    _setKBUrlStatus(e.message,'#dc2626');
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+async function crawlKBSite(){
+  const url=document.getElementById('kbUrlInput').value.trim();
+  if(!url)return;
+  const btn=document.getElementById('kbCrawlBtn');
+  btn.disabled=true;_setKBUrlStatus('Crawling the site — this can take a minute…','var(--g400)');
+  try{
+    const r=await fetch(`/admin/ai-settings/kb/crawl-site?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,max_pages:20}),
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Crawl failed');
+    _setKBUrlStatus(`Added ${d.pages_ingested} page(s) as drafts — review below, then Go Live to publish.`,'#16a34a');
+    document.getElementById('kbUrlInput').value='';
+    await loadKBDocs();
+  }catch(e){
+    _setKBUrlStatus(e.message,'#dc2626');
+  }finally{
+    btn.disabled=false;
+  }
 }
 
 async function trashKBDoc(id){

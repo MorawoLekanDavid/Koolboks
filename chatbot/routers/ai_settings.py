@@ -12,6 +12,7 @@ from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.ai_settings_service import get_draft_content, invalidate_cache
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
+from chatbot.services.website_ingest import crawl_site, ingest_url
 from chatbot.utils.file_parser import extract_text
 
 router = APIRouter(prefix="/admin/ai-settings", tags=["ai-settings"])
@@ -211,6 +212,46 @@ async def upload_kb_document(
         db.close()
 
 
+class IngestUrlRequest(BaseModel):
+    url: str
+
+
+@router.post("/kb/ingest-url")
+async def ingest_kb_url(body: IngestUrlRequest, ctx: dict = Depends(require_tab_permission("aiSettings"))):
+    """Pull one page's content in as a draft KB document — same review flow as
+    a manual upload, just sourced from a URL instead of a file."""
+    url = body.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "Please provide a full URL starting with http:// or https://")
+    try:
+        doc = await ingest_url(url, created_by=ctx.get("name") or ctx.get("email", "admin"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await invalidate_cache()
+    return _fmt_doc(doc)
+
+
+class CrawlSiteRequest(BaseModel):
+    url: str
+    max_pages: int = 20
+
+
+@router.post("/kb/crawl-site")
+async def crawl_kb_site(body: CrawlSiteRequest, ctx: dict = Depends(require_tab_permission("aiSettings"))):
+    """Follow same-domain links from `url` and ingest each page as a draft KB
+    document — for pulling in a whole site section without pasting every URL
+    by hand. Capped at 50 pages regardless of what's requested."""
+    url = body.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "Please provide a full URL starting with http:// or https://")
+    max_pages = max(1, min(body.max_pages, 50))
+    results = await crawl_site(url, max_pages=max_pages, created_by=ctx.get("name") or ctx.get("email", "admin"))
+    if not results:
+        raise HTTPException(400, "Couldn't extract any pages from that site")
+    await invalidate_cache()
+    return {"pages_ingested": len(results), "pages": results}
+
+
 @router.get("/kb/{doc_id}")
 async def get_kb_document(doc_id: int, ctx: dict = Depends(require_tab_permission("aiSettings"))):
     db = get_db()
@@ -342,7 +383,7 @@ async def test_chat(body: TestChatMessage, ctx: dict = Depends(require_tab_permi
     if not body.message.strip():
         raise HTTPException(400, "Message cannot be empty")
 
-    instruction, kb = await get_draft_content()
+    instruction, kb = await get_draft_content(body.message)
     system_content = (instruction.replace("{bot_name}", BOT_NAME).replace("{knowledge_base}", kb)
                        .replace("{user_name}", "Tester").replace("{inventory}", ""))
 

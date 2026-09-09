@@ -186,8 +186,8 @@ def auto_detect_products(products: List[Product], raw_text: str, product_hint: s
     return []
 
 
-async def build_system_prompt(user_name: str, inv: str) -> dict:
-    instruction, kb = await get_live_content()
+async def build_system_prompt(user_name: str, inv: str, query_text: str = "") -> dict:
+    instruction, kb = await get_live_content(query_text)
     content = (instruction.replace("{bot_name}", BOT_NAME).replace("{user_name}", user_name)
                .replace("{knowledge_base}", kb).replace("{inventory}", inv))
     return {"role": "system", "content": content}
@@ -214,10 +214,11 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
 
     df = load_products()
     inv = inventory_text(df)
-    system = await build_system_prompt(request.user_name, inv)
+    is_welcome_sentinel = request.message.strip() == "__welcome__"
+    system = await build_system_prompt(request.user_name, inv, "" if is_welcome_sentinel else request.message)
 
     # Welcome
-    if request.message.strip() == "__welcome__":
+    if is_welcome_sentinel:
         history = await redis_client.get_history(request.session_id)
         if not history:
             welcome_prompt = (
