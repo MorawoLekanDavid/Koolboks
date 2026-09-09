@@ -25,6 +25,60 @@ async def mark_whatsapp_read(message_id: str):
         log.warning(f"Failed to mark message as read: {e}")
 
 
+async def fetch_whatsapp_media(media_id: str) -> Optional[tuple]:
+    """Resolve a WhatsApp media ID to its actual bytes. Meta never hands out a
+    stable, browsable URL for inbound media — only an ID that resolves to a
+    short-lived, auth-required download link — so this always does a live
+    two-step fetch (resolve the link, then download it) rather than caching a
+    URL that would go stale within minutes. Returns (content_type, bytes) or
+    None on any failure — callers decide how to degrade."""
+    if not WHATSAPP_API_TOKEN:
+        return None
+    headers = {"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+    try:
+        async with httpx.AsyncClient(timeout=15.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            meta_resp = await client.get(f"{WHATSAPP_API_URL}/{media_id}", headers=headers)
+            if meta_resp.status_code != 200:
+                log.warning(f"WhatsApp media lookup failed for {media_id}: {meta_resp.status_code}")
+                return None
+            media_url = meta_resp.json().get("url")
+            if not media_url:
+                return None
+            file_resp = await client.get(media_url, headers=headers)
+            if file_resp.status_code != 200:
+                log.warning(f"WhatsApp media download failed for {media_id}: {file_resp.status_code}")
+                return None
+            return file_resp.headers.get("content-type", "application/octet-stream"), file_resp.content
+    except Exception as e:
+        log.warning(f"WhatsApp media fetch error for {media_id}: {e}")
+        return None
+
+
+async def transcribe_whatsapp_audio(media_id: str) -> Optional[str]:
+    """Download a voice note / audio message and transcribe it via Groq's
+    Whisper. This is genuine understanding, not an acknowledgment — the
+    transcript is fed into the bot's normal reasoning exactly like typed
+    text, so it can actually respond to what was said."""
+    from chatbot.services.groq_service import groq_client  # deferred: avoids a
+    # module-load-order cycle, since groq_service doesn't need anything here
+
+    fetched = await fetch_whatsapp_media(media_id)
+    if not fetched:
+        return None
+    content_type, audio_bytes = fetched
+    ext = "ogg" if "ogg" in content_type else "mp4" if "mp4" in content_type else "mp3" if "mpeg" in content_type else "bin"
+    try:
+        transcription = await groq_client.audio.transcriptions.create(
+            file=(f"voice.{ext}", audio_bytes, content_type),
+            model="whisper-large-v3-turbo",
+        )
+        text = (transcription.text or "").strip()
+        return text or None
+    except Exception as e:
+        log.warning(f"Whisper transcription failed for {media_id}: {e}")
+        return None
+
+
 async def send_whatsapp_message(
     to: str, body: str, image_url: str = None, image_caption: str = None
 ) -> Optional[str]:

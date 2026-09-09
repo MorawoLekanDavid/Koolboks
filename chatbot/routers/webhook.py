@@ -1,6 +1,8 @@
 import asyncio
+import json
 import re
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -128,32 +130,64 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 messages = value.get("messages", [])
                 for msg in messages:
                     msg_type = msg.get("type")
+                    escalate = False       # image/video/document: needs a human, not text-describable
+                    audio_media_id = None  # audio: resolved to a real transcript later, not acknowledged blind
+                    caption = ""
+
                     if msg_type == "text":
                         text = msg["text"]["body"]
                         llm_text = text
                     elif msg_type in ("image", "video", "document", "audio", "sticker"):
                         # Previously silently skipped — no reply, no acknowledgment, no
-                        # record at all. `text` stays a short, clean marker for the DB
-                        # and logs; `llm_text` is what the bot actually responds to, so
-                        # customers who send media at least get engaged instead of
-                        # silence. Images additionally get a real, viewable marker (see
-                        # media_id handling below) so agents can actually see them in
-                        # the admin transcript — the bot itself still can't "see" it,
-                        # that's a separate feature.
+                        # record at all. `text` is the real marker saved to the DB (the
+                        # admin transcript already renders [image]/[video]/[audio]/
+                        # [document] tags); `llm_text` drives what the bot actually does.
                         media = msg.get(msg_type) or {}
                         caption = (media.get("caption") or "").strip()
                         media_id = media.get("id")
+                        filename = media.get("filename")  # documents only
                         article = "an" if msg_type in ("image", "audio") else "a"
-                        if msg_type == "image" and media_id:
+
+                        if media_id and msg_type in ("image", "sticker"):
                             text = f"[image]/admin/media-proxy/{media_id}[/image]"
+                        elif media_id and msg_type == "video":
+                            text = f"[video]/admin/media-proxy/{media_id}[/video]"
+                        elif media_id and msg_type == "audio":
+                            text = f"[audio]/admin/media-proxy/{media_id}[/audio]"
+                        elif media_id and msg_type == "document":
+                            label = filename or "document"
+                            url = f"/admin/media-proxy/{media_id}" + (f"?filename={quote(filename)}" if filename else "")
+                            text = f"[document]{url}|{label}[/document]"
                         else:
-                            text = f"[Customer sent {article} {msg_type}]" + (f' — caption: "{caption}"' if caption else "")
-                        llm_text = (
-                            f"[Customer sent {article} {msg_type}"
-                            + (f' with caption "{caption}"' if caption else "")
-                            + f". You cannot view {msg_type}s yet — acknowledge that warmly "
-                            f"in one clause and continue the conversation naturally.]"
-                        )
+                            text = f"[Customer sent {article} {msg_type}]"
+
+                        # What the bot actually does differs by type:
+                        # - audio: genuinely transcribed (Whisper) and treated like typed
+                        #   text once resolved — see delayed_bot_response
+                        # - image / video / document: real content the bot can't see and
+                        #   that often needs a human call (a product photo, a receipt, a
+                        #   spec sheet) — escalate to an agent rather than pretend it's
+                        #   fine, or ask the customer to "describe it in words," which
+                        #   just reads as broken
+                        # - sticker: low-stakes chit-chat, not worth pulling in a human
+                        #   for — acknowledge briefly and keep going (READ THE ROOM)
+                        if msg_type == "audio":
+                            audio_media_id = media_id
+                            llm_text = None  # filled in with the transcript once resolved
+                        elif msg_type in ("image", "video", "document"):
+                            escalate = True
+                            llm_text = (
+                                f"[Customer sent {article} {msg_type}"
+                                + (f' with caption "{caption}"' if caption else "")
+                                + f". You cannot view {msg_type}s. Let them know warmly, in "
+                                f"one short clause, that you're looping in a teammate to "
+                                f"take a look and follow up shortly — do NOT say you "
+                                f"personally can't view it, just frame it as bringing in a "
+                                f"specialist. Do not ask any further questions this turn.]"
+                            )
+                        else:  # sticker
+                            llm_text = ("[Customer sent a sticker. Acknowledge briefly and "
+                                        "warmly, then continue the conversation naturally.]")
                     else:
                         continue  # location, contacts, reactions, interactive replies, etc. — out of scope for now
                     wa_from = normalize_phone(msg["from"])
@@ -169,10 +203,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                     # Save inbound message to DB
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text)
-                    # An image's caption gets its own row, same convention already used
-                    # for outbound product sends — [image]...[/image] stays a pure image
-                    # marker, caption text is a separate readable line in the transcript.
-                    if msg_type == "image" and caption:
+                    # A caption gets its own row, same convention already used for
+                    # outbound product sends — the media marker stays a pure media tag,
+                    # caption text is a separate readable line in the transcript.
+                    if msg_type in ("image", "video", "document") and caption:
                         background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", caption)
 
                     # Round-robin a brand-new conversation to an agent — no-ops
@@ -286,6 +320,15 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     # production. `my_seq` is minted here (not inside the delayed task)
                     # so its value reflects the exact moment this message was scheduled,
                     # not whatever the counter happens to read once the task finally runs.
+                    # Each buffer entry carries its own escalate/audio flag (not just
+                    # text) so a burst mixing message types — a photo then a follow-up
+                    # question, say — still escalates and still answers, whichever
+                    # task ends up combining and replying to the whole thing.
+                    pending_entry = json.dumps({
+                        "text": llm_text,
+                        "escalate": escalate,
+                        "audio_media_id": audio_media_id,
+                    })
                     my_seq = None
                     if redis_client.client:
                         try:
@@ -293,14 +336,22 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                             msgs_key = f"koolbuy:pending_msgs:{session_id}"
                             my_seq = str(await redis_client.client.incr(seq_key))
                             await redis_client.client.expire(seq_key, 300)
-                            await redis_client.client.rpush(msgs_key, llm_text)
+                            await redis_client.client.rpush(msgs_key, pending_entry)
                             await redis_client.client.expire(msgs_key, 300)
                         except Exception as _e:
                             log.warning(f"Debounce buffer write failed for {session_id}: {_e}")
                             my_seq = None
 
-                    # Fire delayed response — gives agents BOT_RESPONSE_DELAY seconds to take over
-                    asyncio.create_task(delayed_bot_response(session_id, wa_from, name, llm_text, my_seq))
+                    # Fire delayed response — gives agents BOT_RESPONSE_DELAY seconds to take over.
+                    # The `or` fallback only matters if Redis is unavailable (my_seq stays
+                    # None): audio's llm_text is None until resolved via the pending buffer,
+                    # which needs Redis — without it there's no combining, so this is what
+                    # the reply falls back to instead of crashing on a None message.
+                    asyncio.create_task(delayed_bot_response(
+                        session_id, wa_from, name,
+                        llm_text or "[Customer sent a voice note. Acknowledge warmly and ask them to type their message.]",
+                        my_seq,
+                    ))
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
     return Response(content="OK", status_code=200)

@@ -2115,6 +2115,12 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   </div>
 </div>
 
+<!-- Image lightbox — click any chat image to enlarge -->
+<div class="modal-overlay hidden" id="lightboxOverlay" onclick="if(event.target===this)closeLightbox()" style="background:rgba(0,0,0,.85)">
+  <img id="lightboxImg" src="" style="max-width:92vw;max-height:92vh;border-radius:8px;display:block;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+  <button onclick="closeLightbox()" title="Close" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;line-height:1">✕</button>
+</div>
+
 <!-- Product modal -->
 <div class="modal-overlay hidden" id="cannedModal">
   <div class="modal">
@@ -3362,10 +3368,7 @@ async function loadMessages(){
       const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot'&&m.name!=='Itura';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 Itura');
-      const imgMatch=m.content.match(/^\[image\](.*)\[\/image\]$/);
-      const bodyHtml=imgMatch
-        ?`<img src="${esc(mediaSrc(imgMatch[1]))}" style="max-width:200px;max-height:200px;border-radius:8px;display:block" onerror="this.style.display='none'">`
-        :esc(m.content);
+      const bodyHtml=renderMediaBody(m.content);
       const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
       let statusHtml='';
       if(m.direction==='outbound'&&m.delivery_status){
@@ -6321,7 +6324,7 @@ async function openContactDetail(phone){
       const t=formatTime(m.timestamp);
       return `<div style="background:${m.direction==='inbound'?'var(--g50)':'var(--orange-s)'};border-radius:8px;padding:8px 10px;font-size:12px">
         <div style="font-weight:700;color:var(--g500);font-size:10px;margin-bottom:2px">${who} · ${t}</div>
-        <div style="color:var(--g700)">${esc(m.content.length>200?m.content.slice(0,200)+'…':m.content)}</div>
+        <div style="color:var(--g700)">${esc(mediaLabel(m.content))}</div>
       </div>`;
     }).join('')}</div>`;
   }catch(e){
@@ -7162,6 +7165,43 @@ function mediaSrc(url){
   if(url && url.startsWith('/admin/media-proxy/'))return `${url}${url.includes('?')?'&':'?'}key=${encodeURIComponent(adminKey)}`;
   return url;
 }
+// Renders a message's content as its real media type — image/video/audio
+// player or a document download link — falling back to plain escaped text
+// for everything else. One shared renderer so the chat view and any future
+// transcript surface stay consistent instead of each re-implementing this.
+function renderMediaBody(content){
+  let m;
+  if(m=content.match(/^\[image\](.*)\[\/image\]$/))
+    return `<img src="${esc(mediaSrc(m[1]))}" style="max-width:200px;max-height:200px;border-radius:8px;display:block;cursor:zoom-in" onerror="this.style.display='none'" onclick="openLightbox(this.src)">`;
+  if(m=content.match(/^\[video\](.*)\[\/video\]$/))
+    return `<video src="${esc(mediaSrc(m[1]))}" controls style="max-width:260px;max-height:260px;border-radius:8px;display:block"></video>`;
+  if(m=content.match(/^\[audio\](.*)\[\/audio\]$/))
+    return `<audio src="${esc(mediaSrc(m[1]))}" controls style="max-width:240px"></audio>`;
+  if(m=content.match(/^\[document\](.*)\|(.*)\[\/document\]$/))
+    return `<a href="${esc(mediaSrc(m[1]))}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:var(--orange);text-decoration:none;font-size:13px;font-weight:600">📄 ${esc(m[2])}</a>`;
+  return esc(content);
+}
+// Short, human labels for the compact contact-history preview drawer, which
+// shows truncated plain text only — a raw [video]/admin/media-proxy/...
+// marker would just look broken there, so this swaps in a plain label instead.
+function mediaLabel(content){
+  if(/^\[image\]/.test(content))return '📷 Image';
+  if(/^\[video\]/.test(content))return '🎥 Video';
+  if(/^\[audio\]/.test(content))return '🎤 Voice note';
+  if(/^\[document\]/.test(content))return '📄 Document';
+  return content.length>200?content.slice(0,200)+'…':content;
+}
+function openLightbox(src){
+  document.getElementById('lightboxImg').src=src;
+  document.getElementById('lightboxOverlay').classList.remove('hidden');
+}
+function closeLightbox(){
+  document.getElementById('lightboxOverlay').classList.add('hidden');
+  document.getElementById('lightboxImg').src='';
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!document.getElementById('lightboxOverlay').classList.contains('hidden'))closeLightbox();
+});
 function emptyState(icon,title,sub,actionHtml){
   return `<div class="ui-empty"><div class="ui-empty-icon">${icon}</div><div class="ui-empty-title">${esc(title)}</div>${sub?`<div class="ui-empty-sub">${esc(sub)}</div>`:''}${actionHtml||''}</div>`;
 }

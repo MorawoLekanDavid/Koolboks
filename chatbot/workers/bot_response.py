@@ -1,11 +1,61 @@
 import asyncio
+import json
 
 from fastapi import BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
 
 from chatbot.config import BOT_NAME, BOT_RESPONSE_DELAY, log
 from chatbot.core import redis_client
+from chatbot.database import get_db
+from chatbot.models import HandoffEvent
 from chatbot.services.chat_service import ChatRequest, chat_handler
-from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
+from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message, transcribe_whatsapp_audio
+
+# Matches the 24h TTL an agent-initiated takeover already uses
+# (conversations.py's toggle_handoff) — same mechanism, different trigger.
+MEDIA_HANDOFF_TTL = 86400
+MEDIA_HANDOFF_LABEL = "Awaiting agent (media)"
+
+
+def _parse_pending_entry(raw: str) -> dict:
+    """Pending-buffer entries are JSON ({"text", "escalate", "audio_media_id"}).
+    Falls back to treating `raw` as plain text for entries written by an older
+    version of this code — buffers can briefly outlive a deploy."""
+    try:
+        entry = json.loads(raw)
+        if isinstance(entry, dict):
+            return entry
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return {"text": raw, "escalate": False, "audio_media_id": None}
+
+
+async def _set_media_handoff(session_id: str, wa_from: str):
+    """Hand a conversation to a human because the customer sent something the
+    bot can't meaningfully respond to (an image, video, or document) — reuses
+    the exact mechanism a manual agent takeover uses, just system-triggered,
+    so it shows up the same way in the admin dashboard and auto-resets the
+    same way (HANDOFF_AUTO_RESET_HOURS) if nobody picks it up."""
+    if redis_client.client:
+        try:
+            await redis_client.client.set(
+                f"koolbuy:handoff:{session_id}", MEDIA_HANDOFF_LABEL, ex=MEDIA_HANDOFF_TTL
+            )
+        except Exception as e:
+            log.warning(f"[delay] failed to set media handoff for {session_id}: {e}")
+
+    def _log():
+        db = get_db()
+        try:
+            db.add(HandoffEvent(phone=wa_from, agent_name=MEDIA_HANDOFF_LABEL, event_type="takeover"))
+            db.commit()
+        except Exception as e:
+            log.warning(f"[delay] failed to log media handoff event for {wa_from}: {e}")
+        finally:
+            db.close()
+
+    await run_in_threadpool(_log)
+    log.info(f"[delay] {session_id} escalated to a human agent (unviewable media)")
 
 
 async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str, my_seq: str = None):
@@ -31,7 +81,7 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         except Exception as e:
             log.warning(f"[delay] pending-seq check failed for {session_id}: {e}")
 
-    # Re-check handoff — agent may have taken over during the delay
+    # Re-check handoff — agent (or a prior media escalation) may have taken over during the delay
     handoff_key = f"koolbuy:handoff:{session_id}"
     in_handoff = await redis_client.client.get(handoff_key) if redis_client.client else None
     if in_handoff:
@@ -41,12 +91,36 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     # We're the winning task — fold every message received during this burst
     # (this one included) into a single combined turn instead of replying to
     # just the last one and silently dropping earlier ones from the same burst.
+    # Audio entries get resolved to a real transcript right here — exactly once,
+    # by whichever task actually ends up replying, so a voice note that gets
+    # superseded before anyone replies to it never costs a wasted transcription call.
+    escalate = False
     if redis_client.client and my_seq is not None:
         try:
             msgs_key = f"koolbuy:pending_msgs:{session_id}"
             pending = await redis_client.client.lrange(msgs_key, 0, -1)
             if pending:
-                text = "\n".join(pending)
+                parts = []
+                for raw in pending:
+                    entry = _parse_pending_entry(raw)
+                    if entry.get("escalate"):
+                        escalate = True
+                    audio_id = entry.get("audio_media_id")
+                    if audio_id:
+                        transcript = await transcribe_whatsapp_audio(audio_id)
+                        if transcript:
+                            parts.append(f'[Voice note transcript: "{transcript}"]')
+                            # Its own row so an agent can read what was said without
+                            # having to press play — same convention as image captions.
+                            save_message_db(session_id, wa_from, name, "inbound", f'🎤 "{transcript}"')
+                        else:
+                            parts.append("[Customer sent a voice note that couldn't be "
+                                          "transcribed. Acknowledge warmly and ask them to "
+                                          "type their message instead.]")
+                    elif entry.get("text"):
+                        parts.append(entry["text"])
+                if parts:
+                    text = "\n".join(parts)
             await redis_client.client.delete(msgs_key)
         except Exception as e:
             log.warning(f"[delay] pending-msgs read failed for {session_id}: {e}")
@@ -66,6 +140,8 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
             save_message_db(session_id, wa_from, BOT_NAME, "outbound", fallback_text, wamid=wamid)
         except Exception as e2:
             log.error(f"[delay] fallback message also failed for {session_id}: {e2}")
+        if escalate:
+            await _set_media_handoff(session_id, wa_from)
         return
 
     def _blurb(p):
@@ -108,3 +184,8 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
                 task.func(*task.args, **task.kwargs)
         except Exception as e:
             log.warning(f"[delay] bg task {task.func.__name__} failed: {e}")
+
+    # The reply just sent was the escalation announcement — hand off to a human
+    # now, after it's out, so this doesn't silence the announcement itself.
+    if escalate:
+        await _set_media_handoff(session_id, wa_from)
