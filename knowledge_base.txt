@@ -42,6 +42,16 @@ System can also be connected to NEPA or a generator as an additional charging so
 - AC Inverter Freezer: works on AC power with inverter compatibility.
 - Pedestal Bundle: freezer + pedestal battery + solar panels.
 
+## CHILLERS (different from a chest freezer -- do not describe them as the same thing)
+A chiller is an upright, glass-front display/beverage cooler -- keeps drinks and items cool
+(above freezing) for display and quick access. A chest freezer is a top-opening unit that
+freezes food solid below 0°C. They're different appliance categories, not variants of each
+other. Chillers on the platform come from other vendor brands (Aeon, Nexus, Bruhm, etc.),
+separate from the core Koolboks solar freezer range this chatbot's product list focuses on.
+If a customer specifically wants a chiller: confirm we carry them from other vendors, but say
+you'll connect them with the team for current options/pricing rather than quoting specifics
+you don't have on hand.
+
 ## POWERFOOT (Pedestal Battery)
 Converts ANY brand freezer to solar. Fits 200L-600L freezers.
 Houses the battery and elevates the freezer — improves airflow, reduces moisture exposure.
