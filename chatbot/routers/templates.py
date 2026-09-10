@@ -180,13 +180,7 @@ async def send_template_to_phone(
                 existing_owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
                 if not existing_owner:
                     db.add(ConversationOwner(phone=norm, owner_name=agent_name, owner_email=agent_email))
-                # Starting a conversation with a brand-new number is how agents
-                # add a contact from the conversation tray — same effect as the
-                # Contacts tab's "+ Add Contact", so it needs to land in the
-                # same leads table, not just create a ConversationOwner/Message.
-                existing_lead = db.query(Lead).filter(Lead.phone == norm).first()
-                if not existing_lead:
-                    db.add(Lead(phone=norm, source="manual", status="new", created_by=agent_name))
+                _add_lead_if_missing(db, norm, agent_name)
                 db.commit()
             finally:
                 db.close()
@@ -212,6 +206,27 @@ class BulkBroadcastRequest(BaseModel):
     # Common
     template_name: str
     language: str = "en"
+
+
+def _add_lead_if_missing(db, phone: str, agent_name: str):
+    """An agent messaging a brand-new number — via the conversation tray's
+    single send-template or a bulk broadcast recipient — has the same effect
+    as the Contacts tab's + Add Contact, so it needs to land in the leads
+    table too, not just create a ConversationOwner/Message/BroadcastRecipient.
+    Matches list_contacts()'s Lead.source.in_(["manual","import"]) filter."""
+    if not db.query(Lead).filter(Lead.phone == phone).first():
+        db.add(Lead(phone=phone, source="manual", status="new", created_by=agent_name))
+
+
+def _save_contact_if_new(phone: str, agent_name: str):
+    db = get_db()
+    try:
+        _add_lead_if_missing(db, phone, agent_name)
+        db.commit()
+    except Exception as e:
+        log.warning(f"Failed to save contact for {phone}: {e}")
+    finally:
+        db.close()
 
 
 def _save_broadcast_recipient(campaign_id: int, phone: str, wamid: str | None, status: str):
@@ -285,6 +300,7 @@ async def _run_bulk_broadcast(job_id: str,
                         f"[Template: {template_name}]" + (f" — {', '.join(variables)}" if variables else ""),
                         wamid=wamid,
                     )
+                    _save_contact_if_new(norm, agent_name)
                 else:
                     _save_broadcast_recipient(campaign_id, norm, None, "failed")
                     failed.append({"phone": raw_phone, "error": r.text[:120]})
