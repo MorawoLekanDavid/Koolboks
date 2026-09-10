@@ -26,7 +26,8 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://koolbuy:koolbuy_secure_password_2026@localhost:5432/koolbuy")
 
 FIRST_MESSAGE_SQL = text("""
-    SELECT fm.phone, fm.name, fm.created_at
+    SELECT fm.phone, fm.name, fm.created_at,
+           EXISTS(SELECT 1 FROM messages m WHERE m.phone = fm.phone AND m.direction = 'inbound') AS responded
     FROM (
         SELECT DISTINCT ON (phone) phone, direction, content, name, created_at
         FROM messages
@@ -47,16 +48,18 @@ def run():
     try:
         rows = session.execute(FIRST_MESSAGE_SQL).fetchall()
         created = 0
-        for phone, agent_name, created_at in rows:
+        for phone, agent_name, created_at, responded in rows:
             session.add(Lead(
                 phone=phone,
                 source="manual",
                 status="new",
                 created_by=agent_name or "Agent",
+                assigned_to=agent_name or None,  # the agent who started it owns it
+                outreach_stage="responded" if responded else "contacted",
                 created_at=created_at,  # preserve the real start date, not "now"
             ))
             created += 1
-            print(f"  [contact] {phone} | started by {agent_name or 'Agent'} | {created_at}")
+            print(f"  [contact] {phone} | started by {agent_name or 'Agent'} | {created_at} | {'responded' if responded else 'contacted'}")
 
         session.commit()
         print(f"\nDone. {created} contact(s) backfilled into leads.")

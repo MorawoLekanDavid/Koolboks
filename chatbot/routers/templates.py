@@ -213,9 +213,17 @@ def _add_lead_if_missing(db, phone: str, agent_name: str):
     single send-template or a bulk broadcast recipient — has the same effect
     as the Contacts tab's + Add Contact, so it needs to land in the leads
     table too, not just create a ConversationOwner/Message/BroadcastRecipient.
-    Matches list_contacts()'s Lead.source.in_(["manual","import"]) filter."""
+    Matches list_contacts()'s Lead.source.in_(["manual","import"]) filter.
+    The agent who sent it becomes the contact's owner (not just created_by,
+    which is audit metadata), and the stage starts at "contacted" since a
+    template has, by definition, already gone out — save_message_db()
+    advances it to "responded" the moment an inbound reply comes in."""
     if not db.query(Lead).filter(Lead.phone == phone).first():
-        db.add(Lead(phone=phone, source="manual", status="new", created_by=agent_name))
+        db.add(Lead(
+            phone=phone, source="manual", status="new",
+            created_by=agent_name, assigned_to=agent_name,
+            outreach_stage="contacted",
+        ))
 
 
 def _save_contact_if_new(phone: str, agent_name: str):

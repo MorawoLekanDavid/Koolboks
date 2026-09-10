@@ -9,7 +9,7 @@ from chatbot.config import (
     log,
 )
 from chatbot.database import get_db
-from chatbot.models import Message
+from chatbot.models import Lead, Message
 from chatbot.utils.phone import normalize_phone
 
 
@@ -198,7 +198,21 @@ async def send_whatsapp_otp_template(to: str, template_name: str, code: str, lan
 def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None, delivery_status: str = "sent"):
     try:
         db = get_db()
-        db.add(Message(session_id=session_id, phone=normalize_phone(phone), name=name, direction=direction, content=content, wamid=wamid, delivery_status=delivery_status))
+        norm = normalize_phone(phone)
+        db.add(Message(session_id=session_id, phone=norm, name=name, direction=direction, content=content, wamid=wamid, delivery_status=delivery_status))
+        if direction == "inbound":
+            lead = db.query(Lead).filter(Lead.phone == norm).first()
+            if lead:
+                # The customer's real WhatsApp display name only shows up once
+                # they actually message in — never overwrite a name that's
+                # already been captured (bot-extracted or agent-entered).
+                if not lead.name and name and name != "Customer":
+                    lead.name = name
+                # A contact tab entry moves itself forward once the customer
+                # replies — never backward, so a manual stage change (e.g.
+                # "converted", "dead") never gets clobbered by this.
+                if lead.source in ("manual", "import") and (lead.outreach_stage or "not_contacted") in ("not_contacted", "contacted"):
+                    lead.outreach_stage = "responded"
         db.commit()
         db.close()
     except Exception as e:

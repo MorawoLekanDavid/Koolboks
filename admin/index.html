@@ -2178,7 +2178,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div id="outreachLoading" style="display:none;text-align:center;padding:16px;color:var(--g400);font-size:13px">Loading templates…</div>
     <div id="outreachTemplateWrap" style="display:none">
       <div style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Choose a template</div>
-      <div id="outreachTemplateList" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+      <select id="outreachTemplateSelect" onchange="_onOutreachTemplateSelect()" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+        <option value="">— Select a template —</option>
+      </select>
+      <div id="outreachTemplateDetail" style="margin-top:12px"></div>
     </div>
     <div id="outreachErr" style="display:none;color:#e53e3e;font-size:13px;margin-top:6px"></div>
     <div style="margin-top:16px;text-align:right"><button onclick="closeOutreachModal()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 16px;font-size:13px;cursor:pointer">Cancel</button></div>
@@ -3042,6 +3045,7 @@ async function openOutreachModal(){
   document.getElementById('outreachPhone').value='';
   document.getElementById('outreachLoading').style.display='none';
   document.getElementById('outreachTemplateWrap').style.display='none';
+  document.getElementById('outreachTemplateDetail').innerHTML='';
   document.getElementById('outreachErr').style.display='none';
   document.getElementById('outreachModal').classList.remove('hidden');
   // Pre-load templates
@@ -3078,33 +3082,36 @@ async function _loadOutreachTemplates(){
   }
 }
 function _renderOutreachTemplates(templates){
-  const listEl=document.getElementById('outreachTemplateList');
+  const selEl=document.getElementById('outreachTemplateSelect');
+  const detailEl=document.getElementById('outreachTemplateDetail');
+  detailEl.innerHTML='';
   if(!templates.length){
-    listEl.innerHTML='<div style="color:var(--g400);font-size:13px;padding:12px 0">No approved templates found.</div>';
+    selEl.innerHTML='<option value="">No approved templates found</option>';
     document.getElementById('outreachTemplateWrap').style.display='block';
     return;
   }
-  listEl.innerHTML=templates.map((t,i)=>{
-    const bodyComp=(t.components||[]).find(c=>c.type==='BODY');
-    const bodyText=bodyComp?bodyComp.text:'';
-    const varMatches=[...bodyText.matchAll(/\{\{(\d+)\}\}/g)];
-    const varCount=varMatches.length?Math.max(...varMatches.map(m=>parseInt(m[1]))):0;
-    const varInputs=varCount?Array.from({length:varCount},(_,j)=>`
-      <input data-var="${j+1}" placeholder="Variable {{${j+1}}}" style="width:100%;box-sizing:border-box;margin-top:5px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">`
-    ).join(''):'';
-    return `<div id="otpl_${i}" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">${esc(t.name)}</div>
-          <div style="font-size:11px;color:var(--g400);white-space:pre-wrap;word-break:break-word">${esc(bodyText.slice(0,120)+(bodyText.length>120?'…':''))}</div>
-          ${varCount?`<div style="font-size:11px;color:var(--orange);margin-top:4px">${varCount} variable${varCount>1?'s':''} required</div>`:''}
-          ${varInputs}
-        </div>
-        <button onclick="sendOutreachTemplate(${i},'${esc(t.name)}','${t.language||'en'}')" style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Send</button>
-      </div>
-    </div>`;
-  }).join('');
+  selEl.innerHTML='<option value="">— Select a template —</option>'
+    +templates.map((t,i)=>`<option value="${i}">${esc(t.name)}</option>`).join('');
   document.getElementById('outreachTemplateWrap').style.display='block';
+}
+function _onOutreachTemplateSelect(){
+  const idx=document.getElementById('outreachTemplateSelect').value;
+  const detailEl=document.getElementById('outreachTemplateDetail');
+  if(idx===''||!_outreachTemplatesCache){detailEl.innerHTML='';return;}
+  const t=_outreachTemplatesCache[Number(idx)];
+  const bodyComp=(t.components||[]).find(c=>c.type==='BODY');
+  const bodyText=bodyComp?bodyComp.text:'';
+  const varMatches=[...bodyText.matchAll(/\{\{(\d+)\}\}/g)];
+  const varCount=varMatches.length?Math.max(...varMatches.map(m=>parseInt(m[1]))):0;
+  const varInputs=varCount?Array.from({length:varCount},(_,j)=>`
+    <input data-var="${j+1}" placeholder="Variable {{${j+1}}}" style="width:100%;box-sizing:border-box;margin-top:5px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">`
+  ).join(''):'';
+  detailEl.innerHTML=`<div id="otpl_${idx}" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface)">
+    <div style="font-size:11px;color:var(--g400);white-space:pre-wrap;word-break:break-word">${esc(bodyText.slice(0,200)+(bodyText.length>200?'…':''))}</div>
+    ${varCount?`<div style="font-size:11px;color:var(--orange);margin-top:4px">${varCount} variable${varCount>1?'s':''} required</div>`:''}
+    ${varInputs}
+    <button onclick="sendOutreachTemplate(${idx},'${esc(t.name)}','${t.language||'en'}')" style="margin-top:10px;width:100%;background:var(--orange);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer">Send</button>
+  </div>`;
 }
 async function sendOutreachTemplate(tplIdx, templateName, language){
   const ph=(document.getElementById('outreachPhone')?.value||'').trim();
@@ -6220,7 +6227,7 @@ function renderContactsTable(){
       <td>${tags||'<span style="color:var(--g300)">—</span>'}</td>
       <td>${src}</td>
       <td>${ctOutreachBadge(c)}</td>
-      <td>${ctMetaCell(c.created_at,c.created_by)}</td>
+      <td>${ctMetaCell(c.created_at)}</td>
       <td>${ctMetaCell(c.updated_at,c.updated_by)}</td>
       <td style="white-space:nowrap">
         <button onclick='openEditContactModal(_ctMap[${ph}])' style="font-size:12px;padding:3px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer;margin-right:4px">Edit</button>
