@@ -418,6 +418,30 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     else:
         log.info("NO product cards matched for this response")
 
+    # Guard against the model stating a different Naira price in its own
+    # sentence than the real price of the single product it just tagged —
+    # a real, observed bug: near-identical product names (same freezer,
+    # "+ solar panel" suffix the only difference) sit close together in the
+    # inventory list, and the model sometimes recalls the wrong neighbor's
+    # price. Same trust-problem class bnpl_breakdown() exists to prevent,
+    # just for the sticker price instead of the monthly math — this must
+    # run before that gets appended below, or it would also try to "fix"
+    # the down-payment/monthly figures to match the full price. Only safe
+    # to blanket-replace when exactly one product is being priced; a
+    # multi-product comparison legitimately mentions more than one price.
+    if len(cards) == 1:
+        try:
+            correct_price = float(cards[0].price)
+            correct_str = f"N{correct_price:,.0f}"
+
+            def _fix_price(match: re.Match) -> str:
+                stated = float(match.group(0)[1:].replace(",", "").replace("₦", "").strip())
+                return correct_str if abs(stated - correct_price) > 1 else match.group(0)
+
+            raw = re.sub(r"[N₦]\s?\d[\d,]*(?:\.\d+)?", _fix_price, raw)
+        except (ValueError, TypeError):
+            pass
+
     # Attach an accurate payment-plan breakdown whenever a single product is being
     # priced — computed here instead of trusting the model's mental math, and shown
     # proactively rather than only after the customer objects to the price. Skipped
