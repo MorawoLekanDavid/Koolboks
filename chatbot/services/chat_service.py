@@ -224,12 +224,13 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
             welcome_prompt = (
                 f"Greet {request.user_name} warmly. In the SAME sentence, introduce "
                 f"yourself by name ({BOT_NAME}) the way any real sales agent would when "
-                f"picking up a new customer, AND briefly say what Koolbuy does (solar "
-                f"freezers for homes and businesses across Nigeria, so food and stock "
-                f"stop spoiling) — both are required, don't skip the company mention. "
-                f"Then ask what they'd be using the freezer for — never assume it's for "
-                f"a business, plenty of customers just want one for the house. "
-                f"Max 2 sentences total."
+                f"picking up a new customer, AND briefly say what Koolbuy does (solar-"
+                f"powered freezers, chillers, and ice makers for homes and businesses "
+                f"across Nigeria — not just food storage, also drinks, ice-block "
+                f"production, general cold storage) — both are required, don't skip the "
+                f"company mention. Then ask what they'd be using the freezer for — never "
+                f"assume it's for a business, plenty of customers just want one for the "
+                f"house. Max 2 sentences total."
             )
             messages = [system, {"role": "user", "content": welcome_prompt}]
             # 100 was enough for the old one-line greeting, but the required
