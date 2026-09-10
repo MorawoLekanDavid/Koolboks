@@ -3007,7 +3007,7 @@ function renderConversations(){
   const rawQ=(document.getElementById('searchInput')?.value||'').trim();
   const isSearch=_searchResults!==null;
   function _pass(c){
-    const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.owner&&c.owner.name);
+    const vf=convView==='all'||(convView==='mine'&&c.owner&&c.owner.name===agentName)||(convView==='sales'&&c.is_outreach);
     return vf&&_passesFilters(c);
   }
   let filtered;

@@ -170,11 +170,41 @@ async def list_conversations(
                     .order_by(ConversationScore.phone, ConversationScore.created_at.desc())
                 ).all()
 
-            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows
+            # "Outreach" means the agent started this conversation (a single
+            # send-template or a bulk-broadcast recipient), not merely "has an
+            # owner" — every conversation gets an owner sooner or later via
+            # round-robin, so that check was making the Outreach view show
+            # almost the same list as All. The real signal: the very first
+            # message on record is an outbound template send.
+            first_msg_rows = []
+            if phones:
+                first_msg_subq = (
+                    select(Message.phone, func.min(Message.created_at).label("first_at"))
+                    .where(Message.phone.in_(phones))
+                    .group_by(Message.phone)
+                    .subquery()
+                )
+                first_msg_rows = db.execute(
+                    select(Message.phone, Message.direction, Message.content)
+                    .join(
+                        first_msg_subq,
+                        and_(
+                            Message.phone == first_msg_subq.c.phone,
+                            Message.created_at == first_msg_subq.c.first_at,
+                        ),
+                    )
+                ).all()
+
+            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows, first_msg_rows
         finally:
             db.close()
 
-    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows = await run_in_threadpool(_db_fetch)
+    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows, first_msg_rows = await run_in_threadpool(_db_fetch)
+
+    outreach_set = {
+        r.phone for r in first_msg_rows
+        if r.direction == "outbound" and (r.content or "").startswith("[Template:")
+    }
 
     score_map: dict = {}
     for sr in score_rows:
@@ -263,6 +293,7 @@ async def list_conversations(
                 "tags": tags_map.get(r.phone, []),
                 "owner": owner_map.get(r.phone),
                 "score": score_map.get(r.phone),
+                "is_outreach": r.phone in outreach_set,
             }
         )
 

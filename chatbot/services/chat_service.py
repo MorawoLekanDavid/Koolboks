@@ -18,13 +18,28 @@ from chatbot.database import get_db
 from chatbot.models import Message, Product
 from chatbot.services.groq_service import call_groq
 from chatbot.services.lead_service import save_lead, update_lead_address
-from chatbot.utils.phone import SESSION_ID_RE, extract_valid_phone, phone_from_history
+from chatbot.utils.phone import SESSION_ID_RE, extract_valid_phone, normalize_phone, phone_from_history
 
 # Customer explicitly asking to reset the conversation — "let's start from scratch",
 # "start over", "restart", etc. Distinct from FILLER_ACK_RE in webhook.py, which
 # handles the opposite case (a bare "ok"/"thanks" that should NOT reset anything).
 RESTART_RE = re.compile(
     r'\b(start\s*(over|again|afresh|from\s*scratch)|restart|reset\s*(this\s*|the\s*)?conversation)\b',
+    re.IGNORECASE,
+)
+
+# Customer consents to using the WhatsApp number they're already texting from
+# instead of typing it out — a real, recurring pattern ("use this number",
+# "this is my number am chatting with"). Without this, extract_valid_phone()
+# finds no digits, so nothing gets captured: the model still generates a
+# plausible-sounding "thanks for your number" reply from context alone, while
+# the system captures nothing — a real customer ready to buy silently falls
+# through to "drop-off" with no phone on file at all.
+PHONE_CONSENT_RE = re.compile(
+    r'\buse\s+(this|the|my)\s+(whatsapp\s+)?number\b|'
+    r'\bthis\s+(is\s+)?(my\s+)?(phone\s+)?number\b.{0,25}\b(chatting|texting|messaging)\b|'
+    r'\bnumber\b.{0,15}\b(am|i\'?m|i\s+am)\s+(chatting|texting|messaging)\b|'
+    r'\bsame\s+number\b',
     re.IGNORECASE,
 )
 
@@ -339,6 +354,9 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         [{"role": "user", "content": request.message}]
 
     phone = extract_valid_phone(request.message)
+    if (not phone and not already_captured and request.session_id.startswith("wa_")
+            and PHONE_CONSENT_RE.search(request.message)):
+        phone = normalize_phone(request.session_id[3:])
     lead_captured = False
     looks_like_phone = bool(
         re.search(r'\b0\d{7,11}\b|\+234\d{7,11}\b|\b[789]\d{9}\b', request.message))

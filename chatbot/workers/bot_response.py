@@ -121,6 +121,27 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
                         parts.append(entry["text"])
                 if parts:
                     text = "\n".join(parts)
+
+            # Re-check right before committing to reply: transcription above
+            # can take real time, during which a customer's follow-up may
+            # have already arrived and started its own task. If so, leave
+            # pending_msgs UNCLEARED — that task will read this same buffer
+            # (this message included) and combine everything correctly — and
+            # bail out here rather than generate a reply to a burst that's
+            # already stale. Known remaining gap: a message arriving DURING
+            # the chat_handler call below (the LLM call itself, typically
+            # 1-3s) isn't caught by any check — chat_handler saves
+            # conversation history internally as part of generating a reply,
+            # so discarding post-call would leave a reply in history that
+            # was never actually sent to the customer, corrupting later
+            # turns' context. Closing that gap needs chat_handler's generate
+            # and persist steps split apart, which is a real refactor, not a
+            # one-line fix.
+            current_seq = await redis_client.client.get(f"koolbuy:pending_seq:{session_id}")
+            if current_seq is not None and current_seq != my_seq:
+                log.info(f"[delay] {session_id} superseded while preparing the reply — skipping")
+                return
+
             await redis_client.client.delete(msgs_key)
         except Exception as e:
             log.warning(f"[delay] pending-msgs read failed for {session_id}: {e}")
