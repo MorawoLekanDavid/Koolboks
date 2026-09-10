@@ -222,9 +222,13 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         history = await redis_client.get_history(request.session_id)
         if not history:
             welcome_prompt = (
-                f"Greet {request.user_name} warmly, introducing yourself by name "
-                f"({BOT_NAME}) the way any real sales agent would when picking up a "
-                f"new customer, in one sentence. Then ask what they sell or store. "
+                f"Greet {request.user_name} warmly. In the SAME sentence, introduce "
+                f"yourself by name ({BOT_NAME}) the way any real sales agent would when "
+                f"picking up a new customer, AND briefly say what Koolbuy does (solar "
+                f"freezers for homes and businesses across Nigeria, so food and stock "
+                f"stop spoiling) — both are required, don't skip the company mention. "
+                f"Then ask what they'd be using the freezer for — never assume it's for "
+                f"a business, plenty of customers just want one for the house. "
                 f"Max 2 sentences total."
             )
             messages = [system, {"role": "user", "content": welcome_prompt}]
