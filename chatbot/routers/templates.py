@@ -21,7 +21,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import require_admin
-from chatbot.models import BroadcastCampaign, BroadcastRecipient, ConversationOwner
+from chatbot.models import BroadcastCampaign, BroadcastRecipient, ConversationOwner, Lead
 from chatbot.routers.permissions import conversation_guard, require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db
 from chatbot.utils.phone import normalize_phone
@@ -174,16 +174,23 @@ async def send_template_to_phone(
                         f"[Template: {body.template_name}]" + (f" — {', '.join(body.variables)}" if body.variables else ""),
                         wamid=wamid)
 
-        def _claim_owner():
+        def _claim_owner_and_save_contact():
             db = get_db()
             try:
-                existing = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
-                if not existing:
+                existing_owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+                if not existing_owner:
                     db.add(ConversationOwner(phone=norm, owner_name=agent_name, owner_email=agent_email))
-                    db.commit()
+                # Starting a conversation with a brand-new number is how agents
+                # add a contact from the conversation tray — same effect as the
+                # Contacts tab's "+ Add Contact", so it needs to land in the
+                # same leads table, not just create a ConversationOwner/Message.
+                existing_lead = db.query(Lead).filter(Lead.phone == norm).first()
+                if not existing_lead:
+                    db.add(Lead(phone=norm, source="manual", status="new", created_by=agent_name))
+                db.commit()
             finally:
                 db.close()
-        await run_in_threadpool(_claim_owner)
+        await run_in_threadpool(_claim_owner_and_save_contact)
 
     data = r.json()
     if not r.is_success:
