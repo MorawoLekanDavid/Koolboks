@@ -26,8 +26,34 @@ def _extract_text_from_html(html: str) -> tuple[str, str]:
     # HTML->text always leaves a wall of blank lines behind — collapse it down
     # to something worth feeding a prompt.
     text = re.sub(r"\n{2,}", "\n\n", text)
-    text = "\n".join(line.strip() for line in text.split("\n") if line.strip())
-    return title, text.strip()
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    # Repeating banners/carousels (e.g. a promo strip rendered 6x in the DOM
+    # for an auto-scroll effect) turn into the same short block of 1-4 lines
+    # back-to-back — collapse any such block down to one occurrence, without
+    # touching legitimate repeats that are actually spread through real
+    # content rather than sitting immediately next to each other.
+    deduped: list = []
+    i = 0
+    while i < len(lines):
+        collapsed = False
+        for block_size in (1, 2, 3, 4):
+            block = lines[i:i + block_size]
+            if len(block) < block_size:
+                continue
+            reps = 0
+            pos = i
+            while lines[pos:pos + block_size] == block:
+                reps += 1
+                pos += block_size
+            if reps >= 3:
+                deduped.extend(block)
+                i = pos
+                collapsed = True
+                break
+        if not collapsed:
+            deduped.append(lines[i])
+            i += 1
+    return title, "\n".join(deduped).strip()
 
 
 async def fetch_page_text(url: str) -> tuple[str, str]:
