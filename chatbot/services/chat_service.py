@@ -229,7 +229,7 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
                 f"keep it that short, this is a WhatsApp opener, not an ad. Both the "
                 f"name and the company line are required. Then ask what they'd be "
                 f"using the freezer for — never assume it's for a business, plenty of "
-                f"customers just want one for the house. Max 2 sentences total."
+                f"customers just want one for the house. Max 3 sentences total."
             )
             messages = [system, {"role": "user", "content": welcome_prompt}]
             # 100 was enough for the old one-line greeting, but the required
