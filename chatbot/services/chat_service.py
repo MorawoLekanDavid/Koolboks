@@ -232,7 +232,11 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
                 f"Max 2 sentences total."
             )
             messages = [system, {"role": "user", "content": welcome_prompt}]
-            welcome_text = await call_groq(messages, max_tokens=100)
+            # 100 was enough for the old one-line greeting, but the required
+            # self-intro + company mention now regularly gets cut off mid-
+            # sentence at that budget — this reasoning model also spends part
+            # of its token budget on hidden reasoning before the visible text.
+            welcome_text = await call_groq(messages, max_tokens=200)
             # Save with timestamp
             await redis_client.save_history(request.session_id, [{
                 "role": "assistant",
