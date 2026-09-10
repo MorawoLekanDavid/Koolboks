@@ -223,14 +223,13 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         if not history:
             welcome_prompt = (
                 f"Greet {request.user_name} warmly. In the SAME sentence, introduce "
-                f"yourself by name ({BOT_NAME}) the way any real sales agent would when "
-                f"picking up a new customer, AND briefly say what Koolbuy does (solar-"
-                f"powered freezers, chillers, and ice makers for homes and businesses "
-                f"across Nigeria — not just food storage, also drinks, ice-block "
-                f"production, general cold storage) — both are required, don't skip the "
-                f"company mention. Then ask what they'd be using the freezer for — never "
-                f"assume it's for a business, plenty of customers just want one for the "
-                f"house. Max 2 sentences total."
+                f"yourself by name ({BOT_NAME}) and say what Koolbuy does in no more "
+                f"than a handful of words, e.g. 'solar freezers, chillers & ice makers "
+                f"for home or business' — never narrow it to just food/spoilage, but "
+                f"keep it that short, this is a WhatsApp opener, not an ad. Both the "
+                f"name and the company line are required. Then ask what they'd be "
+                f"using the freezer for — never assume it's for a business, plenty of "
+                f"customers just want one for the house. Max 2 sentences total."
             )
             messages = [system, {"role": "user", "content": welcome_prompt}]
             # 100 was enough for the old one-line greeting, but the required
