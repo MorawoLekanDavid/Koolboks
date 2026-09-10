@@ -222,8 +222,10 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         history = await redis_client.get_history(request.session_id)
         if not history:
             welcome_prompt = (
-                f"Greet {request.user_name} warmly in one sentence. "
-                f"Then ask what they sell or store. Max 2 sentences total."
+                f"Greet {request.user_name} warmly, introducing yourself by name "
+                f"({BOT_NAME}) the way any real sales agent would when picking up a "
+                f"new customer, in one sentence. Then ask what they sell or store. "
+                f"Max 2 sentences total."
             )
             messages = [system, {"role": "user", "content": welcome_prompt}]
             welcome_text = await call_groq(messages, max_tokens=100)
@@ -280,8 +282,9 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
         state_summary += (
             f"✓ FIRST MESSAGE — this is {request.user_name}'s very first message in this "
             f"conversation (or they just asked to restart). Start your reply with a short, "
-            f"warm welcome using their name that also briefly introduces Koolbuy, before asking "
-            f"Step 1's question. See STEP 1 for how to rotate the intro's angle.\n"
+            f"warm welcome using their name that also introduces yourself by name "
+            f"({BOT_NAME}) and briefly introduces Koolbuy, before asking Step 1's "
+            f"question. See STEP 1 for how to rotate the intro's angle.\n"
         )
         # A real WhatsApp session with genuinely empty history is either a brand-new
         # contact or one that legitimately restarted — but if this phone already has
