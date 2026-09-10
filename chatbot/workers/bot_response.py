@@ -8,7 +8,7 @@ from chatbot.config import BOT_NAME, BOT_RESPONSE_DELAY, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import HandoffEvent
-from chatbot.services.chat_service import ChatRequest, chat_handler
+from chatbot.services.chat_service import ChatRequest, generate_chat_response
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message, transcribe_whatsapp_audio
 
 # Matches the 24h TTL an agent-initiated takeover already uses
@@ -95,9 +95,9 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     # by whichever task actually ends up replying, so a voice note that gets
     # superseded before anyone replies to it never costs a wasted transcription call.
     escalate = False
+    msgs_key = f"koolbuy:pending_msgs:{session_id}"
     if redis_client.client and my_seq is not None:
         try:
-            msgs_key = f"koolbuy:pending_msgs:{session_id}"
             pending = await redis_client.client.lrange(msgs_key, 0, -1)
             if pending:
                 parts = []
@@ -122,37 +122,32 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
                 if parts:
                     text = "\n".join(parts)
 
-            # Re-check right before committing to reply: transcription above
-            # can take real time, during which a customer's follow-up may
-            # have already arrived and started its own task. If so, leave
-            # pending_msgs UNCLEARED — that task will read this same buffer
-            # (this message included) and combine everything correctly — and
-            # bail out here rather than generate a reply to a burst that's
-            # already stale. Known remaining gap: a message arriving DURING
-            # the chat_handler call below (the LLM call itself, typically
-            # 1-3s) isn't caught by any check — chat_handler saves
-            # conversation history internally as part of generating a reply,
-            # so discarding post-call would leave a reply in history that
-            # was never actually sent to the customer, corrupting later
-            # turns' context. Closing that gap needs chat_handler's generate
-            # and persist steps split apart, which is a real refactor, not a
-            # one-line fix.
+            # Re-check right before generating: transcription above can take
+            # real time, during which a customer's follow-up may have already
+            # arrived and started its own task. pending_msgs is deliberately
+            # NOT cleared yet (see below) — if superseded, that other task
+            # reads this same buffer (this message included) and combines
+            # everything correctly, so just bail out here.
             current_seq = await redis_client.client.get(f"koolbuy:pending_seq:{session_id}")
             if current_seq is not None and current_seq != my_seq:
                 log.info(f"[delay] {session_id} superseded while preparing the reply — skipping")
                 return
-
-            await redis_client.client.delete(msgs_key)
         except Exception as e:
             log.warning(f"[delay] pending-msgs read failed for {session_id}: {e}")
 
-    # Generate bot response
+    # Generate bot response — NOT yet committed to history or sent. The LLM
+    # call inside is the single slowest step here (often 1-3s+), and a
+    # customer's follow-up can easily land during it; generate_chat_response()
+    # hands back a reply plus a separate persist() step specifically so this
+    # worker can re-check for supersession one more time before either of
+    # those happens, instead of a stale reply getting saved to history as if
+    # it had actually been sent.
     bg = BackgroundTasks()
     chat_req = ChatRequest(session_id=session_id, message=text, user_name=name)
     try:
-        chat_resp = await chat_handler(chat_req, bg)
+        chat_resp, persist = await generate_chat_response(chat_req, bg)
     except Exception as e:
-        log.error(f"[delay] chat_handler failed for {session_id}: {e}")
+        log.error(f"[delay] reply generation failed for {session_id}: {e}")
         # Without this, the customer sees total silence — no error, no retry
         # prompt, nothing — whenever the AI backend has a hiccup.
         try:
@@ -164,6 +159,33 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         if escalate:
             await _set_media_handoff(session_id, wa_from)
         return
+
+    # This is the check that closes the gap the pre-generation checks above
+    # can't: a customer's follow-up arriving WHILE the LLM was generating.
+    # Still superseded? Discard everything — don't persist (the reply never
+    # gets written into history as if it had been sent) and don't clear
+    # pending_msgs (the newer task reads this message from that same buffer
+    # and combines it with its own, replying to both at once).
+    if redis_client.client and my_seq is not None:
+        try:
+            current_seq = await redis_client.client.get(f"koolbuy:pending_seq:{session_id}")
+            if current_seq is not None and current_seq != my_seq:
+                log.info(f"[delay] {session_id} superseded during generation — discarding reply, "
+                         f"not persisting or sending")
+                return
+        except Exception as e:
+            log.warning(f"[delay] post-generation pending-seq check failed for {session_id}: {e}")
+
+    # Past this point we're committed: clear the buffer (this task now owns
+    # replying to everything in it) and commit the reply to history before
+    # anything gets sent, so a crash mid-send can't leave history out of sync
+    # with what the customer actually sees.
+    if redis_client.client and my_seq is not None:
+        try:
+            await redis_client.client.delete(msgs_key)
+        except Exception as e:
+            log.warning(f"[delay] pending-msgs clear failed for {session_id}: {e}")
+    await persist()
 
     def _blurb(p):
         return f"🛒 *{p.name}*\n💰 N{float(p.price):,.0f}"

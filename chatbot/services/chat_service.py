@@ -208,7 +208,18 @@ async def build_system_prompt(user_name: str, inv: str, query_text: str = "") ->
     return {"role": "system", "content": content}
 
 
-async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
+async def generate_chat_response(request: ChatRequest, background_tasks: BackgroundTasks):
+    """Does everything chat_handler does EXCEPT commit the turn to Redis
+    history — returns (ChatResponse, persist), where persist is a zero-arg
+    async callable that actually writes it. Split out for the WhatsApp
+    debounce path: that worker generates a reply, then re-checks whether a
+    newer customer message has arrived before deciding to actually send it.
+    Calling the old all-in-one chat_handler and discarding its result on a
+    late supersession still left the discarded reply saved to history as if
+    it had really been sent — corrupting every later turn's context, since
+    the model would "remember" saying something the customer never saw.
+    chat_handler() below is the same as before for every other caller: it
+    generates and immediately persists, unconditionally."""
     # Validate session ID format
     if not SESSION_ID_RE.match(request.session_id):
         raise HTTPException(status_code=400, detail="Invalid session ID.")
@@ -252,14 +263,18 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
             # sentence at that budget — this reasoning model also spends part
             # of its token budget on hidden reasoning before the visible text.
             welcome_text = await call_groq(messages, max_tokens=200)
-            # Save with timestamp
-            await redis_client.save_history(request.session_id, [{
-                "role": "assistant",
-                "content": welcome_text,
-                "ts": datetime.now().isoformat(),
-            }])
-            return ChatResponse(session_id=request.session_id, response=welcome_text)
-        return ChatResponse(session_id=request.session_id, response="")
+
+            async def _persist_welcome():
+                await redis_client.save_history(request.session_id, [{
+                    "role": "assistant",
+                    "content": welcome_text,
+                    "ts": datetime.now().isoformat(),
+                }])
+            return ChatResponse(session_id=request.session_id, response=welcome_text), _persist_welcome
+
+        async def _persist_noop():
+            pass
+        return ChatResponse(session_id=request.session_id, response=""), _persist_noop
 
     # Normal chat
     history = await redis_client.get_history(request.session_id)
@@ -477,11 +492,26 @@ async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
     clean = re.sub(r'PRODUCTS:\s*.+\n?', '', raw, flags=re.IGNORECASE).strip()
 
     now = datetime.now().isoformat()
-    # Save annotated message (with phone note) to Redis history with timestamp
+    # Annotated message (with phone note) plus the reply, ready to commit to
+    # Redis history with timestamp — committed by persist(), not here, so a
+    # caller can still decide not to.
     user_content = messages[-1]["content"] if messages[-1]["role"] == "user" else request.message
     history.append({"role": "user",      "content": user_content, "ts": now})
     history.append(
         {"role": "assistant", "content": raw,                     "ts": now})
-    await redis_client.save_history(request.session_id, history)
 
-    return ChatResponse(session_id=request.session_id, response=clean, products=cards, lead_captured=lead_captured)
+    async def _persist():
+        await redis_client.save_history(request.session_id, history)
+
+    return ChatResponse(session_id=request.session_id, response=clean, products=cards, lead_captured=lead_captured), _persist
+
+
+async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):
+    """Generate a reply and commit it to history unconditionally — the
+    original chat_handler behavior, for the direct /chat API and any other
+    caller that always wants to send whatever comes back. The WhatsApp
+    debounce path uses generate_chat_response() directly instead, so it can
+    decide whether to persist before committing to anything."""
+    chat_resp, persist = await generate_chat_response(request, background_tasks)
+    await persist()
+    return chat_resp
