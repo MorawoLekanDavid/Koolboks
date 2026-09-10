@@ -66,7 +66,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .sb-nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--sidebar-text);transition:background .15s,color .15s;text-align:left}
 .sb-nav-item:hover{background:var(--sidebar-hover);color:#fff}
 .sb-nav-item.active{background:var(--sidebar-active);color:var(--orange)}
-.sb-icon{font-size:16px;flex-shrink:0;width:20px;text-align:center}
+.sb-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
+.sb-icon svg{width:18px;height:18px}
 .sb-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-footer{border-top:1px solid rgba(255,255,255,.07);padding:12px 10px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
 .sb-nav-divider{height:1px;background:rgba(255,255,255,.08);margin:8px 6px}
@@ -138,7 +139,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 
 /* ── Shared empty-state pattern ── */
 .ui-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 20px;text-align:center;grid-column:1/-1}
-.ui-empty-icon{width:48px;height:48px;background:var(--g100);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.ui-empty-icon{width:48px;height:48px;background:var(--g100);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--g400);flex-shrink:0}
+.ui-empty-icon svg{width:22px;height:22px}
 .ui-empty-title{font-size:14px;font-weight:700;color:var(--g600)}
 .ui-empty-sub{font-size:12px;color:var(--g400);max-width:320px;line-height:1.5}
 .ui-empty .btn-primary{margin-top:6px;padding:7px 18px;font-size:13px}
@@ -159,7 +161,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .chat-act-btns{display:flex;gap:6px;align-items:center}
 .ca-btn{width:34px;height:34px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .ca-btn:hover{background:var(--g100)}
-.handoff-btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .2s}
+.handoff-btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .2s;display:inline-flex;align-items:center;gap:6px;justify-content:center}
+.handoff-btn svg{width:14px;height:14px;flex-shrink:0}
 .handoff-btn.take-over{background:var(--orange);color:#fff}
 .handoff-btn.take-over:hover{background:var(--orange-d)}
 .handoff-btn.hand-back{background:var(--green);color:#fff}
@@ -168,7 +171,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .msg{max-width:65%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
 .msg.inbound{background:#fff;align-self:flex-start;border-radius:0 12px 12px 12px;box-shadow:var(--sh)}
 .msg.outbound{background:var(--orange-s);align-self:flex-end;border-radius:12px 0 12px 12px;box-shadow:var(--sh)}
-.msg-sender{font-size:11px;font-weight:700;margin-bottom:4px}
+.msg-sender{font-size:11px;font-weight:700;margin-bottom:4px;display:inline-flex;align-items:center;gap:4px}
+.msg-sender-icon{display:inline-flex;width:12px;height:12px;flex-shrink:0}
+.msg-sender-icon svg{width:12px;height:12px}
 .msg-sender.bot{color:var(--orange)}
 .msg-sender.agent-s{color:var(--g700)}
 .msg-sender.customer{color:var(--g500)}
@@ -661,7 +666,9 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   }
 }
 @media(max-width:900px){.conv-panel{width:240px}}
-.detail-toggle{padding:6px 10px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g700);white-space:nowrap}
+.detail-toggle{padding:6px 10px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g700);white-space:nowrap;display:inline-flex;align-items:center;gap:5px;justify-content:center}
+.detail-toggle svg{width:13px;height:13px;flex-shrink:0}
+.ca-btn svg{width:16px;height:16px}
 .detail-toggle:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
 @media(max-width:768px){
   .sidebar{width:56px}
@@ -792,15 +799,15 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="sb-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
     </div>
     <nav class="sb-nav">
-      <button class="htab sb-nav-item active" id="htabConv"       onclick="switchTab('conv')"><span class="sb-icon">💬</span><span class="sb-label">Conversations</span></button>
-      <button class="htab sb-nav-item"        id="htabLeads"      onclick="switchTab('leads')"><span class="sb-icon">👥</span><span class="sb-label">Leads</span></button>
-      <button class="htab sb-nav-item"        id="htabContacts"   onclick="switchTab('contacts')"><span class="sb-icon">📋</span><span class="sb-label">Contacts</span></button>
-      <button class="htab sb-nav-item"        id="htabProducts"   onclick="switchTab('products')"><span class="sb-icon">📦</span><span class="sb-label">Products</span></button>
-      <button class="htab sb-nav-item hidden" id="htabAnalytics"  onclick="switchTab('analytics')"><span class="sb-icon">📊</span><span class="sb-label">Analytics</span></button>
-      <button class="htab sb-nav-item hidden" id="htabMessaging"  onclick="switchTab(_lastMessagingTab)"><span class="sb-icon">📢</span><span class="sb-label">Messaging</span></button>
+      <button class="htab sb-nav-item active" id="htabConv"       onclick="switchTab('conv')"><span class="sb-icon" data-icon="chat"></span><span class="sb-label">Conversations</span></button>
+      <button class="htab sb-nav-item"        id="htabLeads"      onclick="switchTab('leads')"><span class="sb-icon" data-icon="users"></span><span class="sb-label">Leads</span></button>
+      <button class="htab sb-nav-item"        id="htabContacts"   onclick="switchTab('contacts')"><span class="sb-icon" data-icon="clipboard"></span><span class="sb-label">Contacts</span></button>
+      <button class="htab sb-nav-item"        id="htabProducts"   onclick="switchTab('products')"><span class="sb-icon" data-icon="box"></span><span class="sb-label">Products</span></button>
+      <button class="htab sb-nav-item hidden" id="htabAnalytics"  onclick="switchTab('analytics')"><span class="sb-icon" data-icon="chart"></span><span class="sb-label">Analytics</span></button>
+      <button class="htab sb-nav-item hidden" id="htabMessaging"  onclick="switchTab(_lastMessagingTab)"><span class="sb-icon" data-icon="megaphone"></span><span class="sb-label">Messaging</span></button>
       <div class="sb-nav-divider"></div>
-      <button class="htab sb-nav-item hidden" id="htabUsage"      onclick="switchTab('usage')"><span class="sb-icon">💰</span><span class="sb-label">Usage &amp; Cost</span></button>
-      <button class="htab sb-nav-item hidden" id="htabSettings"   onclick="switchTab(_lastSettingsTab)"><span class="sb-icon">⚙️</span><span class="sb-label">Settings</span></button>
+      <button class="htab sb-nav-item hidden" id="htabUsage"      onclick="switchTab('usage')"><span class="sb-icon" data-icon="banknote"></span><span class="sb-label">Usage &amp; Cost</span></button>
+      <button class="htab sb-nav-item hidden" id="htabSettings"   onclick="switchTab(_lastSettingsTab)"><span class="sb-icon" data-icon="gear"></span><span class="sb-label">Settings</span></button>
     </nav>
     <!-- Zero-size placeholders JS references by id -->
     <button id="inavAnalytics" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;opacity:0" onclick="switchTab('analytics')"></button>
@@ -900,10 +907,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <select id="headerOwnerSelect" class="hdr-assign-sel" onchange="headerAssignOwner(this.value)" title="Assign conversation to agent">
               <option value="">Assign to…</option>
             </select>
-            <button class="ca-btn" title="WhatsApp" onclick="openWhatsApp()">💬</button>
-            <button class="detail-toggle" onclick="toggleDetailPanel()" id="detailToggleBtn">👤 Details</button>
+            <button class="ca-btn" title="WhatsApp" onclick="openWhatsApp()"><span data-icon="chat"></span></button>
+            <button class="detail-toggle" onclick="toggleDetailPanel()" id="detailToggleBtn"><span data-icon="person"></span>Details</button>
           </div>
-          <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()">👤 Take Over</button>
+          <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()"><span data-icon="person"></span>Take Over</button>
           <button class="handoff-btn take-over" id="sendTmplBtn" data-permtab="templates" onclick="openSendTemplateModal()" style="background:var(--g700);margin-left:6px">📨 Template</button>
         </div>
         <!-- Tag bar -->
@@ -2301,8 +2308,41 @@ let convTotal=0, convOffset=0, convLimit=100, convHasMore=false;
 let _convSearchTimer=null, _searchResults=null;
 let _outreachTemplatesCache=null;
 
+// ── Icon system ──────────────────────────────────────────────────────────
+// Single source of truth for every UI icon — stroke-based SVG (Heroicons-
+// style, 24x24 viewBox, currentColor stroke so hover/active CSS color rules
+// apply automatically, matching how .sb-label text already does). Static
+// markup references an icon by `data-icon="name"` and hydrateIcons() fills
+// it in on load; JS-generated markup (table rows, dynamic buttons) can also
+// interpolate ICON.name directly inside its own template literals.
+const ICON = {
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10H9l-4.5 4v-4H4z"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 13.3c2.3.3 4 2.1 4 4.6"/></svg>',
+  clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="16" rx="1.5"/><rect x="9" y="3" width="6" height="3" rx="1"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4.5"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8 12 4l8.5 4-8.5 4-8.5-4z"/><path d="M3.5 8v8l8.5 4 8.5-4V8M12 12v8"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11M10.5 20V4M17 20V14M21 20H3"/></svg>',
+  megaphone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l7 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M17 8a4 4 0 0 1 0 8"/></svg>',
+  banknote: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="12" cy="12" r="2.3"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.45l1.9-1.48-1.9-3.3-2.26.9a7 7 0 0 0-1.26-.73L15 3.5h-6l-.33 2.44a7 7 0 0 0-1.26.73l-2.26-.9-1.9 3.3 1.9 1.48A7 7 0 0 0 5 12c0 .5.05.98.15 1.45l-1.9 1.48 1.9 3.3 2.26-.9c.38.3.8.54 1.26.73L9 20.5h6l.33-2.44c.46-.19.88-.43 1.26-.73l2.26.9 1.9-3.3-1.9-1.48c.1-.47.15-.95.15-1.45z"/></svg>',
+  person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>',
+  robot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><path d="M12 7V4M9.5 4h5"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8.5A1.5 1.5 0 0 1 20.5 8.5v9a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 17.5z"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 14h8v5H8z"/></svg>',
+  target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
+  wave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V6.5a1.5 1.5 0 0 1 3 0V13.5a5.5 5.5 0 0 1-5.5 5.5h-1.5a5 5 0 0 1-4-2L3.5 13.3a1.2 1.2 0 0 1 2-1.3L7.5 14.5"/></svg>',
+};
+function hydrateIcons(root){
+  (root||document).querySelectorAll('[data-icon]').forEach(el=>{
+    const name=el.getAttribute('data-icon');
+    if(ICON[name])el.innerHTML=ICON[name];
+  });
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────
 window.onload=async()=>{
+  hydrateIcons();
   const inviteToken=new URLSearchParams(window.location.search).get('token');
   if(inviteToken){
     document.getElementById('loginScreen').classList.add('hidden');
@@ -2983,9 +3023,9 @@ function renderConversations(){
   const list=document.getElementById('convList');
   if(!filtered.length){
     let body;
-    if(isSearch)body=emptyState('🔍','No results',`Nothing matches "${rawQ}"`);
-    else if(!allConversations.length)body=emptyState('💬','No conversations yet','They\'ll show up here as soon as a customer messages your WhatsApp number.');
-    else body=emptyState('🗂️','No conversations match this filter','Try a different view or clear the active filters.');
+    if(isSearch)body=emptyState(ICON.search,'No results',`Nothing matches "${rawQ}"`);
+    else if(!allConversations.length)body=emptyState(ICON.chat,'No conversations yet','They\'ll show up here as soon as a customer messages your WhatsApp number.');
+    else body=emptyState(ICON.folder,'No conversations match this filter','Try a different view or clear the active filters.');
     list.innerHTML=body+(convHasMore&&!isSearch?'<div class="load-more-row"><button onclick="loadConversations(true)">Load more</button></div>':'');
     return;
   }
@@ -3386,7 +3426,7 @@ async function loadMessages(){
       }
       const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot'&&m.name!=='Itura';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
-      const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`👤 ${esc(m.name)}`:'🤖 Itura');
+      const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`<span class="msg-sender-icon">${ICON.person}</span>${esc(m.name)}`:`<span class="msg-sender-icon">${ICON.robot}</span>Itura`);
       const bodyHtml=renderMediaBody(m.content);
       const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
       let statusHtml='';
@@ -3438,7 +3478,7 @@ function renderCannedList(){
   const el=document.getElementById('cannedList');
   if(!el)return;
   if(!cannedData.length){
-    el.innerHTML=emptyState('💾','No canned responses yet','Save a message here once and send it with one click during any conversation.',
+    el.innerHTML=emptyState(ICON.save,'No canned responses yet','Save a message here once and send it with one click during any conversation.',
       '<button class="btn-primary" onclick="openCannedModal()">+ New Response</button>');
     return;
   }
@@ -3633,12 +3673,12 @@ function updateChatUI(mode,agent){
   const ra=document.getElementById('replyArea');const rd=document.getElementById('replyDisabled');
   const sub=document.getElementById('chatSubtitle');const pill=document.getElementById('chatModePill');
   if(mode==='agent'){
-    btn.textContent='🤖 Hand Back to Bot';btn.className='handoff-btn hand-back';
+    btn.innerHTML=`${ICON.robot}Hand Back to Bot`;btn.className='handoff-btn hand-back';
     ra.classList.remove('hidden');rd.classList.add('hidden');
     sub.textContent=`Handled by ${agent||agentName}`;
     pill.textContent='Agent';pill.className='chat-mode-pill agent';
   }else{
-    btn.textContent='👤 Take Over';btn.className='handoff-btn take-over';
+    btn.innerHTML=`${ICON.person}Take Over`;btn.className='handoff-btn take-over';
     ra.classList.add('hidden');rd.classList.remove('hidden');
     sub.textContent=selectedPhone||'';
     pill.textContent='Bot';pill.className='chat-mode-pill bot';
@@ -3651,7 +3691,7 @@ function toggleDetailPanel(){
   const dp=document.getElementById('detailPanel');
   dp.classList.toggle('force-show');
   const btn=document.getElementById('detailToggleBtn');
-  btn.textContent=dp.classList.contains('force-show')?'✕ Close':'👤 Details';
+  btn.innerHTML=dp.classList.contains('force-show')?`${ICON.close}Close`:`${ICON.person}Details`;
 }
 function closeChatMobile(){
   document.getElementById('chatPanel').classList.remove('mobile-open');
@@ -3861,8 +3901,8 @@ function showLeadGroup(g){
   const dlBtn=document.getElementById('downloadBtn');if(list.length){dlBtn.classList.remove('hidden');}else{dlBtn.classList.add('hidden');}
   if(!list.length){
     document.getElementById('leadsListBody').innerHTML=isInt
-      ?emptyState('🎯','No interested leads yet','Once a customer gives their number to the bot, they\'ll land here.')
-      :emptyState('👋','No drop-offs yet','Customers who chat but never share a number will show up here.');
+      ?emptyState(ICON.target,'No interested leads yet','Once a customer gives their number to the bot, they\'ll land here.')
+      :emptyState(ICON.wave,'No drop-offs yet','Customers who chat but never share a number will show up here.');
     return;
   }
   document.getElementById('leadsListBody').innerHTML=list.map(l=>{
@@ -4887,7 +4927,7 @@ async function loadProducts(){
 
 function renderProducts(){
   const grid=document.getElementById('productsGrid');
-  if(!allProducts.length){grid.innerHTML=emptyState('📦','No products yet','Add your first product above so the bot can recommend it to customers.');renderPagination();return;}
+  if(!allProducts.length){grid.innerHTML=emptyState(ICON.box,'No products yet','Add your first product above so the bot can recommend it to customers.');renderPagination();return;}
   const start=(productPage-1)*PAGE_SIZE, slice=allProducts.slice(start,start+PAGE_SIZE);
   grid.innerHTML=slice.map(p=>`
     <div class="product-card">
@@ -6189,8 +6229,8 @@ function renderContactsTable(){
   data.forEach(c=>{_ctMap[c.phone]=c;});
   if(!data.length){
     wrap.innerHTML=_allContacts.length
-      ?emptyState('🔍','No contacts match','Try a different tag, stage filter, or search term.')
-      :emptyState('📋','No contacts yet','Add people manually or import a CSV to start building your outreach list.',
+      ?emptyState(ICON.search,'No contacts match','Try a different tag, stage filter, or search term.')
+      :emptyState(ICON.clipboard,'No contacts yet','Add people manually or import a CSV to start building your outreach list.',
         '<button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>');
     document.getElementById('ctPagination').innerHTML='';
     return;
@@ -6384,9 +6424,9 @@ async function openContactDetail(phone){
     const msgs=r.ok?await r.json():[];
     const hist=document.getElementById('ctHistoryBody');
     if(!hist)return; // drawer closed before fetch resolved
-    if(!msgs.length){hist.innerHTML=emptyState('💬','No messages yet','This contact hasn\'t messaged your WhatsApp number.');return;}
+    if(!msgs.length){hist.innerHTML=emptyState(ICON.chat,'No messages yet','This contact hasn\'t messaged your WhatsApp number.');return;}
     hist.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">${msgs.slice(-30).map(m=>{
-      const who=m.direction==='inbound'?esc(m.name||'Customer'):(m.name&&m.name!=='KoolBot'&&m.name!=='Itura'?`👤 ${esc(m.name)}`:'🤖 Itura');
+      const who=m.direction==='inbound'?esc(m.name||'Customer'):(m.name&&m.name!=='KoolBot'&&m.name!=='Itura'?`<span class="msg-sender-icon">${ICON.person}</span>${esc(m.name)}`:`<span class="msg-sender-icon">${ICON.robot}</span>Itura`);
       const t=formatTime(m.timestamp);
       return `<div style="background:${m.direction==='inbound'?'var(--g50)':'var(--orange-s)'};border-radius:8px;padding:8px 10px;font-size:12px">
         <div style="font-weight:700;color:var(--g500);font-size:10px;margin-bottom:2px">${who} · ${t}</div>
