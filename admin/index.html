@@ -2175,6 +2175,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <h3 style="margin-bottom:14px">New Conversation</h3>
     <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">WhatsApp Number</label>
     <input id="outreachPhone" type="tel" placeholder="+2348012345678" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);margin-bottom:14px" oninput="onOutreachPhoneInput()"/>
+    <label style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Product Interest <span style="font-weight:400;color:var(--g400);text-transform:none">(optional)</span></label>
+    <input id="outreachProduct" type="text" placeholder="e.g. 100L Solar Freezer" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);margin-bottom:14px"/>
     <div id="outreachLoading" style="display:none;text-align:center;padding:16px;color:var(--g400);font-size:13px">Loading templates…</div>
     <div id="outreachTemplateWrap" style="display:none">
       <div style="font-size:12px;font-weight:600;color:var(--g600);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Choose a template</div>
@@ -3043,6 +3045,7 @@ function onConvSearch(){
 async function openOutreachModal(){
   _outreachTemplatesCache=null;
   document.getElementById('outreachPhone').value='';
+  document.getElementById('outreachProduct').value='';
   document.getElementById('outreachLoading').style.display='none';
   document.getElementById('outreachTemplateWrap').style.display='none';
   document.getElementById('outreachTemplateDetail').innerHTML='';
@@ -3128,7 +3131,7 @@ async function sendOutreachTemplate(tplIdx, templateName, language){
   try{
     const r=await fetch(`/admin/conversations/${encodeURIComponent(ph)}/send-template?key=${encodeURIComponent(adminKey)}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({template_name:templateName,language,variables})
+      body:JSON.stringify({template_name:templateName,language,variables,product_interest:(document.getElementById('outreachProduct')?.value||'').trim()||null})
     });
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Send failed');}
     closeOutreachModal();

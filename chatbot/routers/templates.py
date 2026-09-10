@@ -45,6 +45,7 @@ class SendTemplateRequest(BaseModel):
     template_name: str
     language: str = "en"
     variables: List[str] = []
+    product_interest: Optional[str] = None
 
 
 @router.get("/templates")
@@ -180,7 +181,7 @@ async def send_template_to_phone(
                 existing_owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
                 if not existing_owner:
                     db.add(ConversationOwner(phone=norm, owner_name=agent_name, owner_email=agent_email))
-                _add_lead_if_missing(db, norm, agent_name)
+                _add_lead_if_missing(db, norm, agent_name, body.product_interest)
                 db.commit()
             finally:
                 db.close()
@@ -208,7 +209,7 @@ class BulkBroadcastRequest(BaseModel):
     language: str = "en"
 
 
-def _add_lead_if_missing(db, phone: str, agent_name: str):
+def _add_lead_if_missing(db, phone: str, agent_name: str, product_interest: str | None = None):
     """An agent messaging a brand-new number — via the conversation tray's
     single send-template or a bulk broadcast recipient — has the same effect
     as the Contacts tab's + Add Contact, so it needs to land in the leads
@@ -218,12 +219,16 @@ def _add_lead_if_missing(db, phone: str, agent_name: str):
     which is audit metadata), and the stage starts at "contacted" since a
     template has, by definition, already gone out — save_message_db()
     advances it to "responded" the moment an inbound reply comes in."""
-    if not db.query(Lead).filter(Lead.phone == phone).first():
+    lead = db.query(Lead).filter(Lead.phone == phone).first()
+    if not lead:
         db.add(Lead(
             phone=phone, source="manual", status="new",
             created_by=agent_name, assigned_to=agent_name,
             outreach_stage="contacted",
+            product_interest=product_interest or None,
         ))
+    elif product_interest:
+        lead.product_interest = product_interest
 
 
 def _save_contact_if_new(phone: str, agent_name: str):
