@@ -27,7 +27,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 /* ── Login ── */
 .login-screen{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--g50)}
 .login-card{background:#fff;padding:40px;border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,.12);width:380px;text-align:center}
-.login-logo{width:56px;height:56px;background:var(--orange);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:26px;color:#fff}
+.login-logo{width:56px;height:56px;background:var(--orange);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#fff}
+.login-logo svg{width:28px;height:28px}
 .login-card h2{font-size:22px;font-weight:700;color:var(--g900);margin-bottom:6px}
 .login-card p{color:var(--g400);font-size:13px;margin-bottom:28px}
 .login-card input{width:100%;padding:11px 16px;border:1.5px solid var(--g200);border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;font-family:inherit;color:var(--g900)}
@@ -59,7 +60,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .sb-toggle-btn:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.3)}
 .sidebar.sb-collapsed .sb-toggle-btn{margin-left:0}
 .sb-brand{display:flex;align-items:center;gap:10px;padding:18px 14px 14px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
-.brand-logo{width:32px;height:32px;background:var(--orange);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0}
+.brand-logo{width:32px;height:32px;background:var(--orange);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+.brand-logo svg{width:17px;height:17px}
 .sb-brand-name{font-size:15px;font-weight:800;color:#fff;white-space:nowrap}
 .sb-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
 .sb-nav-item,.htab{border:none;background:none;font-family:inherit;cursor:pointer}
@@ -73,6 +75,11 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
    repeating it per usage. */
 .icon-only-btn{display:inline-flex;align-items:center;justify-content:center}
 .icon-only-btn svg{width:15px;height:15px}
+.lightbox-close-btn svg{width:16px;height:16px}
+.saved-draft-msg [data-icon]{display:inline-flex;vertical-align:-1px}
+.saved-draft-msg svg{width:11px;height:11px}
+.invite-result-msg{display:inline-flex;align-items:flex-start;gap:5px}
+.invite-result-msg svg{width:13px;height:13px;flex-shrink:0;margin-top:2px}
 .src-badge{font-size:11px;color:var(--g400);display:inline-flex;align-items:center;gap:4px}
 .src-badge svg{width:11px;height:11px}
 .sb-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -134,9 +141,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .c-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
 .c-time{font-size:10px;color:var(--g400)}
 .c-badges{display:flex;gap:4px;align-items:center}
-.badge-bot{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--green-s);color:#15803d}
-.badge-agent{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--orange-s);color:var(--orange-d)}
-.badge-score{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;cursor:help}
+.badge-bot{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--green-s);color:#15803d;display:inline-flex;align-items:center;gap:3px}
+.badge-agent{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;background:var(--orange-s);color:var(--orange-d);display:inline-flex;align-items:center;gap:3px}
+.badge-bot svg,.badge-agent svg{width:10px;height:10px}
+.resp-icon-cell{display:table-cell}
+.resp-icon-cell svg{width:12px;height:12px;vertical-align:-2px;margin-right:2px}
+.badge-score{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;cursor:help;display:inline-flex;align-items:center;gap:3px}
+.badge-score svg{width:9px;height:9px}
 .badge-score.sc-good{background:var(--green-s);color:#15803d}
 .badge-score.sc-ok{background:#fef3c7;color:#92400e}
 .badge-score.sc-bad{background:var(--red-s);color:#b91c1c}
@@ -157,7 +168,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .empty-chat{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--g400)}
 .empty-chat-icon{width:64px;height:64px;background:var(--orange-s);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px}
 .chat-hdr{background:#fff;border-bottom:1px solid var(--g200);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
-.chat-back-btn{background:none;border:none;font-size:20px;cursor:pointer;padding:4px;border-radius:8px;display:none;color:var(--g700)}
+.chat-back-btn{background:none;border:none;cursor:pointer;padding:4px;border-radius:8px;display:none;align-items:center;justify-content:center;color:var(--g700)}
+.chat-back-btn svg{width:20px;height:20px}
 .chat-back-btn:hover{background:var(--g100)}
 .chat-title-block{flex:1;min-width:0}
 .chat-name-row{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:var(--g900)}
@@ -187,9 +199,11 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .msg{position:relative}
 .msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
 .msg-time{font-size:10px;color:var(--g400)}
-.msg-status{font-size:10px;color:var(--g400);cursor:default}
+.msg-status{font-size:10px;color:var(--g400);cursor:default;display:inline-flex;align-items:center;gap:3px;vertical-align:middle}
+.msg-status svg{width:13px;height:9px}
 .msg-status-read{color:#53bdeb}
 .msg-status-failed{color:var(--red);font-weight:600;cursor:help}
+.msg-status-failed svg{width:11px;height:11px}
 .msg-date-sep{display:flex;align-items:center;gap:8px;margin:8px 0;align-self:stretch}
 .msg-date-sep::before,.msg-date-sep::after{content:'';flex:1;border-top:1px solid var(--g200)}
 .msg-date-sep span{white-space:nowrap;font-size:11px;font-weight:600;color:var(--g500);padding:3px 10px;background:#fff;border:1px solid var(--g200);border-radius:99px}
@@ -229,9 +243,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .reply-icon-btn:hover{background:var(--g100)}
 .reply-box textarea{flex:1;border:1.5px solid var(--g200);border-radius:20px;padding:9px 14px;font-size:14px;resize:none;outline:none;font-family:inherit;max-height:120px;min-height:40px;color:var(--g900);background:var(--g50)}
 .reply-box textarea:focus{border-color:var(--orange);background:#fff}
-.send-btn{width:40px;height:40px;background:var(--orange);color:#fff;border:none;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.send-btn{width:40px;height:40px;background:var(--orange);color:#fff;border:none;border-radius:50%;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.send-btn svg{width:17px;height:17px}
 .send-btn:hover{background:var(--orange-d)}
 .reply-disabled{padding:12px;background:var(--g50);border-top:1px solid var(--g200);text-align:center;font-size:13px;color:var(--g400);flex-shrink:0}
+.reply-disabled [data-icon]{display:inline-flex;vertical-align:-3px}
+.reply-disabled svg{width:15px;height:15px}
+.ai-perf-title [data-icon]{display:inline-flex;vertical-align:-3px}
+.ai-perf-title svg{width:17px;height:17px}
 /* BI Analyst read-only lock — beats whatever mode-based show/hide logic
    (updateChatUI etc.) is doing, since IDs always outrank classes here. */
 body.read-only-chat #replyArea{display:none!important}
@@ -248,7 +267,8 @@ body.read-only-chat #saveConvOwnerBtn,
 body.read-only-chat #noteInput,
 body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .img-attach-badge{display:none;align-items:center;gap:6px;padding:5px 14px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px;color:#92400e;font-weight:600}
-.img-attach-badge button{background:none;border:none;cursor:pointer;font-size:13px;color:#92400e;padding:0 2px;line-height:1}
+.img-attach-badge button{background:none;border:none;cursor:pointer;color:#92400e;padding:0 2px;line-height:1;display:inline-flex}
+.img-attach-badge button svg{width:13px;height:13px}
 
 /* Detail panel — hidden until the "Details" button is clicked, at any screen width */
 .detail-panel{width:300px;background:#fff;border-left:1px solid var(--g200);display:none;flex-direction:column;flex-shrink:0;overflow:hidden}
@@ -485,7 +505,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .ct-view-toggle button:not(:last-child){border-right:1px solid var(--border)}
 .ct-meta-cell{font-size:11px;line-height:1.5}
 .ct-meta-cell .by{color:var(--g400)}
-.ct-outreach-badge{font-size:11px;padding:2px 7px;border-radius:8px;font-weight:600;display:inline-block}
+.ct-outreach-badge{font-size:11px;padding:2px 7px;border-radius:8px;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+.ct-outreach-badge svg{width:10px;height:10px}
 .ct-outreach-badge.responded{background:var(--green-s);color:#15803d}
 .ct-outreach-badge.waiting{background:#fef3c7;color:#92400e}
 .ct-outreach-badge.none{background:var(--g100);color:var(--g400)}
@@ -502,6 +523,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .ct-pipe-card.dragging{opacity:.4}
 .ct-pipe-card-name{font-size:13px;font-weight:600;color:var(--g900);margin-bottom:2px}
 .ct-pipe-card-meta{font-size:11px;color:var(--g400)}
+.ct-pipe-card-meta svg{width:10px;height:10px;vertical-align:-1px;margin-right:1px}
 .ct-pipe-empty{font-size:12px;color:var(--g300);text-align:center;padding:14px 0}
 .stage-mgmt-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--g100)}
 .stage-mgmt-row input[type=color]{width:28px;height:28px;border:none;border-radius:6px;cursor:pointer;padding:0;background:none}
@@ -519,7 +541,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .vf-btn:hover{border-color:var(--orange);color:var(--orange)}
 .vf-btn.active{border-color:var(--orange);background:var(--orange-s);color:var(--orange)}
 /* Owner badge on conv item */
-.owner-chip{font-size:10px;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;font-weight:700;white-space:nowrap}
+.owner-chip{font-size:10px;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
+.owner-chip svg{width:9px;height:9px}
 /* Collapsible conv panel */
 .conv-panel{transition:width .2s ease}
 .conv-panel.collapsed{width:44px!important;min-width:44px}
@@ -553,7 +576,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .fd-hdr-title{flex:1;font-size:15px;font-weight:800;color:var(--g900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fd-back-btn{background:none;border:none;font-size:20px;font-weight:400;color:var(--orange);cursor:pointer;padding:0;font-family:inherit;flex-shrink:0;line-height:1}
 .fd-back-btn:hover{opacity:.7}
-.fd-close-btn{background:none;border:none;font-size:18px;cursor:pointer;color:var(--g400);padding:0;line-height:1;flex-shrink:0;margin-left:auto}
+.fd-close-btn{background:none;border:none;cursor:pointer;color:var(--g400);padding:0;line-height:1;flex-shrink:0;margin-left:auto;display:inline-flex}
+.fd-close-btn svg{width:15px;height:15px}
 .fd-close-btn:hover{color:var(--g900)}
 .fd-scroll{flex:1;overflow-y:auto}
 .fd-search-row{padding:10px 14px 8px;border-bottom:1px solid var(--g100);flex-shrink:0;background:#fff}
@@ -614,7 +638,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .rule-row-text{flex:1;font-size:13px;color:var(--g700);min-width:0}
 .rule-condition{color:var(--g500);font-size:12px}
 .rule-arrow{color:var(--orange);font-weight:700;margin:0 4px}
-.rule-assignee{font-weight:700;color:var(--g900)}
+.rule-assignee{font-weight:700;color:var(--g900);display:inline-flex;align-items:center;gap:3px}
+.rule-assignee svg{width:12px;height:12px}
 .assign-panel-sel{width:100%;padding:7px 10px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g800);background:#fff;outline:none}
 .assign-panel-sel:focus{border-color:var(--orange)}
 
@@ -633,7 +658,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .leads-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .date-inp{padding:6px 10px;border:1.5px solid var(--g200);border-radius:8px;font-size:12px;font-family:inherit;outline:none;color:var(--g700)}
 .date-inp:focus{border-color:var(--orange)}
-.btn-dl{padding:7px 14px;background:var(--g100);color:var(--g700);border:1.5px solid var(--g200);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-dl{padding:7px 14px;background:var(--g100);color:var(--g700);border:1.5px solid var(--g200);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+.btn-dl svg{width:12px;height:12px}
 .btn-dl:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
 .lead-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--g100)}
 .lead-row:last-child{border:none}
@@ -725,7 +751,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 <!-- Login -->
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <div class="login-logo">🤖</div>
+    <div class="login-logo"><span data-icon="robot"></span></div>
     <h2>Itura Admin</h2>
     <p>Sign in to manage conversations</p>
     <div id="loginFields">
@@ -756,7 +782,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 <!-- Invite registration screen (?token=... in the URL) -->
 <div class="login-screen hidden" id="registerScreen">
   <div class="login-card">
-    <div class="login-logo">🤖</div>
+    <div class="login-logo"><span data-icon="robot"></span></div>
     <h2>Set Up Your Account</h2>
     <p id="regWelcome">Loading your invite…</p>
     <div id="regLoadingFields"></div>
@@ -779,7 +805,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 <!-- Forgot password screen -->
 <div class="login-screen hidden" id="forgotScreen">
   <div class="login-card">
-    <div class="login-logo">🤖</div>
+    <div class="login-logo"><span data-icon="robot"></span></div>
     <h2>Reset Your Password</h2>
     <div id="forgotRequestFields">
       <p>Enter your email or WhatsApp number — if you have an account, we'll send a code.</p>
@@ -807,7 +833,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <!-- Sidebar -->
   <aside class="sidebar" id="appSidebar">
     <div class="sb-brand">
-      <div class="brand-logo">🤖</div>
+      <div class="brand-logo"><span data-icon="robot"></span></div>
       <span class="sb-brand-name">Itura</span>
       <button class="sb-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
     </div>
@@ -907,7 +933,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       </div>
       <div id="chatView" class="hidden" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
         <div class="chat-hdr">
-          <button class="chat-back-btn" onclick="closeChatMobile()">←</button>
+          <button class="chat-back-btn" onclick="closeChatMobile()"><span data-icon="arrowLeft"></span></button>
           <button class="leads-back-btn" onclick="closeLeadChatPanel()">← Back to Leads</button>
           <div class="chat-title-block">
             <div class="chat-name-row">
@@ -950,16 +976,16 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           </div>
           <div class="img-attach-badge" id="imgAttachBadge">
             🖼️ Product image will be sent
-            <button onclick="clearProductImage()" title="Remove image">✕</button>
+            <button onclick="clearProductImage()" title="Remove image"><span data-icon="close"></span></button>
           </div>
           <div class="reply-box">
             <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies">📋</button>
             <button class="reply-icon-btn" id="prodPickerBtn" onclick="toggleProdPicker()" title="Send Product">🛍️</button>
             <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
-            <button class="send-btn" onclick="sendReply()">➤</button>
+            <button class="send-btn" onclick="sendReply()"><span data-icon="send"></span></button>
           </div>
         </div>
-        <div class="reply-disabled hidden" id="replyDisabled">🤖 Bot is handling this — click "Take Over" to reply</div>
+        <div class="reply-disabled hidden" id="replyDisabled"><span data-icon="robot"></span> Bot is handling this — click "Take Over" to reply</div>
       </div>
     </main>
 
@@ -1081,7 +1107,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn-primary" style="background:var(--green)" onclick="runAutoAssign()">▶ Run Now</button>
-            <button class="btn-dl" onclick="toggleRulesPanel()">✕ Close</button>
+            <button class="btn-dl" onclick="toggleRulesPanel()"><span data-icon="close"></span> Close</button>
           </div>
         </div>
 
@@ -1193,7 +1219,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <div class="fd-drawer" id="ctDrawer" style="width:380px">
     <div class="fd-hdr">
       <span class="fd-hdr-title" id="ctDetailName">Contact</span>
-      <button class="fd-close-btn" onclick="closeContactDetail()">✕</button>
+      <button class="fd-close-btn" onclick="closeContactDetail()"><span data-icon="close"></span></button>
     </div>
     <div class="fd-scroll" id="ctDetailBody" style="padding:16px"></div>
   </div>
@@ -1325,7 +1351,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div id="anPanel-aiPerf" class="hidden">
       <div class="card">
         <div style="margin-bottom:16px">
-          <h3 style="margin:0 0 2px">🤖 AI Performance &amp; Conversational Quality</h3>
+          <h3 class="ai-perf-title" style="margin:0 0 2px"><span data-icon="robot"></span> AI Performance &amp; Conversational Quality</h3>
           <p style="font-size:12px;color:var(--g400);margin:0">How well the bot/agent handled customers — separate from lead qualification. Scored automatically once a conversation goes idle.</p>
           <p style="font-size:11px;color:var(--g300);margin:4px 0 0" title="An LLM reads each conversation and rates it 1-10 against these checks: did it repeat an already-answered question, ignore something the customer asked, accept a vague reply as an answer, recommend something irrelevant, reply unclearly, respond too slowly, or cause visible frustration? Any conversation flagged as likely losing the customer is automatically capped at 4/10.">ⓘ How this is scored — hover for details</p>
         </div>
@@ -1731,7 +1757,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <textarea id="aiInstEditor" class="ai-editor" placeholder="Loading…" oninput="onInstEdit()"></textarea>
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
             <button class="btn-primary" onclick="saveDraftInstruction()" id="aiInstSaveBtn" style="opacity:.4;pointer-events:none">Save as Draft</button>
-            <span id="aiInstSavedMsg" style="font-size:12px;color:var(--green);align-self:center;display:none">✓ Saved as draft</span>
+            <span id="aiInstSavedMsg" class="saved-draft-msg" style="font-size:12px;color:var(--green);align-self:center;display:none"><span data-icon="check"></span> Saved as draft</span>
           </div>
 
           <!-- Version history -->
@@ -2106,7 +2132,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div id="csvStep2" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span id="csvFileLabel" style="font-size:13px;font-weight:600;color:var(--g700)"></span>
-        <button class="btn-dl" onclick="resetCsvImport()">✕ Change file</button>
+        <button class="btn-dl" onclick="resetCsvImport()"><span data-icon="close"></span> Change file</button>
       </div>
       <div style="overflow-x:auto;margin-bottom:14px">
         <table class="agt-table" id="csvPreviewTable"></table>
@@ -2147,7 +2173,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 <!-- Image lightbox — click any chat image to enlarge -->
 <div class="modal-overlay hidden" id="lightboxOverlay" onclick="if(event.target===this)closeLightbox()" style="background:rgba(0,0,0,.85)">
   <img id="lightboxImg" src="" style="max-width:92vw;max-height:92vh;border-radius:8px;display:block;box-shadow:0 8px 40px rgba(0,0,0,.5)">
-  <button onclick="closeLightbox()" title="Close" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;line-height:1">✕</button>
+  <button class="lightbox-close-btn" onclick="closeLightbox()" title="Close" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center"><span data-icon="close"></span></button>
 </div>
 
 <!-- Product modal -->
@@ -2246,7 +2272,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div class="fd-panel">
       <div class="fd-hdr">
         <span class="fd-hdr-title">Filter Conversations</span>
-        <button class="fd-close-btn" onclick="closeFilterDrawer()">✕</button>
+        <button class="fd-close-btn" onclick="closeFilterDrawer()"><span data-icon="close"></span></button>
       </div>
       <div class="fd-scroll" id="fdListScroll"></div>
       <div class="fd-footer">
@@ -2259,7 +2285,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="fd-hdr">
         <button class="fd-back-btn" onclick="closeFDSub()">‹</button>
         <span class="fd-hdr-title" id="fdDetailTitle"></span>
-        <button class="fd-close-btn" onclick="closeFilterDrawer()">✕</button>
+        <button class="fd-close-btn" onclick="closeFilterDrawer()"><span data-icon="close"></span></button>
       </div>
       <div class="fd-op-row" id="fdOpRow" style="display:none"></div>
       <div class="fd-search-row">
@@ -2281,7 +2307,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div class="fd-panel">
       <div class="fd-hdr">
         <span class="fd-hdr-title">Filter Contacts</span>
-        <button class="fd-close-btn" onclick="closeBCFilterDrawer()">✕</button>
+        <button class="fd-close-btn" onclick="closeBCFilterDrawer()"><span data-icon="close"></span></button>
       </div>
       <div class="fd-scroll" id="bcFdListScroll"></div>
       <div class="fd-footer">
@@ -2294,7 +2320,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="fd-hdr">
         <button class="fd-back-btn" onclick="closeBCFDSub()">‹</button>
         <span class="fd-hdr-title" id="bcFdDetailTitle"></span>
-        <button class="fd-close-btn" onclick="closeBCFilterDrawer()">✕</button>
+        <button class="fd-close-btn" onclick="closeBCFilterDrawer()"><span data-icon="close"></span></button>
       </div>
       <div class="fd-op-row" id="bcFdOpRow" style="display:none"></div>
       <div class="fd-search-row" id="bcFdSearchRow">
@@ -2364,6 +2390,9 @@ const ICON = {
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h9a5 5 0 0 1 0 10h-3M5 8l4-4M5 8l4 4"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.2 7-12a7 7 0 0 0-14 0c0 4.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  checkdouble: '<svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8.5l4 4L14 3"/><path d="M8 8.5l4 4L23 3"/></svg>',
+  arrowLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.5L20 4l-6.5 16-3-6.5-6.5-3z"/><path d="M13.5 13.5L20 4"/></svg>',
 };
 function hydrateIcons(root){
   (root||document).querySelectorAll('[data-icon]').forEach(el=>{
@@ -3067,7 +3096,7 @@ function renderConversations(){
     const rn=displayName.replace(/'/g,"\\'");
     const avLetter=c.name?c.name[0].toUpperCase():'#';
     const tagPills=(c.tags||[]).map(t=>`<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${t.color}22;border:1px solid ${t.color};color:${t.color};font-weight:600;white-space:nowrap">${esc(t.name)}</span>`).join('');
-    const ownerChip=c.owner&&c.owner.name?`<span class="owner-chip">👤 ${esc(c.owner.name)}</span>`:'';
+    const ownerChip=c.owner&&c.owner.name?`<span class="owner-chip">${ICON.person} ${esc(c.owner.name)}</span>`:'';
     const urgency=unread>0?(c.mode==='agent'?'u-red':'u-amber'):'';
     return `<div class="conv-item ${selectedPhone===c.phone?'active':''}" onclick="selectConv('${c.phone}','${rn}','${c.mode}','${c.agent||''}')">
       <div class="c-av-wrap">
@@ -3088,10 +3117,10 @@ function renderConversations(){
             const tier=qs>=7?'sc-good':qs>=5?'sc-ok':'sc-bad';
             const issueTxt=esc((c.score.issues||[]).join(', ')||'AI response quality score');
             return atRisk
-              ?`<span class="badge-score sc-bad" title="AI flagged this conversation as at risk — ${issueTxt}">⚠ ${qs}/10</span>`
+              ?`<span class="badge-score sc-bad" title="AI flagged this conversation as at risk — ${issueTxt}">${ICON.warning} ${qs}/10</span>`
               :`<span class="badge-score ${tier}" title="AI response quality — ${issueTxt}">${qs}/10</span>`;
           })():''}
-          <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}" title="${c.mode==='bot'?'Bot is auto-replying':'Taken over — see the owner chip for who'}">${c.mode==='bot'?'🤖 Bot':'🤝 Taken Over'}</span>
+          <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}" title="${c.mode==='bot'?'Bot is auto-replying':'Taken over — see the owner chip for who'}">${c.mode==='bot'?ICON.robot+' Bot':ICON.handshake+' Taken Over'}</span>
           ${unread>0?`<span class="unread-pill">${unread}</span>`:''}
         </div>
       </div>
@@ -3466,13 +3495,13 @@ async function loadMessages(){
         const ds=m.delivery_status;
         if(ds==='failed'){
           const reason=m.delivery_error?esc(m.delivery_error):'Not delivered';
-          statusHtml=`<span class="msg-status msg-status-failed" title="${reason}">⚠ Not delivered</span>`;
+          statusHtml=`<span class="msg-status msg-status-failed" title="${reason}">${ICON.warning} Not delivered</span>`;
         }else if(ds==='read'){
-          statusHtml=`<span class="msg-status msg-status-read" title="Read">✓✓</span>`;
+          statusHtml=`<span class="msg-status msg-status-read" title="Read">${ICON.checkdouble}</span>`;
         }else if(ds==='delivered'){
-          statusHtml=`<span class="msg-status" title="Delivered">✓✓</span>`;
+          statusHtml=`<span class="msg-status" title="Delivered">${ICON.checkdouble}</span>`;
         }else{
-          statusHtml=`<span class="msg-status" title="Sent">✓</span>`;
+          statusHtml=`<span class="msg-status" title="Sent">${ICON.check}</span>`;
         }
       }
       parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span>${statusHtml}</div></div>`);
@@ -4044,9 +4073,9 @@ function renderAssignmentRules(){
       <div class="rule-row-text">
         <span class="rule-condition">${esc(condText)}</span>
         <span class="rule-arrow"> → </span>
-        <span class="rule-assignee">👤 ${esc(r.assign_to)}</span>
+        <span class="rule-assignee">${ICON.person} ${esc(r.assign_to)}</span>
       </div>
-      <button onclick="deleteAssignmentRule(${r.id})" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--g400);padding:2px 6px;flex-shrink:0" title="Delete rule">✕</button>
+      <button class="icon-only-btn" onclick="deleteAssignmentRule(${r.id})" style="background:none;border:none;cursor:pointer;color:var(--g400);padding:2px 6px;flex-shrink:0" title="Delete rule">${ICON.close}</button>
     </div>`;
   }).join('');
 }
@@ -4084,7 +4113,7 @@ async function runAutoAssign(){
   try{
     const r=await fetch(`/admin/assignment-rules/run?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
     const d=await r.json();
-    resEl.textContent='✓ '+d.message;resEl.style.display='block';
+    resEl.textContent=d.message;resEl.style.display='block';
     await loadLeads();
   }catch(e){resEl.textContent='Error running auto-assign.';resEl.style.color='#dc2626';resEl.style.display='block';}
   finally{btn.textContent=origText;btn.disabled=false;}
@@ -4371,8 +4400,8 @@ async function inviteMember(){
     ['newAgentName','newAgentEmail','newAgentPhone'].forEach(id=>document.getElementById(id).value='');
     if(resultEl){
       resultEl.innerHTML=d.whatsapp_sent
-        ?`<span style="color:var(--green)">✓ Invite sent to ${esc(name)} on WhatsApp.</span>`
-        :`<span style="color:var(--red)">⚠ Couldn't deliver via WhatsApp — share this link with them manually: <a href="${esc(d.invite_link)}" target="_blank">${esc(d.invite_link)}</a></span>`;
+        ?`<span class="invite-result-msg" style="color:var(--green)">${ICON.check} Invite sent to ${esc(name)} on WhatsApp.</span>`
+        :`<span class="invite-result-msg" style="color:var(--red)">${ICON.warning} Couldn't deliver via WhatsApp — share this link with them manually: <a href="${esc(d.invite_link)}" target="_blank">${esc(d.invite_link)}</a></span>`;
     }
     await loadAgentList();
   }else if(r){
@@ -4557,7 +4586,7 @@ async function togglePerm(role,tab,checkbox){
       body:JSON.stringify({permissions:{[role]:{[tab]:val}}})
     });
     if(!r.ok)throw new Error();
-    if(status){status.textContent='✓ Saved';status.style.color='var(--green)';setTimeout(()=>{if(status.textContent==='✓ Saved')status.textContent='';},2000);}
+    if(status){status.textContent='Saved';status.style.color='var(--green)';setTimeout(()=>{if(status.textContent==='Saved')status.textContent='';},2000);}
   }catch(e){
     _permMatrix[role][tab]=prev;
     checkbox.checked=prev!==false;
@@ -4622,7 +4651,7 @@ async function toggleRoutingField(field,value){
     });
     if(!r.ok)throw new Error();
     const cfg=await r.json();
-    if(status){status.textContent='✓ '+_routingStatusMsg(cfg);status.style.color='var(--green)';}
+    if(status){status.textContent=_routingStatusMsg(cfg);status.style.color='var(--green)';}
   }catch(e){
     if(status){status.textContent='⚠ Failed to save — please try again.';status.style.color='var(--red)';}
     await loadRoutingConfig();
@@ -5082,7 +5111,7 @@ async function saveSheet(){
       headers:{'Content-Type':'application/json'},body:JSON.stringify({products})});
     if(r.ok){
       const d=await r.json();
-      st.textContent=`✓ ${d.created} added, ${d.updated} updated`;
+      st.textContent=`${d.created} added, ${d.updated} updated`;
       st.style.color='var(--green)';
       document.getElementById('sheetBody').innerHTML='';initSheet();
       await loadProducts();
@@ -5154,7 +5183,7 @@ async function importFile(){
       headers:{'Content-Type':'application/json'},body:JSON.stringify({products:parsedFileProducts})});
     if(r.ok){
       const d=await r.json();
-      st.textContent=`✓ ${d.created} added, ${d.updated} updated`;st.style.color='var(--green)';
+      st.textContent=`${d.created} added, ${d.updated} updated`;st.style.color='var(--green)';
       parsedFileProducts=[];
       await loadProducts();
     }else{const e=await r.json().catch(()=>({}));st.textContent=e.detail||'Failed.';st.style.color='var(--red)';}
@@ -6023,7 +6052,7 @@ function ctMetaCell(iso,by){
   return `<div class="ct-meta-cell">${ctFmtDateTime(iso)}${by?`<br><span class="by">by ${esc(by)}</span>`:''}</div>`;
 }
 function ctOutreachBadge(c){
-  if(c.responded_at)return `<span class="ct-outreach-badge responded">✓ Responded ${timeAgo(c.responded_at)}</span>`;
+  if(c.responded_at)return `<span class="ct-outreach-badge responded">${ICON.check} Responded ${timeAgo(c.responded_at)}</span>`;
   if(c.last_outbound_at)return `<span class="ct-outreach-badge waiting">Sent ${timeAgo(c.last_outbound_at)}, no reply</span>`;
   return `<span class="ct-outreach-badge none">Not messaged</span>`;
 }
@@ -6116,7 +6145,7 @@ function renderContactsPipeline(){
       const ph=JSON.stringify(c.phone);
       return `<div class="ct-pipe-card" draggable="true" ondragstart='onPipeDragStart(event,${ph})' onclick='openContactDetail(${ph})'>
         <div class="ct-pipe-card-name">${esc(c.name||c.phone)}</div>
-        <div class="ct-pipe-card-meta">${esc(c.phone)}${c.owner?' · 👤 '+esc(c.owner):''}</div>
+        <div class="ct-pipe-card-meta">${esc(c.phone)}${c.owner?' · '+ICON.person+' '+esc(c.owner):''}</div>
       </div>`;
     }).join('')||'<div class="ct-pipe-empty">No contacts</div>';
     return `<div class="ct-pipe-col" ondragover="onPipeDragOver(event)" ondragleave="onPipeDragLeave(event)" ondrop="onPipeDrop(event,${s.id})">
@@ -7005,13 +7034,13 @@ async function loadAiPerformanceTab(){
         <tbody>${d.flagged.map(f=>{
           const ph=JSON.stringify(f.phone);
           const nm=JSON.stringify(f.name||f.phone);
-          const respIcon=f.responder_type==='bot'?'🤖 Bot':f.responder_type==='agent'?'👤 Agent':f.responder_type==='mixed'?'🤖👤 Both':'—';
+          const respIcon=f.responder_type==='bot'?ICON.robot+' Bot':f.responder_type==='agent'?ICON.person+' Agent':f.responder_type==='mixed'?ICON.robot+ICON.person+' Both':'—';
           return `<tr>
             <td style="font-weight:600">${esc(f.name||f.phone)}</td>
             <td><span style="font-weight:700;color:${f.quality_score>=5?'var(--orange)':'#ef4444'}">${f.quality_score}/10</span></td>
             <td style="font-size:12px;color:var(--g500)">${esc((f.issues||[]).map(t=>CQ_ISSUE_LABELS[t]||t).join(', ')||'—')}</td>
             <td style="font-size:12px;color:var(--g500);max-width:220px">${esc(f.reasoning||'—')}</td>
-            <td style="font-size:12px;white-space:nowrap">${respIcon}</td>
+            <td class="resp-icon-cell" style="font-size:12px;white-space:nowrap">${respIcon}</td>
             <td><button class="btn-dl" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick='switchTab("conv");setTimeout(()=>selectConv(${ph},${nm},"bot",""),50)'>Open Chat</button></td>
           </tr>`;
         }).join('')}</tbody>
