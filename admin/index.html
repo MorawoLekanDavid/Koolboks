@@ -40,6 +40,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .login-success{color:var(--green);font-size:13px;margin-bottom:12px;display:none;text-align:left;padding:10px 12px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0}
 .login-link{font-size:13px;color:var(--orange);cursor:pointer;text-align:center;margin-top:14px;font-weight:600}
 .login-link:hover{text-decoration:underline}
+.reset-steps{display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 0 20px}
+.reset-step{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--g400)}
+.reset-step-dot{width:20px;height:20px;border-radius:50%;background:var(--g100);color:var(--g400);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:background .2s,color .2s;flex-shrink:0}
+.reset-step.active{color:var(--g800)}
+.reset-step.active .reset-step-dot{background:var(--orange);color:#fff}
+.reset-step.done .reset-step-dot{background:var(--green);color:#fff}
+.reset-step-line{width:18px;height:1px;background:var(--g200);flex-shrink:0}
 
 /* ── App shell ── */
 .app-shell{display:flex;flex-direction:row;height:100vh}
@@ -780,20 +787,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <input type="password" id="loginKey" placeholder="Admin key (super admin only)"/>
       <div class="login-error" id="loginError"></div>
       <button class="login-btn" onclick="login()">Sign In</button>
-      <div style="display:flex;justify-content:space-between;gap:10px">
-        <div class="login-link" onclick="showChangePwForm()">Change Password</div>
-        <div class="login-link" onclick="showForgotScreen()">Forgot password?</div>
-      </div>
-    </div>
-    <div id="changePwFields" class="hidden">
-      <input type="email"    id="cpEmail"   placeholder="Email address" autocomplete="email"/>
-      <input type="password" id="cpOld"     placeholder="Current password" autocomplete="current-password"/>
-      <input type="password" id="cpNew"     placeholder="New password (at least 6 characters)" autocomplete="new-password"/>
-      <input type="password" id="cpConfirm" placeholder="Confirm new password" autocomplete="new-password"/>
-      <div class="login-error" id="cpError"></div>
-      <div class="login-success" id="cpSuccess"></div>
-      <button class="login-btn" id="cpSubmitBtn" onclick="submitLoginChangePassword()">Change Password</button>
-      <div class="login-link" onclick="showLoginForm()">Back to Sign In</div>
+      <div class="login-link" onclick="showForgotScreen()">Forgot password?</div>
     </div>
   </div>
 </div>
@@ -821,22 +815,35 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   </div>
 </div>
 
-<!-- Forgot password screen -->
+<!-- Forgot password screen — three explicit steps: email, then the code
+     alone, then (only once the code is verified) the new password. -->
 <div class="login-screen hidden" id="forgotScreen">
   <div class="login-card">
     <div class="login-logo"><span data-icon="robot"></span></div>
     <h2>Reset Your Password</h2>
+    <div class="reset-steps" id="forgotStepper">
+      <div class="reset-step active" data-step="1"><span class="reset-step-dot">1</span>Email</div>
+      <div class="reset-step-line"></div>
+      <div class="reset-step" data-step="2"><span class="reset-step-dot">2</span>Code</div>
+      <div class="reset-step-line"></div>
+      <div class="reset-step" data-step="3"><span class="reset-step-dot">3</span>Password</div>
+    </div>
     <div id="forgotRequestFields">
-      <p>Enter your email or WhatsApp number — if you have an account, we'll send a code.</p>
-      <input type="text" id="forgotIdentifier" placeholder="Email or WhatsApp number"/>
+      <p>Enter your email — if you have an account, we'll send a code to the WhatsApp number on file for it.</p>
+      <input type="email" id="forgotEmail" placeholder="Email address" autocomplete="email"/>
       <div class="login-error" id="forgotError"></div>
-      <div class="login-success" id="forgotSuccess"></div>
       <button class="login-btn" onclick="submitForgotPassword()">Send Code</button>
       <div class="login-link" onclick="showLoginForm()">Back to Sign In</div>
     </div>
+    <div id="forgotOtpFields" class="hidden">
+      <p id="forgotOtpMsg">Enter the 6-digit code we sent to your WhatsApp.</p>
+      <input type="text" id="forgotOtpCode" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+      <div class="login-error" id="forgotOtpError"></div>
+      <button class="login-btn" onclick="submitVerifyResetOtp()">Verify Code</button>
+      <div class="login-link" onclick="showForgotScreen()">Start over</div>
+    </div>
     <div id="forgotResetFields" class="hidden">
-      <p>Enter the code we sent and choose a new password.</p>
-      <input type="text"     id="forgotOtpCode"    placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+      <p>Code verified — choose a new password.</p>
       <input type="password" id="forgotNewPassword" placeholder="New password (at least 6 characters)" autocomplete="new-password"/>
       <input type="password" id="forgotNewPasswordConfirm" placeholder="Confirm new password" autocomplete="new-password"/>
       <div class="login-error" id="forgotResetError"></div>
@@ -2307,6 +2314,17 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div class="modal-field"><label>Name</label><div style="padding:6px 0;font-size:14px;color:var(--g900);font-weight:600" id="profileName"></div></div>
     <div class="modal-field"><label>Email</label><div style="padding:6px 0;font-size:14px;color:var(--g900)" id="profileEmail"></div></div>
     <div class="modal-field"><label>Role</label><div style="padding:6px 0;font-size:14px;color:var(--g900)" id="profileRole"></div></div>
+    <div style="border-top:1px solid var(--g100);margin:6px 0 4px;padding-top:14px">
+      <div class="login-link" style="text-align:left;margin-top:0" id="profilePwToggle" onclick="toggleProfilePwForm()">Change Password</div>
+      <div id="profilePwForm" class="hidden" style="margin-top:12px">
+        <div class="modal-field"><label>Current Password</label><input type="password" id="ppOld" autocomplete="current-password" style="width:100%;box-sizing:border-box"></div>
+        <div class="modal-field"><label>New Password</label><input type="password" id="ppNew" placeholder="At least 6 characters" autocomplete="new-password" style="width:100%;box-sizing:border-box"></div>
+        <div class="modal-field"><label>Confirm New Password</label><input type="password" id="ppConfirm" autocomplete="new-password" style="width:100%;box-sizing:border-box"></div>
+        <div class="login-error" id="ppErr" style="margin-bottom:10px"></div>
+        <div class="login-success" id="ppOk" style="margin-bottom:10px"></div>
+        <button class="btn-primary" id="ppSubmitBtn" style="width:100%" onclick="submitProfilePasswordChange()">Update Password</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn-primary" onclick="closeProfileModal()">Close</button>
     </div>
@@ -2502,9 +2520,13 @@ window.onload=async()=>{
   }
 };
 document.addEventListener('keydown',e=>{
-  if(e.key!=='Enter'||document.getElementById('loginScreen').classList.contains('hidden'))return;
-  if(document.getElementById('changePwFields').classList.contains('hidden'))login();
-  else submitLoginChangePassword();
+  if(e.key!=='Enter')return;
+  if(!document.getElementById('loginScreen').classList.contains('hidden')){login();return;}
+  if(!document.getElementById('forgotScreen').classList.contains('hidden')){
+    if(!document.getElementById('forgotRequestFields').classList.contains('hidden'))submitForgotPassword();
+    else if(!document.getElementById('forgotOtpFields').classList.contains('hidden'))submitVerifyResetOtp();
+    else if(!document.getElementById('forgotResetFields').classList.contains('hidden'))submitResetPassword();
+  }
 });
 
 // ── Auth ───────────────────────────────────────────────────────────────
@@ -2633,32 +2655,36 @@ async function toggleAway(checked){
   }
 }
 
-// ── Login-screen change password ────────────────────────────────────────
-function showChangePwForm(){
-  document.getElementById('loginFields').classList.add('hidden');
-  document.getElementById('changePwFields').classList.remove('hidden');
-  document.getElementById('cpError').style.display='none';
-  document.getElementById('cpSuccess').style.display='none';
-}
+// ── Login screen ─────────────────────────────────────────────────────────
 function showLoginForm(){
-  document.getElementById('changePwFields').classList.add('hidden');
-  document.getElementById('loginFields').classList.remove('hidden');
-  ['cpEmail','cpOld','cpNew','cpConfirm'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('registerScreen').classList.add('hidden');
   document.getElementById('forgotScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   // Drop the invite token from the URL so a refresh doesn't re-trigger it
   if(window.location.search.includes('token='))history.replaceState({},'',window.location.pathname);
 }
+// ── Forgot password (3 steps: email → code → new password) ─────────────
+let _resetEmail=null, _resetTicket=null;
+function _setResetStep(n){
+  document.querySelectorAll('#forgotStepper .reset-step').forEach(el=>{
+    const s=parseInt(el.dataset.step);
+    el.classList.toggle('active',s===n);
+    el.classList.toggle('done',s<n);
+  });
+}
 function showForgotScreen(){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('registerScreen').classList.add('hidden');
   document.getElementById('forgotScreen').classList.remove('hidden');
   document.getElementById('forgotRequestFields').classList.remove('hidden');
+  document.getElementById('forgotOtpFields').classList.add('hidden');
   document.getElementById('forgotResetFields').classList.add('hidden');
-  ['forgotIdentifier','forgotOtpCode','forgotNewPassword','forgotNewPasswordConfirm'].forEach(id=>document.getElementById(id).value='');
+  ['forgotEmail','forgotOtpCode','forgotNewPassword','forgotNewPasswordConfirm'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('forgotError').style.display='none';
-  document.getElementById('forgotSuccess').style.display='none';
+  document.getElementById('forgotOtpError').style.display='none';
+  document.getElementById('forgotResetError').style.display='none';
+  _resetEmail=null;_resetTicket=null;
+  _setResetStep(1);
 }
 
 // ── Invite registration ──────────────────────────────────────────────────
@@ -2720,23 +2746,39 @@ async function submitRegistrationOtp(){
   }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
 }
 
-// ── Forgot password ───────────────────────────────────────────────────────
-let _forgotIdentifier=null;
+// ── Forgot password (steps 1-3: request code → verify → set password) ──
 async function submitForgotPassword(){
-  const identifier=document.getElementById('forgotIdentifier').value.trim();
+  const email=document.getElementById('forgotEmail').value.trim();
   const err=document.getElementById('forgotError');
   err.style.display='none';
-  if(!identifier){err.textContent='Please enter your email or WhatsApp number.';err.style.display='block';return;}
+  if(!email){err.textContent='Please enter your email address.';err.style.display='block';return;}
   try{
-    const r=await fetch('/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email_or_phone:identifier})});
-    const d=await r.json().catch(()=>({}));
-    _forgotIdentifier=identifier;
+    await fetch('/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    // Same generic confirmation whether or not the email has an account —
+    // the API deliberately never says which, so the UI can't either.
+    _resetEmail=email;
+    document.getElementById('forgotOtpMsg').textContent=`If ${email} has an account, we sent a 6-digit code to the WhatsApp number on file for it.`;
     document.getElementById('forgotRequestFields').classList.add('hidden');
+    document.getElementById('forgotOtpFields').classList.remove('hidden');
+    _setResetStep(2);
+  }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
+}
+async function submitVerifyResetOtp(){
+  const otp_code=document.getElementById('forgotOtpCode').value.trim();
+  const err=document.getElementById('forgotOtpError');
+  err.style.display='none';
+  if(!otp_code){err.textContent='Please enter the code.';err.style.display='block';return;}
+  try{
+    const r=await fetch('/auth/verify-reset-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_resetEmail,otp_code})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=d.detail||'Incorrect or expired code.';err.style.display='block';return;}
+    _resetTicket=d.reset_ticket;
+    document.getElementById('forgotOtpFields').classList.add('hidden');
     document.getElementById('forgotResetFields').classList.remove('hidden');
+    _setResetStep(3);
   }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
 }
 async function submitResetPassword(){
-  const otp_code=document.getElementById('forgotOtpCode').value.trim();
   const new_password=document.getElementById('forgotNewPassword').value;
   const confirm=document.getElementById('forgotNewPasswordConfirm').value;
   const err=document.getElementById('forgotResetError');
@@ -2744,35 +2786,12 @@ async function submitResetPassword(){
   if(new_password.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
   if(new_password!==confirm){err.textContent='Passwords do not match.';err.style.display='block';return;}
   try{
-    const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email_or_phone:_forgotIdentifier,otp_code,new_password})});
+    const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset_ticket:_resetTicket,new_password})});
     const d=await r.json().catch(()=>({}));
-    if(!r.ok){err.textContent=d.detail||'Incorrect or expired code.';err.style.display='block';return;}
+    if(!r.ok){err.textContent=d.detail||'This reset session has expired. Please start over.';err.style.display='block';return;}
     alert('Password reset — please sign in with your new password.');
     showLoginForm();
   }catch(e){err.textContent='Connection error — please try again.';err.style.display='block';}
-}
-async function submitLoginChangePassword(){
-  const email=document.getElementById('cpEmail').value.trim();
-  const oldPw=document.getElementById('cpOld').value;
-  const newPw=document.getElementById('cpNew').value;
-  const confirmPw=document.getElementById('cpConfirm').value;
-  const errEl=document.getElementById('cpError'), okEl=document.getElementById('cpSuccess');
-  errEl.style.display='none';okEl.style.display='none';
-  if(!email||!oldPw||!newPw||!confirmPw){errEl.textContent='Please fill in all fields.';errEl.style.display='block';return;}
-  if(newPw.length<6){errEl.textContent='New password must be at least 6 characters.';errEl.style.display='block';return;}
-  if(newPw!==confirmPw){errEl.textContent='New passwords do not match.';errEl.style.display='block';return;}
-  const btn=document.getElementById('cpSubmitBtn');btn.disabled=true;btn.textContent='Saving…';
-  try{
-    const r=await fetch('/admin/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.toLowerCase(),old_password:oldPw,new_password:newPw})});
-    if(r.ok){
-      okEl.textContent='Password updated! You can now sign in.';okEl.style.display='block';
-      ['cpOld','cpNew','cpConfirm'].forEach(id=>document.getElementById(id).value='');
-    }else{
-      const e=await r.json().catch(()=>({}));
-      errEl.textContent=e.detail||'Failed to update password.';errEl.style.display='block';
-    }
-  }catch{errEl.textContent='Network error. Please try again.';errEl.style.display='block';}
-  finally{btn.disabled=false;btn.textContent='Change Password';}
 }
 
 // ── Profile modal ─────────────────────────────────────────────────────────
@@ -2784,6 +2803,43 @@ function openProfileModal(){
 }
 function closeProfileModal(){
   document.getElementById('profileModal').classList.add('hidden');
+  document.getElementById('profilePwForm').classList.add('hidden');
+  document.getElementById('profilePwToggle').textContent='Change Password';
+  ['ppOld','ppNew','ppConfirm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ppErr').style.display='none';
+  document.getElementById('ppOk').style.display='none';
+}
+function toggleProfilePwForm(){
+  const form=document.getElementById('profilePwForm');
+  const toggle=document.getElementById('profilePwToggle');
+  const showing=form.classList.contains('hidden');
+  form.classList.toggle('hidden',!showing);
+  toggle.textContent=showing?'Cancel':'Change Password';
+}
+async function submitProfilePasswordChange(){
+  const oldPw=document.getElementById('ppOld').value;
+  const newPw=document.getElementById('ppNew').value;
+  const confirmPw=document.getElementById('ppConfirm').value;
+  const errEl=document.getElementById('ppErr'), okEl=document.getElementById('ppOk');
+  errEl.style.display='none';okEl.style.display='none';
+  if(!oldPw||!newPw||!confirmPw){errEl.textContent='Please fill in all fields.';errEl.style.display='block';return;}
+  if(newPw.length<6){errEl.textContent='New password must be at least 6 characters.';errEl.style.display='block';return;}
+  if(newPw!==confirmPw){errEl.textContent='New passwords do not match.';errEl.style.display='block';return;}
+  const btn=document.getElementById('ppSubmitBtn');btn.disabled=true;btn.textContent='Saving…';
+  try{
+    const r=await fetch(`/admin/change-password?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({old_password:oldPw,new_password:newPw})
+    });
+    if(r.ok){
+      okEl.textContent='Password updated.';okEl.style.display='block';
+      ['ppOld','ppNew','ppConfirm'].forEach(id=>document.getElementById(id).value='');
+    }else{
+      const e=await r.json().catch(()=>({}));
+      errEl.textContent=e.detail||'Failed to update password.';errEl.style.display='block';
+    }
+  }catch{errEl.textContent='Network error. Please try again.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Update Password';}
 }
 
 // ── Conv view filter ───────────────────────────────────────────────────

@@ -24,6 +24,7 @@ router = APIRouter(tags=["invite-auth"])
 INVITE_TOKEN_TTL_HOURS = 24
 REGISTRATION_OTP_TTL = 300   # 5 min
 RESET_OTP_TTL = 900          # 15 min
+RESET_TICKET_TTL = 600       # 10 min — window to actually set a new password after the code is verified
 MAX_OTP_ATTEMPTS = 5
 MAX_RESET_REQUESTS_PER_WINDOW = 3
 
@@ -90,16 +91,9 @@ async def _purge_sessions_for_agent(agent_id: int) -> None:
             await redis_client.client.delete(key)
 
 
-def _lookup_by_identifier(db, identifier: str):
-    identifier = identifier.strip()
-    q = db.query(Agent).filter(Agent.is_active == True)
-    if "@" in identifier:
-        return q.filter(func.lower(Agent.email) == identifier.lower()).first()
-    try:
-        norm = normalize_phone(identifier)
-    except Exception:
-        return None
-    return q.filter(Agent.phone_number == norm).first()
+def _lookup_by_email(db, email: str):
+    email = email.strip().lower()
+    return db.query(Agent).filter(func.lower(Agent.email) == email, Agent.is_active == True).first()
 
 
 # ── Admin: invite a new member ───────────────────────────────────────────
@@ -306,9 +300,17 @@ async def verify_registration_otp(body: VerifyOtpIn):
 
 
 # ── Public: forgot password ──────────────────────────────────────────────
+# Three explicit steps, each gating the next: (1) identify by email — never
+# by a raw phone number typed in, so recovering an account always means
+# proving you own the WhatsApp number already on file for THAT email, not
+# whichever account happens to have the number you typed; (2) verify the
+# code, and only the code — no password fields exist yet at this point;
+# (3) once verified, a short-lived reset ticket (not the OTP itself) is
+# what authorizes actually setting the new password, so the code can't be
+# reused and the password step can't be reached by guessing without it.
 
 class ForgotPasswordIn(BaseModel):
-    email_or_phone: str
+    email: str
 
 
 @router.post("/auth/forgot-password")
@@ -316,7 +318,7 @@ async def forgot_password(body: ForgotPasswordIn):
     def _lookup():
         db = get_db()
         try:
-            return _lookup_by_identifier(db, body.email_or_phone)
+            return _lookup_by_email(db, body.email)
         finally:
             db.close()
 
@@ -324,7 +326,7 @@ async def forgot_password(body: ForgotPasswordIn):
 
     # Always the same generic response whether or not the account exists —
     # this endpoint must not leak who's registered.
-    generic = {"ok": True, "message": "If that account exists, a verification code has been sent to its WhatsApp number."}
+    generic = {"ok": True, "message": "If that email is registered, we've sent a verification code to the WhatsApp number on file for it."}
 
     if not agent or not agent.phone_number or not redis_client.client:
         return generic
@@ -342,41 +344,70 @@ async def forgot_password(body: ForgotPasswordIn):
     return generic
 
 
-class ResetPasswordIn(BaseModel):
-    email_or_phone: str
+class VerifyResetOtpIn(BaseModel):
+    email: str
     otp_code: str
-    new_password: str
 
 
-@router.post("/auth/reset-password")
-async def reset_password(body: ResetPasswordIn):
-    if len(body.new_password) < 6:
-        raise HTTPException(400, "New password must be at least 6 characters.")
-
+@router.post("/auth/verify-reset-otp")
+async def verify_reset_otp(body: VerifyResetOtpIn):
+    """Step 2: confirms the code alone — no password involved yet. Success
+    hands back a one-time reset ticket; the password step (below) accepts
+    only that ticket, not the OTP, so the code can't be replayed."""
     def _lookup():
         db = get_db()
         try:
-            return _lookup_by_identifier(db, body.email_or_phone)
+            return _lookup_by_email(db, body.email)
         finally:
             db.close()
 
     agent = await run_in_threadpool(_lookup)
     if not agent:
-        raise HTTPException(400, "Invalid code or account.")
+        raise HTTPException(403, "Incorrect code.")
 
     ok, err = await _check_otp("password_reset", agent.id, body.otp_code)
     if not ok:
         raise HTTPException(403, err)
 
+    ticket = secrets.token_urlsafe(32)
+    if redis_client.client:
+        await redis_client.client.set(f"koolbuy:password_reset_ticket:{ticket}", str(agent.id), ex=RESET_TICKET_TTL)
+    return {"ok": True, "reset_ticket": ticket}
+
+
+class ResetPasswordIn(BaseModel):
+    reset_ticket: str
+    new_password: str
+
+
+@router.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordIn):
+    """Step 3: only reachable with a ticket from a just-verified code —
+    shown to the user only after step 2 succeeds, so there's nothing on
+    screen to set a password with until identity is actually confirmed."""
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters.")
+    if not redis_client.client:
+        raise HTTPException(503, "Service temporarily unavailable — please try again shortly.")
+
+    ticket_key = f"koolbuy:password_reset_ticket:{body.reset_ticket}"
+    agent_id_raw = await redis_client.client.get(ticket_key)
+    if not agent_id_raw:
+        raise HTTPException(400, "This reset session has expired. Please start over.")
+    await redis_client.client.delete(ticket_key)
+    agent_id = int(agent_id_raw)
+
     def _update():
         db = get_db()
         try:
-            a = db.query(Agent).filter(Agent.id == agent.id).first()
+            a = db.query(Agent).filter(Agent.id == agent_id).first()
+            if not a:
+                raise HTTPException(400, "Account not found.")
             a.password_hash = hash_password(body.new_password)
             db.commit()
         finally:
             db.close()
 
     await run_in_threadpool(_update)
-    await _purge_sessions_for_agent(agent.id)
+    await _purge_sessions_for_agent(agent_id)
     return {"ok": True}

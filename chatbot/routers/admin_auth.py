@@ -369,21 +369,32 @@ async def delete_agent(agent_id: int, ctx: dict = Depends(require_admin)):
 
 
 class ChangePasswordRequest(BaseModel):
-    email: str
     old_password: str
     new_password: str
 
 
 @router.post("/change-password")
-async def change_password(body: ChangePasswordRequest):
-    """Self-service password change from the login screen — proof of identity
-    is the current password, so no active session is required."""
+async def change_password(body: ChangePasswordRequest, ctx: dict = Depends(get_admin_ctx)):
+    """Self-service password change for someone already signed in — lives in
+    the Profile menu, not the login screen. Requiring an active session (on
+    top of the current password) means this can only ever touch the caller's
+    own account; a public, logged-out version of this same form accepted an
+    email address as free input, which both let anyone probe which emails
+    have accounts (404 "Account not found" vs 403 "Current password is
+    incorrect" gave that away) and served no purpose Forgot Password didn't
+    already cover for someone who isn't signed in."""
     if len(body.new_password) < 6:
         raise HTTPException(400, "New password must be at least 6 characters.")
     db = get_db()
     try:
-        email = body.email.strip().lower()
-        agent = db.query(Agent).filter(func.lower(Agent.email) == email).first()
+        agent_id = ctx.get("agent_id")
+        if agent_id:
+            agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        else:
+            # super_admin signed in via the bare admin key has no agent_id in
+            # its session — fall back to the email get_admin_ctx resolved.
+            email = (ctx.get("email") or "").lower()
+            agent = db.query(Agent).filter(func.lower(Agent.email) == email).first() if email else None
         if not agent or not agent.password_hash:
             raise HTTPException(404, "Account not found.")
         if not verify_password(body.old_password, agent.password_hash):
