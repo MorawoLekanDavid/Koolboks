@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from typing import Optional
 
@@ -445,9 +446,12 @@ async def update_agent_phone(agent_id: int, body: AgentPhoneUpdate, ctx: dict = 
     it carries the same admin/super_admin restriction as reset-password
     above (otherwise a regular admin could redirect another admin's
     recovery number to one they control and take the account over)."""
-    try:
-        norm = normalize_phone(body.phone_number)
-    except Exception:
+    # normalize_phone() deliberately falls back to returning its input
+    # unchanged when nothing matches (fine for its other, more lenient
+    # callers) — it never raises, so garbage in means garbage right back
+    # out unless the result is checked against the real E.164 shape here.
+    norm = normalize_phone(body.phone_number)
+    if not re.fullmatch(r"\+234[789]\d{9}", norm):
         raise HTTPException(400, "That doesn't look like a valid phone number.")
     db = get_db()
     try:
