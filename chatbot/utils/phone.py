@@ -28,8 +28,11 @@ def strict_normalize_phone(phone: str) -> str:
     its other callers (e.g. a WhatsApp webhook's `from`, which is already a
     real number just possibly in an odd shape) — it's wrong for a human
     typing a number into a form (invites, admin-edited contact info), where
-    garbage needs to be rejected outright instead of stored verbatim."""
-    norm = normalize_phone(phone)
+    garbage needs to be rejected outright instead of stored verbatim.
+    Strips spaces/dashes/parens first — "0902 995 1974" is a completely
+    normal way to type a real number, not something to reject."""
+    cleaned = re.sub(r"[\s\-()]", "", phone.strip())
+    norm = normalize_phone(cleaned)
     if not re.fullmatch(r"\+234[789]\d{9}", norm):
         raise ValueError(f"Not a valid Nigerian phone number: {phone!r}")
     return norm
