@@ -21,6 +21,20 @@ def normalize_phone(phone: str) -> str:
     return '+234' + digits
 
 
+def strict_normalize_phone(phone: str) -> str:
+    """Like normalize_phone, but raises ValueError instead of silently
+    handing back the input unchanged when it doesn't resolve to a real
+    Nigerian E.164 number. normalize_phone's fallback behavior is right for
+    its other callers (e.g. a WhatsApp webhook's `from`, which is already a
+    real number just possibly in an odd shape) — it's wrong for a human
+    typing a number into a form (invites, admin-edited contact info), where
+    garbage needs to be rejected outright instead of stored verbatim."""
+    norm = normalize_phone(phone)
+    if not re.fullmatch(r"\+234[789]\d{9}", norm):
+        raise ValueError(f"Not a valid Nigerian phone number: {phone!r}")
+    return norm
+
+
 def extract_valid_phone(text: str) -> Optional[str]:
     m = PHONE_RE.search(text)
     if not m:
