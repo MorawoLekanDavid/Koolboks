@@ -108,7 +108,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .status-dot.away{background:#f59e0b}
 .sb-notif{display:flex;align-items:center;justify-content:space-between;padding:4px 8px}
 .notif-wrap{position:relative;cursor:pointer;display:inline-flex}
-.notif-icon{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px}
+.notif-icon{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.notif-icon svg{width:15px;height:15px}
 .notif-badge{position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:1px 4px;border-radius:10px;min-width:14px;text-align:center}
 .sb-logout{padding:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--sidebar-text);text-align:center;transition:all .15s;width:100%}
 .sb-logout:hover{background:rgba(255,107,0,.18);border-color:var(--orange);color:var(--orange)}
@@ -267,6 +268,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .qa-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
 .reply-box{display:flex;align-items:flex-end;gap:8px;padding:10px 14px;background:#fff;border-top:1px solid var(--g200);flex-shrink:0}
 .reply-icon-btn{width:36px;height:36px;background:none;border:none;font-size:18px;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.reply-icon-btn svg{width:18px;height:18px}
 .reply-icon-btn:hover{background:var(--g100)}
 .reply-box textarea{flex:1;border:1.5px solid var(--g200);border-radius:20px;padding:9px 14px;font-size:14px;resize:none;outline:none;font-family:inherit;max-height:120px;min-height:40px;color:var(--g900);background:var(--g50)}
 .reply-box textarea:focus{border-color:var(--orange);background:#fff}
@@ -327,7 +329,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 /* Activity tab */
 .act-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--g100)}
 .act-item:last-child{border:none}
-.act-icon{width:32px;height:32px;border-radius:50%;background:var(--orange-s);color:var(--orange);font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.act-icon{width:32px;height:32px;border-radius:50%;background:var(--orange-s);color:var(--orange);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.act-icon svg{width:15px;height:15px}
 .act-body{flex:1}
 .act-label{font-size:12px;font-weight:600;color:var(--g700)}
 .act-time{font-size:11px;color:var(--g400);margin-top:2px}
@@ -379,7 +382,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 /* File upload */
 .file-drop{border:2px dashed var(--g200);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .15s}
 .file-drop:hover,.file-drop.drag-over{border-color:var(--orange);background:var(--orange-s)}
-.file-drop-icon{font-size:32px;margin-bottom:8px}
+.file-drop-icon{margin-bottom:8px;color:var(--g400)}
+.file-drop-icon svg{width:32px;height:32px}
 .file-drop-text{font-size:14px;font-weight:600;color:var(--g700)}
 .file-drop-sub{font-size:12px;color:var(--g400);margin-top:4px}
 .preview-table-wrap{overflow-x:auto;max-height:260px;overflow-y:auto;border:1px solid var(--g200);border-radius:8px;margin-top:16px}
@@ -893,7 +897,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <span class="notif-badge hidden" id="notifCount">0</span>
         </div>
         <div class="notif-wrap" onclick="toggleSound()" title="Sound notifications on — click to mute">
-          <div class="notif-icon" id="soundToggleBtn">🔊</div>
+          <div class="notif-icon" id="soundToggleBtn" data-icon="soundOn"></div>
         </div>
       </div>
       <div class="sb-user">
@@ -985,7 +989,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <button class="detail-toggle" onclick="toggleDetailPanel()" id="detailToggleBtn"><span data-icon="person"></span>Details</button>
           </div>
           <button class="handoff-btn take-over" id="handoffBtn" onclick="toggleHandoff()"><span data-icon="person"></span>Take Over</button>
-          <button class="handoff-btn take-over" id="sendTmplBtn" data-permtab="templates" onclick="openSendTemplateModal()" style="background:var(--g700);margin-left:6px">📨 Template</button>
+          <button class="handoff-btn take-over" id="sendTmplBtn" data-permtab="templates" onclick="openSendTemplateModal()" style="background:var(--g700);margin-left:6px"><span class="icon-sm" data-icon="send"></span>Template</button>
         </div>
         <!-- Tag bar -->
         <div id="chatTagBar" style="padding:6px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-height:36px;background:var(--surface)">
@@ -1014,7 +1018,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <button onclick="clearProductImage()" title="Remove image"><span data-icon="close"></span></button>
           </div>
           <div class="reply-box">
-            <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies">📋</button>
+            <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies"><span data-icon="clipboard"></span></button>
             <button class="reply-icon-btn" id="prodPickerBtn" onclick="toggleProdPicker()" title="Send Product">🛍️</button>
             <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
             <button class="send-btn" onclick="sendReply()"><span data-icon="send"></span></button>
@@ -1199,9 +1203,9 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <p style="font-size:12px;color:var(--g400)">Outreach contacts — added manually or imported from CSV</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn-dl" onclick="openStageManageModal()">⚙ Manage Stages</button>
+          <button class="btn-dl" onclick="openStageManageModal()"><span data-icon="gear"></span>Manage Stages</button>
           <button class="btn-dl" onclick="exportContactsCsv()"><span data-icon="download"></span>Export CSV</button>
-          <button class="btn-dl" onclick="openImportCsvModal()">⬆ Import CSV</button>
+          <button class="btn-dl" onclick="openImportCsvModal()"><span data-icon="upload"></span>Import CSV</button>
           <button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
         </div>
       </div>
@@ -1233,7 +1237,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <select id="ctBulkTagSel" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
             <option value="">Add tag…</option>
           </select>
-          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="bulkTagContacts()">🏷 Tag Selected</button>
+          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="bulkTagContacts()"><span data-icon="tag"></span>Tag Selected</button>
           <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="exportContactsCsv(true)"><span data-icon="download"></span>Export Selected</button>
           <button class="btn-danger" style="padding:5px 12px;font-size:12px" onclick="bulkDeleteContacts()">Delete Selected</button>
           <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="clearContactSelection()">Cancel</button>
@@ -1262,7 +1266,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <!-- Stage management modal -->
   <div class="modal-overlay hidden" id="stageMgmtModal" onclick="if(event.target===this)closeStageManageModal()">
     <div class="modal" style="max-width:440px">
-      <h3>⚙ Manage Stages</h3>
+      <h3><span class="modal-icon" data-icon="gear"></span>Manage Stages</h3>
       <p style="font-size:12px;color:var(--g400);margin-bottom:14px">These are the outreach pipeline stages contacts move through. Renaming a stage updates every contact already in it.</p>
       <div id="stageMgmtList"></div>
       <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
@@ -1336,7 +1340,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
           <div>
-            <h3 style="margin:0 0 2px">🕐 Shift &amp; Login Tracker</h3>
+            <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="clock"></span>Shift &amp; Login Tracker</h3>
             <p style="font-size:12px;color:var(--g400);margin:0">Presence, idle time, and login/device audit for a single day</p>
           </div>
           <input type="date" id="shiftDatePicker" onchange="loadShiftTrackerTab()" style="font-size:12px;padding:5px 8px;border:1px solid var(--g200);border-radius:6px;color:var(--g700);font-family:inherit">
@@ -1408,7 +1412,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 
         <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
 
-        <p class="an-section-lbl">⚠ Flagged — Likely Lost Customers</p>
+        <p class="an-section-lbl" style="display:flex;align-items:center;gap:6px"><span class="icon-sm" data-icon="warning"></span>Flagged — Likely Lost Customers</p>
         <div id="aiPerfFlaggedList" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
       </div>
     </div>
@@ -1522,7 +1526,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="tmpl-grid hidden" id="tmplGrid"></div>
       <div id="tmplEmpty" class="hidden">
         <div class="ui-empty">
-          <div class="ui-empty-icon">📨</div>
+          <div class="ui-empty-icon" data-icon="send"></div>
           <div class="ui-empty-title">No templates yet</div>
           <div class="ui-empty-sub">Create one above and Meta will need to approve it before it can be sent.</div>
         </div>
@@ -1534,7 +1538,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <div id="broadcastTab" class="tab-full hidden">
     <div class="bulk-tabs tmpl-subnav" id="msgSubNavBroadcast">
       <button class="bulk-tab active" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="send"></span>Broadcast</button>
-      <button class="bulk-tab" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
+      <button class="bulk-tab" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="save"></span>Canned Responses</button>
     </div>
     <div class="card">
       <div style="margin-bottom:8px">
@@ -1552,8 +1556,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <!-- Step 1: Audience -->
       <div id="bbStepAudience">
         <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;max-width:420px">
-          <button id="bbModePhone" onclick="setBBMode('phone')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--orange);color:#fff;border:none;cursor:pointer">📋 Phone List</button>
-          <button id="bbModeContacts" onclick="setBBMode('contacts')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--surface);color:var(--g600);border:none;cursor:pointer;border-left:1px solid var(--border)">👥 From Contacts</button>
+          <button id="bbModePhone" onclick="setBBMode('phone')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--orange);color:#fff;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px"><span class="icon-sm" data-icon="clipboard"></span>Phone List</button>
+          <button id="bbModeContacts" onclick="setBBMode('contacts')" style="flex:1;padding:8px;font-size:13px;font-weight:600;background:var(--surface);color:var(--g600);border:none;cursor:pointer;border-left:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;gap:6px"><span class="icon-sm" data-icon="users"></span>From Contacts</button>
         </div>
 
         <div id="bbPhonePanel" style="max-width:500px">
@@ -1671,7 +1675,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <div id="cannedTab" class="tab-full hidden">
     <div class="bulk-tabs tmpl-subnav" id="msgSubNavCanned">
       <button class="bulk-tab" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="send"></span>Broadcast</button>
-      <button class="bulk-tab active" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
+      <button class="bulk-tab active" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="save"></span>Canned Responses</button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -1774,7 +1778,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         <div class="bulk-tabs" style="margin-bottom:16px">
           <button class="bulk-tab active" id="aiTabInstBtn" onclick="switchAISubTab('inst')">AI Instructions</button>
           <button class="bulk-tab" id="aiTabKBBtn" onclick="switchAISubTab('kb')">Knowledge Base</button>
-          <button class="bulk-tab" id="aiTabTagsBtn" onclick="switchAISubTab('tags')">🏷 Tags</button>
+          <button class="bulk-tab" id="aiTabTagsBtn" onclick="switchAISubTab('tags')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="tag"></span>Tags</button>
         </div>
 
         <!-- Go Live banner -->
@@ -1836,7 +1840,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <div id="kbLiveList" class="kb-doc-list"></div>
           </div>
           <div id="kbDraftSection" style="margin-top:14px">
-            <div class="kb-section-lbl">📝 Draft (will go live on publish)</div>
+            <div class="kb-section-lbl"><span class="kb-section-icon" data-icon="pencil"></span>Draft (will go live on publish)</div>
             <div id="kbDraftList" class="kb-doc-list"></div>
           </div>
           <div id="kbTrashSection" style="margin-top:14px">
@@ -1985,7 +1989,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
         <div>
-          <h3 style="margin:0 0 2px">💰 Groq Usage &amp; Cost</h3>
+          <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="banknote"></span>Groq Usage &amp; Cost</h3>
           <p style="font-size:12px;color:var(--g400);margin:0">Token usage and estimated spend across every AI call — chat replies, lead extraction, conversation scoring, follow-ups, auto-tagging, and test chat.</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -2066,7 +2070,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         <!-- File upload -->
         <div id="bulkFile" class="hidden">
           <div class="file-drop" id="fileDrop" onclick="document.getElementById('fileInput').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragleave="this.classList.remove('drag-over')">
-            <div class="file-drop-icon">📂</div>
+            <div class="file-drop-icon" data-icon="folder"></div>
             <div class="file-drop-text">Click to choose or drag & drop a file</div>
             <div class="file-drop-sub">Supports CSV and Excel (.xlsx, .xls)</div>
             <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(this.files[0])"/>
@@ -2201,12 +2205,12 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 <!-- Import CSV modal -->
 <div class="modal-overlay hidden" id="importCsvModal" onclick="if(event.target===this)closeImportCsvModal()">
   <div class="modal" style="max-width:560px">
-    <h3>⬆ Import Contacts from CSV</h3>
+    <h3><span class="modal-icon" data-icon="upload"></span>Import Contacts from CSV</h3>
     <p style="font-size:12px;color:var(--g400);margin-bottom:16px">Upload a spreadsheet with a header row. Columns are matched by name — supported headers: <strong>name, phone, product_interest, amount, payment_plan, address</strong> (case-insensitive).</p>
 
     <div id="csvStep1">
       <label style="display:block;border:2px dashed var(--g200);border-radius:10px;padding:24px;text-align:center;cursor:pointer;color:var(--g400)" id="csvDropZone">
-        <div style="font-size:28px;margin-bottom:6px">📂</div>
+        <div class="file-drop-icon" data-icon="folder" style="margin-bottom:6px"></div>
         <div style="font-size:13px">Click to choose a CSV file</div>
         <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none" onchange="onCsvFileChosen(event)">
       </label>
@@ -2506,6 +2510,10 @@ const ICON = {
   arrowLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.5L20 4l-6.5 16-3-6.5-6.5-3z"/><path d="M13.5 13.5L20 4"/></svg>',
   sparkle: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z"/></svg>',
+  soundOn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12"/></svg>',
+  soundOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 5M21 9l-5 5"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10l6-3.5v11l-6-3.5"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg>',
   inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M4 12l1.5-7A1.5 1.5 0 0 1 7 4h10a1.5 1.5 0 0 1 1.5 1l1.5 7"/><path d="M4 12v6a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 18v-6"/></svg>',
 };
 function hydrateIcons(root){
@@ -4225,9 +4233,9 @@ async function loadLeadDetails(phone){
       <div class="act-stat"><div class="act-stat-n">${act.total_messages||0}</div><div class="act-stat-l">Messages</div></div>
       <div class="act-stat"><div class="act-stat-n" style="font-size:13px;padding-top:4px">${lead.active_duration||'-'}</div><div class="act-stat-l">Active Time</div></div>`;
     document.getElementById('actList').innerHTML=`
-      <div class="act-item"><div class="act-icon">🕐</div><div class="act-body"><div class="act-label">First seen</div><div class="act-time">${fmt(act.first_seen)}</div></div></div>
-      <div class="act-item"><div class="act-icon">📅</div><div class="act-body"><div class="act-label">Last message</div><div class="act-time">${fmt(act.last_seen)}</div></div></div>
-      <div class="act-item"><div class="act-icon">📋</div><div class="act-body"><div class="act-label">Lead captured</div><div class="act-time">${fmt(lead.created_at)}</div></div></div>`;
+      <div class="act-item"><div class="act-icon">${ICON.clock}</div><div class="act-body"><div class="act-label">First seen</div><div class="act-time">${fmt(act.first_seen)}</div></div></div>
+      <div class="act-item"><div class="act-icon">${ICON.calendar}</div><div class="act-body"><div class="act-label">Last message</div><div class="act-time">${fmt(act.last_seen)}</div></div></div>
+      <div class="act-item"><div class="act-icon">${ICON.clipboard}</div><div class="act-body"><div class="act-label">Lead captured</div><div class="act-time">${fmt(lead.created_at)}</div></div></div>`;
 
   }catch(e){ed.classList.remove('hidden');dc.classList.add('hidden');ed.textContent='Could not load lead details.';}
 }
@@ -4966,7 +4974,7 @@ async function togglePerm(role,tab,checkbox){
   }catch(e){
     _permMatrix[role][tab]=prev;
     checkbox.checked=prev!==false;
-    if(status){status.textContent='⚠ Save failed';status.style.color='var(--red)';}
+    if(status){status.textContent='Save failed';status.style.color='var(--red)';}
     alert('Failed to save this change — please try again.');
   }finally{
     checkbox.disabled=false;
@@ -5029,7 +5037,7 @@ async function toggleRoutingField(field,value){
     const cfg=await r.json();
     if(status){status.textContent=_routingStatusMsg(cfg);status.style.color='var(--green)';}
   }catch(e){
-    if(status){status.textContent='⚠ Failed to save — please try again.';status.style.color='var(--red)';}
+    if(status){status.textContent='Failed to save — please try again.';status.style.color='var(--red)';}
     await loadRoutingConfig();
   }
 }
@@ -5044,7 +5052,7 @@ function renderAiInstStatusSub(live,draft){
   const liveLine=_aiLiveInfo
     ?`🟢 Live: v${_aiLiveInfo.version} · published ${fmt(_aiLiveInfo.created_at)} by ${esc(_aiLiveInfo.created_by||'—')}`
     :'⚪ Nothing published yet';
-  const draftLine=draft?`<br>📝 Draft: v${draft.version} · not yet published`:'';
+  const draftLine=draft?`<br>${iconText('pencil',`Draft: v${draft.version} · not yet published`)}`:'';
   el.innerHTML=liveLine+draftLine;
 }
 
@@ -5619,7 +5627,7 @@ function toggleSound(){
 function _syncSoundToggleUI(){
   const btn=document.getElementById('soundToggleBtn');
   const wrap=btn?.closest('.notif-wrap');
-  if(btn)btn.textContent=soundEnabled?'🔊':'🔇';
+  if(btn)btn.innerHTML=ICON[soundEnabled?'soundOn':'soundOff'];
   if(wrap)wrap.title=soundEnabled?'Sound notifications on — click to mute':'Sound notifications muted — click to unmute';
 }
 
@@ -7368,7 +7376,7 @@ async function loadAiPerformanceTab(){
 
     const issueEntries=Object.entries(d.issue_counts||{}).sort((a,b)=>b[1]-a[1]);
     if(!issueEntries.length){
-      donutEl.innerHTML='<p style="color:var(--g400);font-size:13px">No issues flagged 🎉</p>';
+      donutEl.innerHTML=`<p style="color:var(--g400);font-size:13px">${iconText('check','No issues flagged')}</p>`;
     } else {
       donutEl.innerHTML='<canvas id="aiPerfDonut" height="220"></canvas>';
       const n=issueEntries.length;
@@ -7403,7 +7411,7 @@ async function loadAiPerformanceTab(){
     }
 
     if(!d.flagged||!d.flagged.length){
-      flaggedEl.innerHTML='<p style="color:var(--g400);font-size:13px">No conversations flagged as at-risk 🎉</p>';
+      flaggedEl.innerHTML=`<p style="color:var(--g400);font-size:13px">${iconText('check','No conversations flagged as at-risk')}</p>`;
     } else {
       flaggedEl.innerHTML=`<table class="agt-table" style="width:100%">
         <thead><tr><th>Customer</th><th>Score</th><th>Issues</th><th>Reasoning</th><th>Handled by</th><th></th></tr></thead>
@@ -7722,17 +7730,17 @@ function renderMediaBody(content){
   if(m=content.match(/^\[audio\](.*)\[\/audio\]$/))
     return `<audio src="${esc(mediaSrc(m[1]))}" controls style="max-width:240px"></audio>`;
   if(m=content.match(/^\[document\](.*)\|(.*)\[\/document\]$/))
-    return `<a href="${esc(mediaSrc(m[1]))}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:var(--orange);text-decoration:none;font-size:13px;font-weight:600">📄 ${esc(m[2])}</a>`;
+    return `<a href="${esc(mediaSrc(m[1]))}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:var(--orange);text-decoration:none;font-size:13px;font-weight:600"><span class="icon-sm">${ICON.file}</span>${esc(m[2])}</a>`;
   return esc(content);
 }
 // Short, human labels for the compact contact-history preview drawer, which
 // shows truncated plain text only — a raw [video]/admin/media-proxy/...
 // marker would just look broken there, so this swaps in a plain label instead.
 function mediaLabel(content){
-  if(/^\[image\]/.test(content))return '📷 Image';
-  if(/^\[video\]/.test(content))return '🎥 Video';
-  if(/^\[audio\]/.test(content))return '🎤 Voice note';
-  if(/^\[document\]/.test(content))return '📄 Document';
+  if(/^\[image\]/.test(content))return 'Image';
+  if(/^\[video\]/.test(content))return 'Video';
+  if(/^\[audio\]/.test(content))return 'Voice note';
+  if(/^\[document\]/.test(content))return 'Document';
   return content.length>200?content.slice(0,200)+'…':content;
 }
 function openLightbox(src){
