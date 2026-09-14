@@ -82,6 +82,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
    repeating it per usage. */
 .icon-only-btn{display:inline-flex;align-items:center;justify-content:center}
 .icon-only-btn svg{width:15px;height:15px}
+/* Generic small-icon sizing for one-off inline-styled buttons that don't
+   warrant their own dedicated CSS class. */
+.icon-sm{display:inline-flex}
+.icon-sm svg{width:12px;height:12px}
 .lightbox-close-btn svg{width:16px;height:16px}
 .saved-draft-msg [data-icon]{display:inline-flex;vertical-align:-1px}
 .saved-draft-msg svg{width:11px;height:11px}
@@ -173,7 +177,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 /* Chat panel */
 .chat-panel{flex:1;display:flex;flex-direction:column;background:var(--g50);overflow:hidden;min-width:0}
 .empty-chat{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--g400)}
-.empty-chat-icon{width:64px;height:64px;background:var(--orange-s);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px}
+.empty-chat-icon{width:64px;height:64px;background:var(--orange-s);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--orange)}
+.empty-chat-icon svg{width:28px;height:28px}
 .chat-hdr{background:#fff;border-bottom:1px solid var(--g200);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .chat-back-btn{background:none;border:none;cursor:pointer;padding:4px;border-radius:8px;display:none;align-items:center;justify-content:center;color:var(--g700)}
 .chat-back-btn svg{width:20px;height:20px}
@@ -687,6 +692,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .date-inp:focus{border-color:var(--orange)}
 .btn-dl{padding:7px 14px;background:var(--g100);color:var(--g700);border:1.5px solid var(--g200);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
 .btn-dl svg{width:12px;height:12px}
+.btn-dl svg{width:12px;height:12px}
 .btn-dl:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
 .lead-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--g100)}
 .lead-row:last-child{border:none}
@@ -957,7 +963,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <!-- Chat -->
     <main class="chat-panel" id="chatPanel">
       <div class="empty-chat" id="emptyState">
-        <div class="empty-chat-icon">💬</div>
+        <div class="empty-chat-icon" data-icon="chat"></div>
         <span>Select a conversation</span>
       </div>
       <div id="chatView" class="hidden" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
@@ -986,7 +992,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <div id="chatTagPills" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>
           <div id="chatTagActions" style="display:flex;gap:5px;flex-shrink:0;position:relative">
             <button onclick="toggleTagDropdown()" style="font-size:11px;padding:3px 9px;border:1px dashed var(--g300);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap">＋ Tag</button>
-            <button onclick="runAutoTag()" id="autoTagBtn" style="font-size:11px;padding:3px 9px;border:1px solid var(--g200);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap">✨ Auto-tag</button>
+            <button onclick="runAutoTag()" id="autoTagBtn" style="font-size:11px;padding:3px 9px;border:1px solid var(--g200);border-radius:12px;background:none;color:var(--g500);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px"><span class="icon-sm" data-icon="sparkle"></span>Auto-tag</button>
             <div id="tagDropdown" style="display:none;position:absolute;top:28px;right:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:50;min-width:160px;max-height:220px;overflow-y:auto;padding:4px 0"></div>
           </div>
         </div>
@@ -1119,7 +1125,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <input type="date" class="date-inp" id="leadsDateFrom" onchange="applyLeadDateFilter()"/>
             <span style="font-size:12px;color:var(--g400)">to</span>
             <input type="date" class="date-inp" id="leadsDateTo" onchange="applyLeadDateFilter()"/>
-            <button class="btn-dl hidden" id="downloadBtn" onclick="downloadCurrentGroup()">⬇ CSV</button>
+            <button class="btn-dl hidden" id="downloadBtn" onclick="downloadCurrentGroup()"><span data-icon="download"></span>CSV</button>
             <button class="btn-dl" onclick="toggleRulesPanel()">⚡ Auto-assign Rules</button>
           </div>
         </div>
@@ -1194,7 +1200,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn-dl" onclick="openStageManageModal()">⚙ Manage Stages</button>
-          <button class="btn-dl" onclick="exportContactsCsv()">⬇ Export CSV</button>
+          <button class="btn-dl" onclick="exportContactsCsv()"><span data-icon="download"></span>Export CSV</button>
           <button class="btn-dl" onclick="openImportCsvModal()">⬆ Import CSV</button>
           <button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
         </div>
@@ -1228,7 +1234,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <option value="">Add tag…</option>
           </select>
           <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="bulkTagContacts()">🏷 Tag Selected</button>
-          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="exportContactsCsv(true)">⬇ Export Selected</button>
+          <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="exportContactsCsv(true)"><span data-icon="download"></span>Export Selected</button>
           <button class="btn-danger" style="padding:5px 12px;font-size:12px" onclick="bulkDeleteContacts()">Delete Selected</button>
           <button class="btn-dl" style="padding:5px 12px;font-size:12px" onclick="clearContactSelection()">Cancel</button>
         </div>
@@ -1359,7 +1365,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <p style="font-size:12px;color:var(--g400);margin:0">Handling time, response speed, and resolution — per agent</p>
             <p style="font-size:11px;color:var(--g300);margin:4px 0 0" title="Resolution Rate = explicit hand-backs ÷ takeovers. A chat the bot silently resumed after 8h of agent inactivity isn't counted as a hand-back, so a low rate here reflects how often agents actively close out a chat vs. it timing out, not how many customers went unhelped.">ⓘ How Resolution Rate is measured — hover for details</p>
           </div>
-          <button onclick="downloadAgentPerformance()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit">⬇ CSV</button>
+          <button onclick="downloadAgentPerformance()" style="font-size:12px;padding:5px 12px;background:var(--g100);color:var(--g700);border:1px solid var(--g200);border-radius:6px;cursor:pointer;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="download"></span>CSV</button>
         </div>
 
         <div class="stat-cards-row" id="agentPerfKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
@@ -1433,7 +1439,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div id="anPanel-campaigns" class="hidden">
       <div class="card">
         <div style="margin-bottom:16px">
-          <h3 style="margin:0 0 2px">📤 Campaigns &amp; Templates</h3>
+          <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="send"></span>Campaigns &amp; Templates</h3>
           <p style="font-size:12px;color:var(--g400);margin:0">Outbound campaign performance — funnel, history, and template rankings</p>
         </div>
 
@@ -1527,7 +1533,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <!-- Broadcast tab -->
   <div id="broadcastTab" class="tab-full hidden">
     <div class="bulk-tabs tmpl-subnav" id="msgSubNavBroadcast">
-      <button class="bulk-tab active" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')">📤 Broadcast</button>
+      <button class="bulk-tab active" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="send"></span>Broadcast</button>
       <button class="bulk-tab" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
     </div>
     <div class="card">
@@ -1623,7 +1629,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         <div class="bb-preview-box" id="bbReviewPreviewBox" style="max-width:500px;margin-bottom:20px"></div>
         <div class="modal-actions">
           <button class="btn-cancel" onclick="goBBStep(2)">← Back</button>
-          <button class="btn-primary" id="bbSendBtn" onclick="startBulkBroadcast()">🚀 Send Broadcast</button>
+          <button class="btn-primary" id="bbSendBtn" onclick="startBulkBroadcast()" style="display:inline-flex;align-items:center;gap:6px"><span class="icon-sm" data-icon="rocket"></span>Send Broadcast</button>
         </div>
       </div>
 
@@ -1655,7 +1661,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         <div id="bbFailedList" style="display:none;max-height:140px;overflow-y:auto;background:var(--surface-2,var(--surface));border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-family:monospace;color:#e53e3e"></div>
         <div class="modal-actions">
           <button class="btn-cancel" id="bbDoneBtn" style="display:none" onclick="resetBroadcastFlow()">Start New Broadcast</button>
-          <button class="btn-primary" id="bbDownloadBtn" style="display:none" onclick="downloadBBFailed()">⬇ Download Failed</button>
+          <button class="btn-primary" id="bbDownloadBtn" style="display:none;align-items:center;gap:6px" onclick="downloadBBFailed()"><span class="icon-sm" data-icon="download"></span>Download Failed</button>
         </div>
       </div>
     </div>
@@ -1664,7 +1670,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
   <!-- Canned Responses tab -->
   <div id="cannedTab" class="tab-full hidden">
     <div class="bulk-tabs tmpl-subnav" id="msgSubNavCanned">
-      <button class="bulk-tab" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')">📤 Broadcast</button>
+      <button class="bulk-tab" data-subtab="broadcast" data-permtab="templates" onclick="switchTab('broadcast')" style="display:inline-flex;align-items:center;gap:5px"><span class="icon-sm" data-icon="send"></span>Broadcast</button>
       <button class="bulk-tab active" data-subtab="canned" data-permtab="canned" onclick="switchTab('canned')">💾 Canned Responses</button>
     </div>
     <div class="card">
@@ -1774,7 +1780,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         <!-- Go Live banner -->
         <div id="aiGoLiveBanner" class="ai-go-live-banner hidden">
           <span id="aiPendingLabel">You have pending changes</span>
-          <button class="btn-primary" onclick="goLive()" style="padding:6px 18px;font-size:13px">🚀 Go Live</button>
+          <button class="btn-primary" onclick="goLive()" style="padding:6px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px"><span class="icon-sm" data-icon="rocket"></span>Go Live</button>
         </div>
 
         <!-- AI Instructions panel -->
@@ -1826,7 +1832,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <p id="kbUrlStatus" style="font-size:12px;margin:0 0 14px;min-height:16px"></p>
 
           <div id="kbLiveSection">
-            <div class="kb-section-lbl">✅ Live</div>
+            <div class="kb-section-lbl"><span class="kb-section-icon" data-icon="check"></span>Live</div>
             <div id="kbLiveList" class="kb-doc-list"></div>
           </div>
           <div id="kbDraftSection" style="margin-top:14px">
@@ -2499,12 +2505,20 @@ const ICON = {
   checkdouble: '<svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8.5l4 4L14 3"/><path d="M8 8.5l4 4L23 3"/></svg>',
   arrowLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.5L20 4l-6.5 16-3-6.5-6.5-3z"/><path d="M13.5 13.5L20 4"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M4 12l1.5-7A1.5 1.5 0 0 1 7 4h10a1.5 1.5 0 0 1 1.5 1l1.5 7"/><path d="M4 12v6a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 18v-6"/></svg>',
 };
 function hydrateIcons(root){
   (root||document).querySelectorAll('[data-icon]').forEach(el=>{
     const name=el.getAttribute('data-icon');
     if(ICON[name])el.innerHTML=ICON[name];
   });
+}
+// Inline icon + text for a JS-built string (labels, button text) — the icon
+// resolves immediately since ICON[name] is already real SVG markup, no
+// hydrateIcons() pass needed.
+function iconText(name,text){
+  return `<span class="icon-sm" style="vertical-align:-2px;margin-right:4px">${ICON[name]||''}</span>${text}`;
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────
@@ -3648,7 +3662,7 @@ function renderChatTagPills(){
   if(!el)return;
   if(!_convTags.length){el.innerHTML='<span style="font-size:11px;color:var(--g400)">No tags</span>';return;}
   el.innerHTML=_convTags.map(t=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;background:${t.color}22;border:1px solid ${t.color};font-size:11px;font-weight:600;color:${t.color}">
-    ${esc(t.name)}${t.tagged_by==='AI ✨'?'<span title="AI tagged" style="opacity:.7"> ✨</span>':''}
+    ${esc(t.name)}${t.tagged_by==='AI ✨'?`<span class="icon-sm" title="AI tagged" style="opacity:.7;margin-left:2px">${ICON.sparkle}</span>`:''}
     <button class="tag-remove-btn" onclick="removeConvTag(${t.tag_id})" style="background:none;border:none;color:${t.color};cursor:pointer;font-size:12px;padding:0;margin-left:2px;line-height:1" title="Remove">×</button>
   </span>`).join('');
 }
@@ -3708,7 +3722,7 @@ async function removeConvTag(tagId){
 async function runAutoTag(){
   if(!selectedPhone)return;
   const btn=document.getElementById('autoTagBtn');
-  btn.disabled=true;btn.textContent='✨ Tagging…';
+  btn.disabled=true;btn.textContent='Tagging…';
   try{
     const r=await fetch(`/admin/conversations/${encodeURIComponent(selectedPhone)}/auto-tag?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
     if(!r.ok){const e=await r.json().catch(()=>({}));alert(e.detail||'Auto-tag failed');return;}
@@ -3716,10 +3730,10 @@ async function runAutoTag(){
     await loadConvTags(selectedPhone);
     const conv=allConversations.find(c=>c.phone===selectedPhone);
     if(conv){conv.tags=_convTags.slice();renderConversations();}
-    if(data.applied.length)btn.textContent=`✨ Tagged: ${data.applied.join(', ')}`;
-    else btn.textContent='✨ No matches';
-    setTimeout(()=>{btn.textContent='✨ Auto-tag';},3000);
-  }catch(e){btn.textContent='✨ Auto-tag';}
+    if(data.applied.length)btn.textContent=`Tagged: ${data.applied.join(', ')}`;
+    else btn.textContent='No matches';
+    setTimeout(()=>{btn.innerHTML=iconText('sparkle','Auto-tag');},3000);
+  }catch(e){btn.innerHTML=iconText('sparkle','Auto-tag');}
   finally{btn.disabled=false;}
 }
 
@@ -4320,7 +4334,7 @@ function showLeadGroup(g){
     return `<div class="lead-row">
       <div class="lead-av-sm">${init}</div>
       <div class="lead-info-b"><div class="lead-name-t">${esc(name)}</div><div class="lead-meta-t">${esc(meta)}</div></div>
-      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap">${statusCol}${assignCol}<button class="btn-view-chat" onclick="viewLeadChat('${ph}','${rn}')">💬 Chat</button></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap">${statusCol}${assignCol}<button class="btn-view-chat" onclick="viewLeadChat('${ph}','${rn}')">${iconText('chat','Chat')}</button></div>
     </div>`;
   }).join('');
 }
@@ -5288,7 +5302,7 @@ async function goLive(){
     const d=await r.json();
     if(!r.ok){alert(d.detail||'Failed');return;}
     _hasInstDraft=false;_hasKBPending=false;refreshGoLiveBanner();
-    alert('✅ ' + d.changes.join('\n'));
+    alert(d.changes.join('\n'));
     await loadAISettings();
   }catch(e){console.error(e);alert('Error');}
 }
@@ -5974,7 +5988,7 @@ function resetBroadcastFlow(){
   document.getElementById('bbDoneBtn').style.display='none';
   document.getElementById('bbDownloadBtn').style.display='none';
   document.getElementById('bbSendBtn').disabled=false;
-  document.getElementById('bbSendBtn').textContent='🚀 Send Broadcast';
+  document.getElementById('bbSendBtn').innerHTML=iconText('rocket','Send Broadcast');
   setBBMode('phone');
   goBBStep(1);
 }
@@ -6170,7 +6184,7 @@ async function startBulkBroadcast(){
   }catch(e){
     alert(e.message);
     document.getElementById('bbSendBtn').disabled=false;
-    document.getElementById('bbSendBtn').textContent='🚀 Send Broadcast';
+    document.getElementById('bbSendBtn').innerHTML=iconText('rocket','Send Broadcast');
   }
 }
 
@@ -6195,9 +6209,9 @@ async function pollBBProgress(){
 
     if(d.status==='done'){
       clearInterval(_bbPollTimer);
-      document.getElementById('bbProgressLabel').textContent='✅ Broadcast complete';
+      document.getElementById('bbProgressLabel').textContent='Broadcast complete';
       document.getElementById('bbDoneBtn').style.display='inline-block';
-      if(d.failed&&d.failed.length)document.getElementById('bbDownloadBtn').style.display='inline-block';
+      if(d.failed&&d.failed.length)document.getElementById('bbDownloadBtn').style.display='inline-flex';
     }else{
       document.getElementById('bbProgressLabel').textContent=`Sending… ${d.current||0} of ${d.total}`;
     }
@@ -6832,7 +6846,7 @@ async function openContactDetail(phone){
   body.innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:16px">
       <button class="btn-primary" style="flex:1;padding:8px;font-size:13px" onclick='closeContactDetail();openEditContactModal(_ctMap[${JSON.stringify(phone)}])'>Edit</button>
-      <button class="btn-dl" style="flex:1;padding:8px;font-size:13px" onclick='closeContactDetail();switchTab("conv");setTimeout(()=>selectConv(${JSON.stringify(phone)},${JSON.stringify(c.name||c.phone)},"bot",""),50)'>💬 Open Chat</button>
+      <button class="btn-dl" style="flex:1;padding:8px;font-size:13px" onclick='closeContactDetail();switchTab("conv");setTimeout(()=>selectConv(${JSON.stringify(phone)},${JSON.stringify(c.name||c.phone)},"bot",""),50)'>${ICON.chat} Open Chat</button>
     </div>
     <div style="margin-bottom:16px">${tags}</div>
     <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:20px">
@@ -7139,9 +7153,9 @@ async function loadCampaignsOverview(){
     };
     funnelEl.innerHTML=`
       ${untracked?`<p style="font-size:11px;color:var(--g400);margin:0 0 16px">ⓘ Delivered/Read/Failed cover ${trackable.toLocaleString()} of ${total.toLocaleString()} sends — the other ${untracked.toLocaleString()} were sent before delivery tracking existed and have no status data (not the same as "not delivered"). Responded is unaffected — it's checked independently for every send.</p>`:''}
-      ${fBar('📬 Delivered',d.delivered,trackable,'#3b82f6')}
-      ${fBar('👁 Read',d.read,trackable,'#8b5cf6')}
-      ${fBar('💬 Responded',d.responded,total,'var(--orange)')}
+      ${fBar(iconText('inbox','Delivered'),d.delivered,trackable,'#3b82f6')}
+      ${fBar(iconText('eye','Read'),d.read,trackable,'#8b5cf6')}
+      ${fBar(iconText('chat','Responded'),d.responded,total,'var(--orange)')}
       ${fBar('❌ Failed',d.failed,trackable,'#ef4444')}
     `;
   }catch(e){
@@ -7306,7 +7320,7 @@ async function loadTrafficTab(){
       </div>`;
     };
     funnelEl.innerHTML=f.sent
-      ?`${fBar('📤 Sent',f.sent,f.sent,'var(--orange)')}${fBar('📬 Delivered',f.delivered,f.sent,'#3b82f6')}${fBar('👁 Read',f.read,f.sent,'#8b5cf6')}`
+      ?`${fBar(iconText('send','Sent'),f.sent,f.sent,'var(--orange)')}${fBar(iconText('inbox','Delivered'),f.delivered,f.sent,'#3b82f6')}${fBar(iconText('eye','Read'),f.read,f.sent,'#8b5cf6')}`
       :'<p style="color:var(--g400);font-size:13px">No trackable sends in this period</p>';
   }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
 }
@@ -7584,7 +7598,7 @@ async function submitCreateTemplate(){
       closeCreateTmplModal();
       loadTemplates();
       // Show a brief success note in the templates tab instead of alert
-      document.getElementById('tmplLoading').textContent='✅ Template submitted! Meta usually approves within a few minutes to a few hours.';
+      document.getElementById('tmplLoading').textContent='Template submitted! Meta usually approves within a few minutes to a few hours.';
       document.getElementById('tmplLoading').classList.remove('hidden');
       setTimeout(()=>loadTemplates(),3000);
     }else{
