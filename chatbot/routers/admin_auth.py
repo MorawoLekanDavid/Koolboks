@@ -16,6 +16,7 @@ from chatbot.models import Agent, AgentLoginEvent, Department
 from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.presence_service import get_status, get_statuses
 from chatbot.utils.email import is_valid_email
+from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
@@ -429,5 +430,37 @@ async def reset_agent_password(agent_id: int, body: ResetPasswordRequest, ctx: d
         agent.password_hash = hash_password(body.new_password)
         db.commit()
         return {"status": "ok"}
+    finally:
+        db.close()
+
+
+class AgentPhoneUpdate(BaseModel):
+    phone_number: str
+
+
+@router.patch("/agents/{agent_id}/phone")
+async def update_agent_phone(agent_id: int, body: AgentPhoneUpdate, ctx: dict = Depends(require_admin)):
+    """The phone number is where a WhatsApp-OTP password reset gets sent —
+    changing it is nearly as sensitive as changing the password itself, so
+    it carries the same admin/super_admin restriction as reset-password
+    above (otherwise a regular admin could redirect another admin's
+    recovery number to one they control and take the account over)."""
+    try:
+        norm = normalize_phone(body.phone_number)
+    except Exception:
+        raise HTTPException(400, "That doesn't look like a valid phone number.")
+    db = get_db()
+    try:
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise HTTPException(404, "Agent not found.")
+        if agent.role in ("admin", "super_admin") and ctx.get("role") != "super_admin":
+            raise HTTPException(403, "Only super admin can update an admin's phone number.")
+        clash = db.query(Agent).filter(Agent.phone_number == norm, Agent.id != agent_id).first()
+        if clash:
+            raise HTTPException(409, f"This number is already registered to {clash.name}.")
+        agent.phone_number = norm
+        db.commit()
+        return {"id": agent.id, "phone_number": agent.phone_number}
     finally:
         db.close()

@@ -256,6 +256,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .reassign-status.pending{background:#fef9c3;color:#854d0e}
 .reassign-status.approved{background:#dcfce7;color:#166534}
 .reassign-status.denied{background:#fee2e2;color:#991b1b}
+.phone-missing-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;padding:2px 8px;border-radius:100px;background:#fef9c3;color:#854d0e}
 .quick-actions{display:flex;gap:8px;padding:8px 12px;background:#fff;border-top:1px solid var(--g200);flex-shrink:0;flex-wrap:wrap}
 .qa-btn{padding:6px 12px;background:var(--g50);border:1px solid var(--g200);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--g700);transition:all .15s}
 .qa-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
@@ -1691,7 +1692,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div class="card">
       <h3>Team Members</h3>
       <p style="font-size:13px;color:var(--g400);margin-bottom:18px">New members are invited by WhatsApp — they set their own password and verify their phone number. Admins and super admin can send invites. Only the super admin can promote or demote roles.</p>
-      <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
+      <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
       <div class="add-agent-form" id="addAgentForm" style="margin-top:18px;display:none;flex-wrap:wrap">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
         <input type="email"    id="newAgentEmail"    placeholder="Email address" oninput="_validateNewAgentEmail()" onblur="_validateNewAgentEmail()"/>
@@ -2288,6 +2289,23 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeChangePasswordModal()">Cancel</button>
       <button class="btn-primary" id="pwSaveBtn" onclick="submitChangePassword()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="editPhoneModal">
+  <div class="modal">
+    <h3 id="phoneModalTitle">Edit Phone Number</h3>
+    <p style="font-size:12px;color:var(--g400);margin:-10px 0 16px">This is where a WhatsApp verification code goes if they ever use Forgot Password.</p>
+    <div class="modal-field">
+      <label>WhatsApp Number</label>
+      <input type="tel" id="phoneInput" placeholder="e.g. 08012345678"/>
+    </div>
+    <div id="phoneErr" style="color:#dc2626;font-size:12px;margin-bottom:8px;display:none"></div>
+    <div id="phoneOk" style="color:var(--green);font-size:12px;margin-bottom:8px;display:none"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditPhoneModal()">Cancel</button>
+      <button class="btn-primary" id="phoneSaveBtn" onclick="submitAgentPhone()">Save</button>
     </div>
   </div>
 </div>
@@ -3894,6 +3912,41 @@ async function submitChangePassword(){
   finally{btn.disabled=false;btn.textContent='Save';}
 }
 
+let phoneTargetAgentId=null;
+function openEditPhoneModal(id,name,currentPhone){
+  phoneTargetAgentId=id;
+  document.getElementById('phoneModalTitle').textContent=`Edit Phone Number — ${name}`;
+  document.getElementById('phoneInput').value=currentPhone||'';
+  document.getElementById('phoneErr').style.display='none';
+  document.getElementById('phoneOk').style.display='none';
+  const btn=document.getElementById('phoneSaveBtn');btn.disabled=false;btn.textContent='Save';
+  document.getElementById('editPhoneModal').classList.remove('hidden');
+}
+function closeEditPhoneModal(){
+  document.getElementById('editPhoneModal').classList.add('hidden');
+}
+async function submitAgentPhone(){
+  const phone=document.getElementById('phoneInput').value.trim();
+  const errEl=document.getElementById('phoneErr'), okEl=document.getElementById('phoneOk');
+  errEl.style.display='none';okEl.style.display='none';
+  if(!phone){errEl.textContent='Please enter a phone number.';errEl.style.display='block';return;}
+  const btn=document.getElementById('phoneSaveBtn');btn.disabled=true;btn.textContent='Saving…';
+  try{
+    const r=await fetch(`/admin/agents/${phoneTargetAgentId}/phone?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone_number:phone})
+    });
+    if(r.ok){
+      okEl.textContent='Phone number updated!';okEl.style.display='block';
+      await loadAgentList();
+      setTimeout(closeEditPhoneModal,900);
+    }else{
+      const e=await r.json().catch(()=>({}));
+      errEl.textContent=e.detail||'Failed to update phone number.';errEl.style.display='block';
+    }
+  }catch(e){errEl.textContent='Network error. Please try again.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Save';}
+}
+
 async function submitCanned(){
   const title=document.getElementById('cannedTitle').value.trim();
   const content=document.getElementById('cannedContent').value.trim();
@@ -4626,11 +4679,18 @@ async function loadAgentList(){
             const pendingBadge=`<span class="role-badge" style="background:var(--g100);color:var(--g500)">⏳ Pending Invite</span>`;
             const resendBtn=viewerIsAdmin?`<button class="canned-row-edit" style="margin-right:4px" onclick="resendInvite(${a.id},'${rn}')">Resend</button>`:'';
             const cancelBtn=viewerIsAdmin?`<button class="btn-danger" onclick="removeAgent(${a.id})">Cancel</button>`:'';
-            return `<tr style="opacity:.75"><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${pendingBadge}</td><td>${esc(a.department_name||'—')}</td><td style="white-space:nowrap">${resendBtn}${cancelBtn}</td></tr>`;
+            return `<tr style="opacity:.75"><td>${esc(a.name)}</td><td>${esc(a.email)}</td><td>${esc(a.phone_number||'—')}</td><td>${pendingBadge}</td><td>${esc(a.department_name||'—')}</td><td style="white-space:nowrap">${resendBtn}${cancelBtn}</td></tr>`;
           }
           const roleBadge=`<span class="role-badge ${a.role}">${PERM_ROLE_LABELS[a.role]||a.role}</span>`;
           const statusDot=`<span class="status-dot" style="position:static;display:inline-block;border:none;margin-right:5px;vertical-align:middle" title="${a.status||'offline'}"></span>`.replace('status-dot"','status-dot '+(a.status||'offline')+'"');
           const canManage=viewerIsAdmin&&a.role!=='super_admin'&&(isSuperAdmin||a.role!=='admin');
+          // Phone editing gets its own, slightly wider rule than canManage —
+          // the super_admin themself can still have their own phone edited
+          // (needed since that's where their OTP recovery would go too),
+          // just never by a non-super admin editing another admin's number.
+          const canEditPhone=viewerIsAdmin&&(isSuperAdmin||a.role!=='admin');
+          const phoneCell=a.phone_number?esc(a.phone_number):`<span class="phone-missing-badge">Not set</span>`;
+          const phoneEditBtn=canEditPhone?`<button class="icon-only-btn" style="margin-left:6px;color:var(--g400);vertical-align:middle" title="Edit phone number" onclick="openEditPhoneModal(${a.id},'${rn}','${esc(a.phone_number||'')}')">${ICON.pencil}</button>`:'';
           const removeBtn=canManage?`<button class="btn-danger" onclick="removeAgent(${a.id})">Remove</button>`:'';
           const resetBtn=canManage?`<button class="canned-row-edit" style="margin-right:4px" onclick="openResetPasswordModal(${a.id},'${rn}')">Reset PW</button>`:'';
           let promoteBtn='';
@@ -4645,9 +4705,9 @@ async function loadAgentList(){
             </select>`;
           }
           const deptSel=viewerIsAdmin?`<select onchange="setAgentDepartment(${a.id},this.value)" style="padding:4px 6px;border:1.5px solid var(--g200);border-radius:6px;font-size:12px;font-family:inherit;color:var(--g700);cursor:pointer;background:#fff;outline:none">${deptOpts}</select>`:esc(a.department_name||'—');
-          return `<tr><td>${statusDot}${esc(a.name)}</td><td>${esc(a.email)}</td><td>${roleBadge}</td><td>${deptSel}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
+          return `<tr><td>${statusDot}${esc(a.name)}</td><td>${esc(a.email)}</td><td style="white-space:nowrap">${phoneCell}${phoneEditBtn}</td><td>${roleBadge}</td><td>${deptSel}</td><td style="white-space:nowrap">${promoteBtn}${resetBtn}${removeBtn}</td></tr>`;
         }).join('')
-      :'<tr><td colspan="5" style="color:var(--g400);font-size:13px;padding:12px 0">No team members yet</td></tr>';
+      :'<tr><td colspan="6" style="color:var(--g400);font-size:13px;padding:12px 0">No team members yet</td></tr>';
     _agentList.forEach(a=>{
       const sel=document.querySelector(`#agentTableBody select[onchange^="setAgentDepartment(${a.id},"]`);
       if(sel)sel.value=a.department_id||'';
