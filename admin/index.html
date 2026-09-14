@@ -714,6 +714,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 .add-agent-form{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
 .add-agent-form input{flex:1;min-width:130px;padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;outline:none;font-family:inherit;color:var(--g900)}
 .add-agent-form input:focus{border-color:var(--orange)}
+.add-agent-form input.field-invalid{border-color:#e53e3e}
+.field-error-msg{width:100%;font-size:12px;color:#e53e3e;margin-top:-4px}
 .btn-primary{padding:9px 18px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 .btn-primary:hover{background:var(--orange-d)}
 .btn-danger{padding:5px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px}
@@ -1692,7 +1694,9 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <table class="agt-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody id="agentTableBody"></tbody></table>
       <div class="add-agent-form" id="addAgentForm" style="margin-top:18px;display:none;flex-wrap:wrap">
         <input type="text"     id="newAgentName"     placeholder="Full name"/>
-        <input type="email"    id="newAgentEmail"    placeholder="Email address"/>
+        <input type="email"    id="newAgentEmail"    placeholder="Email address" oninput="_validateNewAgentEmail()" onblur="_validateNewAgentEmail()"/>
+        <input type="email"    id="newAgentEmailConfirm" placeholder="Confirm email address" oninput="_validateNewAgentEmail()" onblur="_validateNewAgentEmail()"/>
+        <div class="field-error-msg hidden" id="newAgentEmailErr"></div>
         <input type="tel"      id="newAgentPhone"     placeholder="WhatsApp number, e.g. 08012345678"/>
         <select id="newAgentRole" style="padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g700);outline:none;min-width:160px">
           <option value="customer_success_agent">Customer Success Agent</option>
@@ -4665,20 +4669,37 @@ async function setRole(id,role){
   if(r&&r.ok)await loadAgentList();
   else alert('Failed to update role.');
 }
+function _isValidEmailFormat(email){
+  return /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/.test(email.trim());
+}
+function _validateNewAgentEmail(){
+  const emailEl=document.getElementById('newAgentEmail');
+  const confirmEl=document.getElementById('newAgentEmailConfirm');
+  const errEl=document.getElementById('newAgentEmailErr');
+  const email=emailEl.value.trim(), confirm=confirmEl.value.trim();
+  emailEl.classList.remove('field-invalid');confirmEl.classList.remove('field-invalid');
+  let msg='';
+  if(email&&!_isValidEmailFormat(email)){msg="That doesn't look like a valid email address.";emailEl.classList.add('field-invalid');}
+  else if(confirm&&email&&confirm!==email){msg='Emails do not match.';confirmEl.classList.add('field-invalid');}
+  errEl.textContent=msg;errEl.classList.toggle('hidden',!msg);
+  return !msg&&!!email&&!!confirm&&email===confirm;
+}
 async function inviteMember(){
   const name=document.getElementById('newAgentName').value.trim();
   const email=document.getElementById('newAgentEmail').value.trim();
+  const emailConfirm=document.getElementById('newAgentEmailConfirm').value.trim();
   const phone_number=document.getElementById('newAgentPhone').value.trim();
   const role=document.getElementById('newAgentRole')?.value||'customer_success_agent';
   const deptVal=document.getElementById('newAgentDept')?.value;
   const department_id=deptVal?parseInt(deptVal):null;
   const resultEl=document.getElementById('inviteResult');
-  if(!name||!email||!phone_number){alert('Please fill in name, email and WhatsApp number.');return;}
+  if(!name||!email||!emailConfirm||!phone_number){alert('Please fill in name, email (twice) and WhatsApp number.');return;}
+  if(!_validateNewAgentEmail())return;
   if(resultEl){resultEl.textContent='Sending invite…';resultEl.style.color='var(--g400)';}
   const r=await fetch(`/admin/invite-member?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone_number,role,department_id})}).catch(()=>null);
   if(r&&r.ok){
     const d=await r.json();
-    ['newAgentName','newAgentEmail','newAgentPhone'].forEach(id=>document.getElementById(id).value='');
+    ['newAgentName','newAgentEmail','newAgentEmailConfirm','newAgentPhone'].forEach(id=>document.getElementById(id).value='');
     if(resultEl){
       resultEl.innerHTML=d.whatsapp_sent
         ?`<span class="invite-result-msg" style="color:var(--green)">${ICON.check} Invite sent to ${esc(name)} on WhatsApp.</span>`

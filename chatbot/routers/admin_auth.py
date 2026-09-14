@@ -15,6 +15,7 @@ from chatbot.dependencies import AGENT_SESSION_TTL, get_admin_ctx, require_admin
 from chatbot.models import Agent, AgentLoginEvent, Department
 from chatbot.routers.permissions import require_tab_permission
 from chatbot.services.presence_service import get_status, get_statuses
+from chatbot.utils.email import is_valid_email
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
@@ -304,6 +305,8 @@ async def set_agent_department(agent_id: int, body: AgentDepartmentIn, ctx: dict
 
 @router.post("/agents")
 async def register_agent(body: AgentCreate, ctx: dict = Depends(require_admin)):
+    if not is_valid_email(body.email.strip()):
+        raise HTTPException(400, "That doesn't look like a valid email address.")
     db = get_db()
     try:
         existing = db.query(Agent).filter(

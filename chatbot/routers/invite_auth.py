@@ -17,6 +17,7 @@ from chatbot.dependencies import AGENT_SESSION_TTL, require_admin
 from chatbot.models import Agent
 from chatbot.routers.admin_auth import AGENT_ROLES
 from chatbot.services.whatsapp_service import send_whatsapp_otp_template, send_whatsapp_template
+from chatbot.utils.email import is_valid_email
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(tags=["invite-auth"])
@@ -139,6 +140,8 @@ async def invite_member(body: InviteIn, ctx: dict = Depends(require_admin)):
     email = body.email.strip().lower()
     if not name or not email:
         raise HTTPException(400, "Name and email are required")
+    if not is_valid_email(email):
+        raise HTTPException(400, "That doesn't look like a valid email address.")
     try:
         phone = normalize_phone(body.phone_number)
     except Exception:
