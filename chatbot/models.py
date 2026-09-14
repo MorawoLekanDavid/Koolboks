@@ -247,12 +247,15 @@ class ConversationOwner(Base):
 
 class ReassignmentRequest(Base):
     """Audit trail + approval workflow for changing who owns a conversation.
-    A team_lead/admin/super_admin's request (or the direct PATCH .../owner
-    endpoint, which logs here too) applies immediately — status=
-    'auto_approved'. Anyone else's request sits 'pending' until a team_lead
-    (scoped to their own department) or an admin decides it. Every row
-    carries a required `reason` so ownership changes stay auditable, however
-    they happened."""
+    A direct reassign (PATCH .../owner — the agent already has access, e.g.
+    admin/super_admin/team_lead-within-department) applies immediately and
+    doesn't require a reason. An agent with no access to a conversation
+    instead has to go through POST .../reassignment-requests, which DOES
+    require a stated `reason`; a team_lead/admin/super_admin's request there
+    still applies immediately ('auto_approved'), anyone else's sits 'pending'
+    until a team_lead (their own department) or an admin decides it. Every
+    ownership change gets a row here either way, so there's one place to see
+    the full history — reason is just null for the ones that didn't need one."""
     __tablename__ = "reassignment_requests"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -264,7 +267,7 @@ class ReassignmentRequest(Base):
     requested_by_name = Column(String(255), nullable=False)
     requested_by_email = Column(String(255), nullable=True)
     requested_by_role = Column(String(50), nullable=True)
-    reason = Column(String(1000), nullable=False)
+    reason = Column(String(1000), nullable=True)
     status = Column(String(20), default="pending", index=True)  # pending | auto_approved | approved | denied
     decided_by_name = Column(String(255), nullable=True)
     decided_by_email = Column(String(255), nullable=True)

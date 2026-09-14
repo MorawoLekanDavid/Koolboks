@@ -1957,7 +1957,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     </div>
     <div class="card">
       <h3 id="reassignHistoryTitle" style="margin-bottom:4px">Recent Activity</h3>
-      <p id="reassignHistoryDesc" style="font-size:12px;color:var(--g400);margin-bottom:6px">Every ownership change, with the reason behind it.</p>
+      <p id="reassignHistoryDesc" style="font-size:12px;color:var(--g400);margin-bottom:6px">Every ownership change, including the reason behind any that needed a request.</p>
       <div id="reassignHistoryList"></div>
     </div>
   </div>
@@ -2122,17 +2122,17 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 </div>
 
 <!-- Add Contact modal -->
-<div class="modal-overlay hidden" id="reassignModal" onclick="if(event.target===this)closeReassignReasonModal(true)">
+<div class="modal-overlay hidden" id="reassignModal" onclick="if(event.target===this)closeReassignReasonModal()">
   <div class="modal" style="max-width:440px">
-    <h3 id="reassignModalTitle"><span class="modal-icon" data-icon="swap"></span>Reassign Conversation</h3>
+    <h3 id="reassignModalTitle"><span class="modal-icon" data-icon="swap"></span>Request Reassignment</h3>
     <div id="reassignModalDesc" class="reassign-modal-desc"></div>
     <div class="modal-field">
       <label>Reason <span style="color:#e53e3e">*</span></label>
-      <textarea id="reassignReasonInput" placeholder="Why is this conversation moving?" style="width:100%;box-sizing:border-box"></textarea>
+      <textarea id="reassignReasonInput" placeholder="Why do you need this conversation?" style="width:100%;box-sizing:border-box"></textarea>
     </div>
     <div id="reassignModalErr" style="display:none;color:#e53e3e;font-size:12px;margin-top:-6px;margin-bottom:8px"></div>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeReassignReasonModal(true)">Cancel</button>
+      <button class="btn-cancel" onclick="closeReassignReasonModal()">Cancel</button>
       <button class="btn-primary" id="reassignConfirmBtn" onclick="confirmReassignReason()">Confirm</button>
     </div>
   </div>
@@ -3017,36 +3017,32 @@ function renderTagTray(){
 }
 
 // ── Header assign dropdown ─────────────────────────────────────────────
-function headerAssignOwner(ownerName){
+async function headerAssignOwner(ownerName){
   const phone=selectedPhone;if(!phone)return;
   const sel=document.getElementById('headerOwnerSelect');
-  const prevName=sel?.dataset.prev||'';
   const agent=ownerName?(allAgents||[]).find(a=>a.name===ownerName):null;
   const ownerEmail=agent?.email||null;
-  const conv=allConversations.find(c=>c.phone===phone);
-  const currentOwnerName=conv?.owner?.name||'Unassigned';
-  openReassignReasonModal({
-    mode:'direct', phone, ownerName, ownerEmail,
-    revertEl:sel, revertValue:prevName,
-    title:'Reassign Conversation',
-    desc:`<strong>${esc(currentOwnerName)}</strong> → <strong>${esc(ownerName||'Unassigned')}</strong>`,
-    confirmLabel:'Reassign',
-    onSuccess:()=>{
-      if(sel)sel.dataset.prev=ownerName||'';
-      if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
-      const detailSel=document.getElementById('assignOwnerSelect');
-      if(detailSel){detailSel.value=ownerName||'';detailSel.dataset.prev=ownerName||'';}
-      renderConversations();
-    }
-  });
+  const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({owner_name:ownerName||null,owner_email:ownerEmail})
+  }).catch(()=>null);
+  if(r&&r.ok){
+    if(sel)sel.dataset.prev=ownerName||'';
+    const conv=allConversations.find(c=>c.phone===phone);
+    if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
+    const detailSel=document.getElementById('assignOwnerSelect');
+    if(detailSel){detailSel.value=ownerName||'';detailSel.dataset.prev=ownerName||'';}
+    renderConversations();
+  } else if(sel){
+    sel.value=sel.dataset.prev||'';
+  }
 }
 
-// ── Reassign / Request-reassignment reason modal ───────────────────────
-// Shared by every place ownership can change: the header dropdown, the
-// detail-panel select, the Leads-tab row select (all mode:'direct', for
-// someone who already has access), and the "Request Reassignment" button
-// shown when an agent is blocked from a conversation they don't own
-// (mode:'request', see openReassignRequestFromOutreach below).
+// ── Request-reassignment reason modal ───────────────────────────────────
+// Only for the "Request Reassignment" button shown when an agent is
+// blocked from a conversation they don't own (see
+// openReassignRequestFromOutreach below) — a direct reassign, by someone
+// who already has access, applies immediately with no reason needed.
 let _reassignModalCtx=null;
 function openReassignReasonModal(cfg){
   _reassignModalCtx=cfg;
@@ -3060,11 +3056,8 @@ function openReassignReasonModal(cfg){
   document.getElementById('reassignModal').classList.remove('hidden');
   document.getElementById('reassignReasonInput').focus();
 }
-function closeReassignReasonModal(revert){
+function closeReassignReasonModal(){
   document.getElementById('reassignModal').classList.add('hidden');
-  if(revert&&_reassignModalCtx&&_reassignModalCtx.revertEl){
-    _reassignModalCtx.revertEl.value=_reassignModalCtx.revertValue||'';
-  }
   _reassignModalCtx=null;
 }
 async function confirmReassignReason(){
@@ -3076,22 +3069,12 @@ async function confirmReassignReason(){
   const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Saving…';
   errEl.style.display='none';
   try{
-    let data;
-    if(cfg.mode==='direct'){
-      const r=await fetch(`/admin/conversations/${encodeURIComponent(cfg.phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
-        method:'PATCH',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({owner_name:cfg.ownerName,owner_email:cfg.ownerEmail,reason})
-      });
-      data=await r.json().catch(()=>({}));
-      if(!r.ok)throw new Error(data.detail||'Failed to reassign');
-    } else {
-      const r=await fetch(`/admin/conversations/${encodeURIComponent(cfg.phone)}/reassignment-requests?key=${encodeURIComponent(adminKey)}`,{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({reason,to_owner_email:cfg.toOwnerEmail||null})
-      });
-      data=await r.json().catch(()=>({}));
-      if(!r.ok)throw new Error(data.detail||'Failed to submit request');
-    }
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(cfg.phone)}/reassignment-requests?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({reason,to_owner_email:cfg.toOwnerEmail||null})
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(data.detail||'Failed to submit request');
     document.getElementById('reassignModal').classList.add('hidden');
     _reassignModalCtx=null;
     cfg.onSuccess&&cfg.onSuccess(data);
@@ -3394,7 +3377,7 @@ async function sendOutreachTemplate(tplIdx, templateName, language){
 }
 function openReassignRequestFromOutreach(phone,tplIdx,templateName,language){
   openReassignReasonModal({
-    mode:'request', phone, toOwnerEmail:null,
+    phone, toOwnerEmail:null,
     title:'Request Reassignment',
     desc:`Ask to take over this conversation so you can message <strong>${esc(phone)}</strong>. A team lead or admin will need to approve it, unless you already have that authority.`,
     confirmLabel:'Send Request',
@@ -3419,7 +3402,7 @@ function loadReassignmentRequests(){
   if(approvalCard)approvalCard.style.display=isApprover?'block':'none';
   if(historyTitle)historyTitle.textContent=isApprover?'Recent Activity':'My Requests';
   if(historyDesc)historyDesc.textContent=isApprover
-    ?'Every ownership change, with the reason behind it.'
+    ?'Every ownership change, including the reason behind any that needed a request.'
     :'Conversations you\'ve requested access to, and their status.';
   if(isApprover)loadReassignPending();
   loadReassignHistory();
@@ -3481,7 +3464,7 @@ function renderReassignHistoryRow(r){
     <div class="reassign-row-main">
       <div class="reassign-row-phone">${esc(r.phone)} <span class="reassign-status ${cls}">${label}</span></div>
       <div class="reassign-row-flow"><span>${esc(r.from_owner_name||'Unassigned')}</span><span class="reassign-arrow" data-icon="arrowLeft" style="transform:rotate(180deg);display:inline-flex"></span><span>${esc(r.to_owner_name||'Unassigned')}</span></div>
-      <div class="reassign-row-reason">"${esc(r.reason)}"</div>
+      ${r.reason?`<div class="reassign-row-reason">"${esc(r.reason)}"</div>`:''}
       <div class="reassign-row-meta">${esc(r.requested_by_name)} · ${timeAgo(r.created_at)}${r.decided_by_name?` · decided by ${esc(r.decided_by_name)}`:''}</div>
     </div>
   </div>`;
@@ -4046,34 +4029,28 @@ function _populateOwnerSelect(phone){
   const status=document.getElementById('assignOwnerStatus');
   if(status)status.style.display='none';
 }
-function saveConvOwner(){
+async function saveConvOwner(){
   const phone=selectedPhone;if(!phone)return;
   const sel=document.getElementById('assignOwnerSelect');
   const ownerName=sel?.value||null;
-  const prevName=sel?.dataset.prev||'';
   const agent=ownerName?(allAgents||[]).find(a=>a.name===ownerName):null;
   const ownerEmail=agent?.email||null;
-  const conv=allConversations.find(c=>c.phone===phone);
-  const currentOwnerName=conv?.owner?.name||'Unassigned';
+  const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({owner_name:ownerName,owner_email:ownerEmail})
+  }).catch(()=>null);
   const status=document.getElementById('assignOwnerStatus');
-  openReassignReasonModal({
-    mode:'direct', phone, ownerName, ownerEmail,
-    revertEl:sel, revertValue:prevName,
-    title:'Reassign Conversation',
-    desc:`<strong>${esc(currentOwnerName)}</strong> → <strong>${esc(ownerName||'Unassigned')}</strong>`,
-    confirmLabel:'Reassign',
-    onSuccess:()=>{
-      if(sel)sel.dataset.prev=ownerName||'';
-      if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
-      const hSel=document.getElementById('headerOwnerSelect');
-      if(hSel){hSel.value=ownerName||'';hSel.dataset.prev=ownerName||'';}
-      renderConversations();
-      if(status){status.style.display='block';status.style.color='var(--green)';status.textContent='Saved';setTimeout(()=>status.style.display='none',2000);}
-    },
-    onError:()=>{
-      if(status){status.style.display='block';status.style.color='var(--red)';status.textContent='Failed';setTimeout(()=>{status.style.display='none';status.style.color='var(--green)';status.textContent='Saved';},2500);}
-    }
-  });
+  if(r&&r.ok){
+    if(sel)sel.dataset.prev=ownerName||'';
+    const conv=allConversations.find(c=>c.phone===phone);
+    if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
+    const hSel=document.getElementById('headerOwnerSelect');
+    if(hSel){hSel.value=ownerName||'';hSel.dataset.prev=ownerName||'';}
+    renderConversations();
+    if(status){status.style.display='block';status.style.color='var(--green)';status.textContent='Saved';setTimeout(()=>status.style.display='none',2000);}
+  } else {
+    if(status){status.style.display='block';status.style.color='var(--red)';status.textContent='Failed';setTimeout(()=>{status.style.display='none';status.style.color='var(--green)';status.textContent='Saved';},2500);}
+  }
 }
 
 // ── Lead Details Panel ─────────────────────────────────────────────────
@@ -4251,27 +4228,22 @@ function viewLeadChat(phone,name){
 
 // ── Lead Assignment — a lead's "owner" IS the conversation's owner, so this
 // writes through the same ConversationOwner record the Conversations tab uses.
-function assignLead(phone,agentName,selEl){
+async function assignLead(phone,agentName,selEl){
   const agent=agentName?(allAgents||[]).find(a=>a.name===agentName):null;
-  const prevName=selEl?.dataset.prev||'';
-  const conv=allConversations.find(c=>c.phone===phone);
-  const currentOwnerName=conv?.owner?.name||selEl?.dataset.prev||'Unassigned';
-  openReassignReasonModal({
-    mode:'direct', phone, ownerName:agentName, ownerEmail:agent?agent.email:null,
-    revertEl:selEl, revertValue:prevName,
-    title:'Reassign Lead',
-    desc:`<strong>${esc(currentOwnerName)}</strong> → <strong>${esc(agentName||'Unassigned')}</strong>`,
-    confirmLabel:'Reassign',
-    onSuccess:()=>{
-      if(selEl){selEl.className='assign-sel '+(agentName?'':'unassigned');selEl.dataset.prev=agentName||'';}
-      if(conv)conv.owner=agentName?{name:agentName,email:agent?agent.email:null}:null;
-    },
-    onError:()=>{alert('Failed to assign — you may not have permission to reassign this conversation.');}
-  });
+  try{
+    const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({owner_name:agentName||null,owner_email:agent?agent.email:null})
+    });
+    if(!r.ok)throw new Error();
+    if(selEl){selEl.className='assign-sel '+(agentName?'':'unassigned');selEl.dataset.prev=agentName||'';}
+    const conv=allConversations.find(c=>c.phone===phone);
+    if(conv)conv.owner=agentName?{name:agentName,email:agent?agent.email:null}:null;
+  }catch(e){alert('Failed to assign — you may not have permission to reassign this conversation.');}
 }
-function assignLeadFromDetail(agentName){
+async function assignLeadFromDetail(agentName){
   if(!currentDetailPhone)return;
-  assignLead(currentDetailPhone,agentName,null);
+  await assignLead(currentDetailPhone,agentName,null);
 }
 async function updateLeadStatus(phone,status){
   if(!phone)return;

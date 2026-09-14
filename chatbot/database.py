@@ -259,7 +259,7 @@ def init_database():
                     requested_by_name VARCHAR(255) NOT NULL,
                     requested_by_email VARCHAR(255),
                     requested_by_role VARCHAR(50),
-                    reason VARCHAR(1000) NOT NULL,
+                    reason VARCHAR(1000),
                     status VARCHAR(20) DEFAULT 'pending',
                     decided_by_name VARCHAR(255),
                     decided_by_email VARCHAR(255),
@@ -268,6 +268,11 @@ def init_database():
                     decided_at TIMESTAMP
                 )
             """))
+            # Direct reassigns (admin/team_lead who already have access) no
+            # longer require a reason — only the request-for-access flow
+            # does — so a row logged for one of those needs reason to be
+            # nullable even though the table originally shipped NOT NULL.
+            _c.execute(sa_text("ALTER TABLE reassignment_requests ALTER COLUMN reason DROP NOT NULL"))
             _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_reassignment_requests_phone ON reassignment_requests (phone)"))
             _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_reassignment_requests_status ON reassignment_requests (status)"))
             _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_reassignment_requests_created_at ON reassignment_requests (created_at)"))

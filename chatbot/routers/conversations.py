@@ -513,7 +513,7 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
 class OwnerUpdate(BaseModel):
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
-    reason: str
+    reason: Optional[str] = None
 
 
 def _dept_match(db, caller_agent_id: Optional[int], target_email: str) -> bool:
@@ -525,9 +525,6 @@ def _dept_match(db, caller_agent_id: Optional[int], target_email: str) -> bool:
 
 @router.patch("/conversations/{phone}/owner")
 async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(conversation_guard(write=True))):
-    if not body.reason or not body.reason.strip():
-        raise HTTPException(400, "Please state a reason for this reassignment")
-
     def _upsert():
         db = get_db()
         try:
@@ -546,14 +543,13 @@ async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depe
                 existing.owner_email = body.owner_email
             else:
                 db.add(ConversationOwner(phone=norm, owner_name=body.owner_name, owner_email=body.owner_email))
-            # Every ownership change gets logged here — not just the requests
-            # that needed approval — so the audit trail covers direct
-            # reassigns too, not only the ones routed through the request flow.
+            # Logged for the audit history same as everything else — no
+            # reason required here, only the request-for-access flow needs one.
             db.add(ReassignmentRequest(
                 phone=norm, from_owner_name=from_name, from_owner_email=from_email,
                 to_owner_name=body.owner_name, to_owner_email=body.owner_email,
                 requested_by_name=ctx.get("name", "Agent"), requested_by_email=ctx.get("email"),
-                requested_by_role=ctx.get("role"), reason=body.reason.strip(),
+                requested_by_role=ctx.get("role"), reason=body.reason.strip() if body.reason else None,
                 status="auto_approved", decided_by_name=ctx.get("name", "Agent"),
                 decided_by_email=ctx.get("email"), decided_at=datetime.utcnow(),
             ))
