@@ -245,6 +245,34 @@ class ConversationOwner(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ReassignmentRequest(Base):
+    """Audit trail + approval workflow for changing who owns a conversation.
+    A team_lead/admin/super_admin's request (or the direct PATCH .../owner
+    endpoint, which logs here too) applies immediately — status=
+    'auto_approved'. Anyone else's request sits 'pending' until a team_lead
+    (scoped to their own department) or an admin decides it. Every row
+    carries a required `reason` so ownership changes stay auditable, however
+    they happened."""
+    __tablename__ = "reassignment_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String(30), index=True, nullable=False)
+    from_owner_name = Column(String(255), nullable=True)
+    from_owner_email = Column(String(255), nullable=True)
+    to_owner_name = Column(String(255), nullable=True)
+    to_owner_email = Column(String(255), nullable=True)
+    requested_by_name = Column(String(255), nullable=False)
+    requested_by_email = Column(String(255), nullable=True)
+    requested_by_role = Column(String(50), nullable=True)
+    reason = Column(String(1000), nullable=False)
+    status = Column(String(20), default="pending", index=True)  # pending | auto_approved | approved | denied
+    decided_by_name = Column(String(255), nullable=True)
+    decided_by_email = Column(String(255), nullable=True)
+    decision_note = Column(String(1000), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    decided_at = Column(DateTime, nullable=True)
+
+
 class BroadcastCampaign(Base):
     __tablename__ = "broadcast_campaigns"
 

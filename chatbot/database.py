@@ -246,6 +246,35 @@ def init_database():
     except Exception as _e:
         log.warning(f"conversation_owners migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS reassignment_requests (
+                    id SERIAL PRIMARY KEY,
+                    phone VARCHAR(30) NOT NULL,
+                    from_owner_name VARCHAR(255),
+                    from_owner_email VARCHAR(255),
+                    to_owner_name VARCHAR(255),
+                    to_owner_email VARCHAR(255),
+                    requested_by_name VARCHAR(255) NOT NULL,
+                    requested_by_email VARCHAR(255),
+                    requested_by_role VARCHAR(50),
+                    reason VARCHAR(1000) NOT NULL,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    decided_by_name VARCHAR(255),
+                    decided_by_email VARCHAR(255),
+                    decision_note VARCHAR(1000),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    decided_at TIMESTAMP
+                )
+            """))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_reassignment_requests_phone ON reassignment_requests (phone)"))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_reassignment_requests_status ON reassignment_requests (status)"))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_reassignment_requests_created_at ON reassignment_requests (created_at)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"reassignment_requests migration: {_e}")
+
     log.info("Database initialized successfully")
 
 

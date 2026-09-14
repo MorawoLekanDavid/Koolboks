@@ -235,6 +235,20 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .canned-row-edit:hover{background:var(--g50);border-color:var(--g400)}
 .canned-row-del{background:none;border:1px solid var(--g200);border-radius:6px;color:var(--g500);cursor:pointer;padding:4px 10px;font-size:12px}
 .canned-row-del:hover{background:#fee2e2;border-color:#fca5a5;color:#dc2626}
+.reassign-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:14px 0;border-bottom:1px solid var(--g100)}
+.reassign-row:last-child{border-bottom:none}
+.reassign-row-main{flex:1;min-width:0}
+.reassign-row-phone{font-size:13px;font-weight:700;color:var(--g800);display:flex;align-items:center;gap:8px}
+.reassign-row-flow{font-size:12px;color:var(--g600);margin-top:4px;display:flex;align-items:center;gap:6px}
+.reassign-row-flow .reassign-arrow{color:var(--g300)}
+.reassign-row-flow .reassign-arrow svg{width:12px;height:12px}
+.reassign-row-reason{font-size:12px;color:var(--g500);margin-top:6px;font-style:italic;line-height:1.5}
+.reassign-row-meta{font-size:11px;color:var(--g400);margin-top:6px}
+.reassign-row-actions{display:flex;gap:6px;flex-shrink:0}
+.reassign-status{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;padding:2px 8px;border-radius:100px}
+.reassign-status.pending{background:#fef9c3;color:#854d0e}
+.reassign-status.approved{background:#dcfce7;color:#166534}
+.reassign-status.denied{background:#fee2e2;color:#991b1b}
 .quick-actions{display:flex;gap:8px;padding:8px 12px;background:#fff;border-top:1px solid var(--g200);flex-shrink:0;flex-wrap:wrap}
 .qa-btn{padding:6px 12px;background:var(--g50);border:1px solid var(--g200);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--g700);transition:all .15s}
 .qa-btn:hover{background:var(--orange-s);border-color:var(--orange);color:var(--orange)}
@@ -376,7 +390,12 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 /* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
-.modal h3{font-size:16px;font-weight:700;color:var(--g900);margin-bottom:18px}
+.modal h3{font-size:16px;font-weight:700;color:var(--g900);margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.modal-icon{display:inline-flex;color:var(--orange)}
+.modal-icon svg{width:18px;height:18px}
+.reassign-modal-desc{font-size:13px;color:var(--g600);background:var(--g50);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
+.reassign-modal-desc strong{color:var(--g900)}
+#reassignModal{z-index:150}
 .modal-field{margin-bottom:12px}
 .modal-field label{display:block;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;margin-bottom:4px}
 .modal-field input,.modal-field textarea{width:100%;border:1px solid var(--g200);border-radius:8px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;color:var(--g800)}
@@ -1456,6 +1475,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab active" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -1657,6 +1677,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
     </div>
     <div class="card">
       <h3>Team Members</h3>
@@ -1702,6 +1723,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
     </div>
     <div class="card" id="rolePermCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -1725,6 +1747,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab active" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
     </div>
     <div class="ai-settings-layout">
 
@@ -1855,6 +1878,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab active" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
     </div>
     <div class="card" style="max-width:640px">
       <h3>Auto-Routing</h3>
@@ -1910,6 +1934,31 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       </div>
 
       <div id="routingConfigStatus" style="font-size:12px;color:var(--g400);margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- Reassignment Requests tab -->
+  <div id="reassignTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavReassign">
+      <button class="bulk-tab" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab active" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+    </div>
+    <div class="card" id="reassignApprovalCard" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px">
+        <h3 style="margin-bottom:0">Needs Your Approval</h3>
+        <span class="fd-row-count" id="reassignPendingCount" style="display:none">0</span>
+      </div>
+      <p style="font-size:12px;color:var(--g400);margin-bottom:6px">Reassignment requests from your team waiting on a decision.</p>
+      <div id="reassignPendingList"></div>
+    </div>
+    <div class="card">
+      <h3 id="reassignHistoryTitle" style="margin-bottom:4px">Recent Activity</h3>
+      <p id="reassignHistoryDesc" style="font-size:12px;color:var(--g400);margin-bottom:6px">Every ownership change, with the reason behind it.</p>
+      <div id="reassignHistoryList"></div>
     </div>
   </div>
 
@@ -2073,6 +2122,22 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 </div>
 
 <!-- Add Contact modal -->
+<div class="modal-overlay hidden" id="reassignModal" onclick="if(event.target===this)closeReassignReasonModal(true)">
+  <div class="modal" style="max-width:440px">
+    <h3 id="reassignModalTitle"><span class="modal-icon" data-icon="swap"></span>Reassign Conversation</h3>
+    <div id="reassignModalDesc" class="reassign-modal-desc"></div>
+    <div class="modal-field">
+      <label>Reason <span style="color:#e53e3e">*</span></label>
+      <textarea id="reassignReasonInput" placeholder="Why is this conversation moving?" style="width:100%;box-sizing:border-box"></textarea>
+    </div>
+    <div id="reassignModalErr" style="display:none;color:#e53e3e;font-size:12px;margin-top:-6px;margin-bottom:8px"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeReassignReasonModal(true)">Cancel</button>
+      <button class="btn-primary" id="reassignConfirmBtn" onclick="confirmReassignReason()">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="addContactModal" onclick="if(event.target===this)closeAddContactModal()">
   <div class="modal" style="max-width:480px">
     <h3>+ Add Contact</h3>
@@ -2390,6 +2455,7 @@ const ICON = {
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h9a5 5 0 0 1 0 10h-3M5 8l4-4M5 8l4 4"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.2 7-12a7 7 0 0 0-14 0c0 4.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13M13 4l4 4-4 4"/><path d="M20 16H7M11 20l-4-4 4-4"/></svg>',
   checkdouble: '<svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8.5l4 4L14 3"/><path d="M8 8.5l4 4L23 3"/></svg>',
   arrowLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.5L20 4l-6.5 16-3-6.5-6.5-3z"/><path d="M13.5 13.5L20 4"/></svg>',
@@ -2951,28 +3017,96 @@ function renderTagTray(){
 }
 
 // ── Header assign dropdown ─────────────────────────────────────────────
-async function headerAssignOwner(ownerName){
+function headerAssignOwner(ownerName){
   const phone=selectedPhone;if(!phone)return;
+  const sel=document.getElementById('headerOwnerSelect');
+  const prevName=sel?.dataset.prev||'';
   const agent=ownerName?(allAgents||[]).find(a=>a.name===ownerName):null;
   const ownerEmail=agent?.email||null;
-  const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
-    method:'PATCH',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({owner_name:ownerName||null,owner_email:ownerEmail})
-  }).catch(()=>null);
-  if(r&&r.ok){
-    const conv=allConversations.find(c=>c.phone===phone);
-    if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
-    const detailSel=document.getElementById('assignOwnerSelect');
-    if(detailSel)detailSel.value=ownerName||'';
-    renderConversations();
+  const conv=allConversations.find(c=>c.phone===phone);
+  const currentOwnerName=conv?.owner?.name||'Unassigned';
+  openReassignReasonModal({
+    mode:'direct', phone, ownerName, ownerEmail,
+    revertEl:sel, revertValue:prevName,
+    title:'Reassign Conversation',
+    desc:`<strong>${esc(currentOwnerName)}</strong> → <strong>${esc(ownerName||'Unassigned')}</strong>`,
+    confirmLabel:'Reassign',
+    onSuccess:()=>{
+      if(sel)sel.dataset.prev=ownerName||'';
+      if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
+      const detailSel=document.getElementById('assignOwnerSelect');
+      if(detailSel){detailSel.value=ownerName||'';detailSel.dataset.prev=ownerName||'';}
+      renderConversations();
+    }
+  });
+}
+
+// ── Reassign / Request-reassignment reason modal ───────────────────────
+// Shared by every place ownership can change: the header dropdown, the
+// detail-panel select, the Leads-tab row select (all mode:'direct', for
+// someone who already has access), and the "Request Reassignment" button
+// shown when an agent is blocked from a conversation they don't own
+// (mode:'request', see openReassignRequestFromOutreach below).
+let _reassignModalCtx=null;
+function openReassignReasonModal(cfg){
+  _reassignModalCtx=cfg;
+  document.getElementById('reassignModalTitle').innerHTML=`<span class="modal-icon" data-icon="swap"></span>${esc(cfg.title)}`;
+  hydrateIcons(document.getElementById('reassignModalTitle'));
+  document.getElementById('reassignModalDesc').innerHTML=cfg.desc;
+  document.getElementById('reassignReasonInput').value='';
+  document.getElementById('reassignModalErr').style.display='none';
+  const btn=document.getElementById('reassignConfirmBtn');
+  btn.textContent=cfg.confirmLabel||'Confirm';btn.disabled=false;
+  document.getElementById('reassignModal').classList.remove('hidden');
+  document.getElementById('reassignReasonInput').focus();
+}
+function closeReassignReasonModal(revert){
+  document.getElementById('reassignModal').classList.add('hidden');
+  if(revert&&_reassignModalCtx&&_reassignModalCtx.revertEl){
+    _reassignModalCtx.revertEl.value=_reassignModalCtx.revertValue||'';
+  }
+  _reassignModalCtx=null;
+}
+async function confirmReassignReason(){
+  const reason=document.getElementById('reassignReasonInput').value.trim();
+  const errEl=document.getElementById('reassignModalErr');
+  if(!reason){errEl.textContent='Please state a reason.';errEl.style.display='block';return;}
+  const cfg=_reassignModalCtx;if(!cfg)return;
+  const btn=document.getElementById('reassignConfirmBtn');
+  const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Saving…';
+  errEl.style.display='none';
+  try{
+    let data;
+    if(cfg.mode==='direct'){
+      const r=await fetch(`/admin/conversations/${encodeURIComponent(cfg.phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({owner_name:cfg.ownerName,owner_email:cfg.ownerEmail,reason})
+      });
+      data=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(data.detail||'Failed to reassign');
+    } else {
+      const r=await fetch(`/admin/conversations/${encodeURIComponent(cfg.phone)}/reassignment-requests?key=${encodeURIComponent(adminKey)}`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({reason,to_owner_email:cfg.toOwnerEmail||null})
+      });
+      data=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(data.detail||'Failed to submit request');
+    }
+    document.getElementById('reassignModal').classList.add('hidden');
+    _reassignModalCtx=null;
+    cfg.onSuccess&&cfg.onSuccess(data);
+  }catch(e){
+    errEl.textContent=e.message||'Something went wrong';errEl.style.display='block';
+    btn.disabled=false;btn.textContent=origLabel;
+    cfg.onError&&cfg.onError(e);
   }
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings'};
+const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab',reassign:'reassignTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings',reassign:'htabSettings'};
 const MESSAGING_TABS=['broadcast','canned'];
-const SETTINGS_TABS=['team','rolePerm','templates','aiSettings','routing'];
+const SETTINGS_TABS=['team','rolePerm','templates','aiSettings','routing','reassign'];
 let _lastMessagingTab='broadcast';
 let _lastSettingsTab='team';
 function switchTab(t){
@@ -3001,6 +3135,7 @@ function switchTab(t){
   if(t==='aiSettings')loadAISettings();
   if(t==='usage')loadUsage();
   if(t==='routing')loadRoutingConfig();
+  if(t==='reassign')loadReassignmentRequests();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
@@ -3246,9 +3381,110 @@ async function sendOutreachTemplate(tplIdx, templateName, language){
     const match=allConversations.find(c=>c.phone===normPh||c.phone===ph);
     if(match)selectConv(match.phone,match.name||match.phone,match.mode,match.agent||'');
   }catch(e){
-    errEl.textContent=e.message;errEl.style.display='block';
+    if(/don't have access/i.test(e.message||'')){
+      errEl.innerHTML=`This number already has an active conversation owned by someone else.<br>`
+        +`<button class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:12px" `
+        +`onclick="openReassignRequestFromOutreach('${ph.replace(/'/g,"\\'")}',${tplIdx},'${templateName.replace(/'/g,"\\'")}','${language.replace(/'/g,"\\'")}')">Request Reassignment</button>`;
+      errEl.style.display='block';
+    } else {
+      errEl.textContent=e.message;errEl.style.display='block';
+    }
     if(btn){btn.disabled=false;btn.textContent='Send';}
   }
+}
+function openReassignRequestFromOutreach(phone,tplIdx,templateName,language){
+  openReassignReasonModal({
+    mode:'request', phone, toOwnerEmail:null,
+    title:'Request Reassignment',
+    desc:`Ask to take over this conversation so you can message <strong>${esc(phone)}</strong>. A team lead or admin will need to approve it, unless you already have that authority.`,
+    confirmLabel:'Send Request',
+    onSuccess:(data)=>{
+      const errEl=document.getElementById('outreachErr');
+      errEl.style.color=data.status==='auto_approved'?'var(--green)':'var(--orange)';
+      errEl.textContent=data.message||'Request submitted.';
+      errEl.style.display='block';
+      if(data.status==='auto_approved'){
+        setTimeout(()=>sendOutreachTemplate(tplIdx,templateName,language),900);
+      }
+    }
+  });
+}
+
+// ── Reassignment Requests panel ─────────────────────────────────────────
+function loadReassignmentRequests(){
+  const isApprover=['admin','super_admin','team_lead'].includes(agentRole);
+  const approvalCard=document.getElementById('reassignApprovalCard');
+  const historyTitle=document.getElementById('reassignHistoryTitle');
+  const historyDesc=document.getElementById('reassignHistoryDesc');
+  if(approvalCard)approvalCard.style.display=isApprover?'block':'none';
+  if(historyTitle)historyTitle.textContent=isApprover?'Recent Activity':'My Requests';
+  if(historyDesc)historyDesc.textContent=isApprover
+    ?'Every ownership change, with the reason behind it.'
+    :'Conversations you\'ve requested access to, and their status.';
+  if(isApprover)loadReassignPending();
+  loadReassignHistory();
+}
+async function loadReassignPending(){
+  const el=document.getElementById('reassignPendingList');
+  const badge=document.getElementById('reassignPendingCount');
+  el.innerHTML='<p class="d-placeholder">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/reassignment-requests?status=pending&key=${encodeURIComponent(adminKey)}`);
+    const rows=r.ok?await r.json():[];
+    if(badge){
+      if(rows.length){badge.style.display='inline-block';badge.textContent=rows.length;}
+      else badge.style.display='none';
+    }
+    el.innerHTML=rows.length?rows.map(renderReassignPendingRow).join('')
+      :emptyState(ICON.check,'All caught up','No pending reassignment requests.');
+    hydrateIcons(el);
+  }catch(e){el.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
+}
+function renderReassignPendingRow(r){
+  return `<div class="reassign-row">
+    <div class="reassign-row-main">
+      <div class="reassign-row-phone">${esc(r.phone)}</div>
+      <div class="reassign-row-flow"><span>${esc(r.from_owner_name||'Unassigned')}</span><span class="reassign-arrow" data-icon="arrowLeft" style="transform:rotate(180deg);display:inline-flex"></span><span>${esc(r.to_owner_name||'Unassigned')}</span></div>
+      <div class="reassign-row-reason">"${esc(r.reason)}"</div>
+      <div class="reassign-row-meta">Requested by ${esc(r.requested_by_name)}${r.requested_by_role?` (${esc(r.requested_by_role.replace('_',' '))})`:''} · ${timeAgo(r.created_at)}</div>
+    </div>
+    <div class="reassign-row-actions">
+      <button class="btn-primary" style="padding:6px 12px;font-size:12px" onclick="decideReassignRequest(${r.id},'approve')">Approve</button>
+      <button class="icon-only-btn btn-danger" style="padding:6px 8px" title="Deny" onclick="decideReassignRequest(${r.id},'deny')"><span data-icon="close"></span></button>
+    </div>
+  </div>`;
+}
+async function decideReassignRequest(id,action){
+  try{
+    const r=await fetch(`/admin/reassignment-requests/${id}/${action}?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+    });
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Failed to update request');}
+    loadReassignmentRequests();
+  }catch(e){alert(e.message||'Failed to update request');}
+}
+async function loadReassignHistory(){
+  const el=document.getElementById('reassignHistoryList');
+  el.innerHTML='<p class="d-placeholder">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/reassignment-requests?status=all&key=${encodeURIComponent(adminKey)}`);
+    const rows=r.ok?await r.json():[];
+    el.innerHTML=rows.length?rows.map(renderReassignHistoryRow).join('')
+      :emptyState(ICON.clipboard,'Nothing yet','No reassignment activity to show.');
+    hydrateIcons(el);
+  }catch(e){el.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
+}
+function renderReassignHistoryRow(r){
+  const cls=r.status==='denied'?'denied':r.status==='pending'?'pending':'approved';
+  const label=r.status==='auto_approved'?'Approved':r.status.charAt(0).toUpperCase()+r.status.slice(1);
+  return `<div class="reassign-row">
+    <div class="reassign-row-main">
+      <div class="reassign-row-phone">${esc(r.phone)} <span class="reassign-status ${cls}">${label}</span></div>
+      <div class="reassign-row-flow"><span>${esc(r.from_owner_name||'Unassigned')}</span><span class="reassign-arrow" data-icon="arrowLeft" style="transform:rotate(180deg);display:inline-flex"></span><span>${esc(r.to_owner_name||'Unassigned')}</span></div>
+      <div class="reassign-row-reason">"${esc(r.reason)}"</div>
+      <div class="reassign-row-meta">${esc(r.requested_by_name)} · ${timeAgo(r.created_at)}${r.decided_by_name?` · decided by ${esc(r.decided_by_name)}`:''}</div>
+    </div>
+  </div>`;
 }
 // ── Tags ───────────────────────────────────────────────────────────────
 const TAG_PALETTE=['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#6b7280'];
@@ -3799,36 +4035,45 @@ function _populateOwnerSelect(phone){
     :(allAgents||[]);
   const opts='<option value="">— Unassigned —</option>'+assignable.map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${_rl[a.role]||a.role})</option>`).join('');
   const sel=document.getElementById('assignOwnerSelect');
-  if(sel){sel.innerHTML=opts;sel.value=currentOwner;}
+  if(sel){sel.innerHTML=opts;sel.value=currentOwner;sel.dataset.prev=currentOwner;}
   // Sync header assign dropdown
   const hSel=document.getElementById('headerOwnerSelect');
   if(hSel){
     hSel.innerHTML='<option value="">Assign to…</option>'+assignable.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
     hSel.value=currentOwner;
+    hSel.dataset.prev=currentOwner;
   }
   const status=document.getElementById('assignOwnerStatus');
   if(status)status.style.display='none';
 }
-async function saveConvOwner(){
+function saveConvOwner(){
   const phone=selectedPhone;if(!phone)return;
   const sel=document.getElementById('assignOwnerSelect');
   const ownerName=sel?.value||null;
+  const prevName=sel?.dataset.prev||'';
   const agent=ownerName?(allAgents||[]).find(a=>a.name===ownerName):null;
   const ownerEmail=agent?.email||null;
-  const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
-    method:'PATCH',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({owner_name:ownerName,owner_email:ownerEmail})
-  }).catch(()=>null);
+  const conv=allConversations.find(c=>c.phone===phone);
+  const currentOwnerName=conv?.owner?.name||'Unassigned';
   const status=document.getElementById('assignOwnerStatus');
-  if(r&&r.ok){
-    // Update local cache
-    const conv=allConversations.find(c=>c.phone===phone);
-    if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
-    renderConversations();
-    if(status){status.style.display='block';setTimeout(()=>status.style.display='none',2000);}
-  } else {
-    if(status){status.style.display='block';status.style.color='var(--red)';status.textContent='Failed';setTimeout(()=>{status.style.display='none';status.style.color='var(--green)';status.textContent='Saved';},2500);}
-  }
+  openReassignReasonModal({
+    mode:'direct', phone, ownerName, ownerEmail,
+    revertEl:sel, revertValue:prevName,
+    title:'Reassign Conversation',
+    desc:`<strong>${esc(currentOwnerName)}</strong> → <strong>${esc(ownerName||'Unassigned')}</strong>`,
+    confirmLabel:'Reassign',
+    onSuccess:()=>{
+      if(sel)sel.dataset.prev=ownerName||'';
+      if(conv)conv.owner=ownerName?{name:ownerName,email:ownerEmail}:null;
+      const hSel=document.getElementById('headerOwnerSelect');
+      if(hSel){hSel.value=ownerName||'';hSel.dataset.prev=ownerName||'';}
+      renderConversations();
+      if(status){status.style.display='block';status.style.color='var(--green)';status.textContent='Saved';setTimeout(()=>status.style.display='none',2000);}
+    },
+    onError:()=>{
+      if(status){status.style.display='block';status.style.color='var(--red)';status.textContent='Failed';setTimeout(()=>{status.style.display='none';status.style.color='var(--green)';status.textContent='Saved';},2500);}
+    }
+  });
 }
 
 // ── Lead Details Panel ─────────────────────────────────────────────────
@@ -3855,6 +4100,7 @@ async function loadLeadDetails(phone){
     const asel=document.getElementById('dAssignSel');
     asel.innerHTML='<option value="">Unassigned</option>'+allAgents.map(a=>`<option value="${esc(a.name)}" ${lead.assigned_to===a.name?'selected':''}>${esc(a.name)}</option>`).join('');
     asel.value=lead.assigned_to||'';
+    asel.dataset.prev=lead.assigned_to||'';
     // Reassigning is admin/team-lead only now — matches the server-side check.
     asel.disabled=!['admin','super_admin','team_lead'].includes(agentRole);
     // Populate status select
@@ -3978,7 +4224,7 @@ function showLeadGroup(g){
     const canAssign=['admin','super_admin','team_lead'].includes(agentRole);
     const agentOpts='<option value="">Unassigned</option>'+allAgents.map(a=>`<option value="${esc(a.name)}" ${l.assigned_to===a.name?'selected':''}>${esc(a.name)}</option>`).join('');
     const assignCol=canAssign
-      ?`<select class="assign-sel ${l.assigned_to?'':'unassigned'}" onchange="assignLead('${ph}',this.value,this)">${agentOpts}</select>`
+      ?`<select class="assign-sel ${l.assigned_to?'':'unassigned'}" data-prev="${esc(l.assigned_to||'')}" onchange="assignLead('${ph}',this.value,this)">${agentOpts}</select>`
       :`<span style="font-size:12px;color:var(--g500);font-weight:600">${esc(l.assigned_to||'Unassigned')}</span>`;
     const statusCol=isInt?`<span class="status-badge ${l.status||'new'}">${(l.status||'new').replace('_',' ')}</span>`:'';
     return `<div class="lead-row">
@@ -4005,20 +4251,27 @@ function viewLeadChat(phone,name){
 
 // ── Lead Assignment — a lead's "owner" IS the conversation's owner, so this
 // writes through the same ConversationOwner record the Conversations tab uses.
-async function assignLead(phone,agentName,selEl){
+function assignLead(phone,agentName,selEl){
   const agent=agentName?(allAgents||[]).find(a=>a.name===agentName):null;
-  try{
-    const r=await fetch(`/admin/conversations/${encodeURIComponent(phone)}/owner?key=${encodeURIComponent(adminKey)}`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({owner_name:agentName||null,owner_email:agent?agent.email:null})
-    });
-    if(!r.ok)throw new Error();
-    if(selEl){selEl.className='assign-sel '+(agentName?'':'unassigned');}
-  }catch(e){alert('Failed to assign — you may not have permission to reassign this conversation.');}
+  const prevName=selEl?.dataset.prev||'';
+  const conv=allConversations.find(c=>c.phone===phone);
+  const currentOwnerName=conv?.owner?.name||selEl?.dataset.prev||'Unassigned';
+  openReassignReasonModal({
+    mode:'direct', phone, ownerName:agentName, ownerEmail:agent?agent.email:null,
+    revertEl:selEl, revertValue:prevName,
+    title:'Reassign Lead',
+    desc:`<strong>${esc(currentOwnerName)}</strong> → <strong>${esc(agentName||'Unassigned')}</strong>`,
+    confirmLabel:'Reassign',
+    onSuccess:()=>{
+      if(selEl){selEl.className='assign-sel '+(agentName?'':'unassigned');selEl.dataset.prev=agentName||'';}
+      if(conv)conv.owner=agentName?{name:agentName,email:agent?agent.email:null}:null;
+    },
+    onError:()=>{alert('Failed to assign — you may not have permission to reassign this conversation.');}
+  });
 }
-async function assignLeadFromDetail(agentName){
+function assignLeadFromDetail(agentName){
   if(!currentDetailPhone)return;
-  await assignLead(currentDetailPhone,agentName,null);
+  assignLead(currentDetailPhone,agentName,null);
 }
 async function updateLeadStatus(phone,status){
   if(!phone)return;

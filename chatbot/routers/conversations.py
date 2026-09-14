@@ -18,7 +18,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, Tag
+from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
 from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
 from chatbot.utils.phone import normalize_phone
@@ -513,34 +513,237 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
 class OwnerUpdate(BaseModel):
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
+    reason: str
+
+
+def _dept_match(db, caller_agent_id: Optional[int], target_email: str) -> bool:
+    caller = db.query(Agent).filter(Agent.id == caller_agent_id).first() if caller_agent_id else None
+    target = db.query(Agent).filter(Agent.email == target_email).first()
+    return bool(caller and target and caller.department_id is not None
+                and target.department_id == caller.department_id)
 
 
 @router.patch("/conversations/{phone}/owner")
 async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(conversation_guard(write=True))):
+    if not body.reason or not body.reason.strip():
+        raise HTTPException(400, "Please state a reason for this reassignment")
+
     def _upsert():
         db = get_db()
         try:
             # Team Lead can reassign broadly, but only to agents in their own
             # department — not a company-wide free-for-all.
             if ctx.get("role") == "team_lead" and body.owner_email:
-                caller = db.query(Agent).filter(Agent.id == ctx.get("agent_id")).first()
-                target = db.query(Agent).filter(Agent.email == body.owner_email).first()
-                if not caller or not target or caller.department_id is None \
-                        or target.department_id != caller.department_id:
+                if not _dept_match(db, ctx.get("agent_id"), body.owner_email):
                     raise HTTPException(403, "You can only reassign within your own department")
 
             norm = normalize_phone(phone)
             existing = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+            from_name = existing.owner_name if existing else None
+            from_email = existing.owner_email if existing else None
             if existing:
                 existing.owner_name = body.owner_name
                 existing.owner_email = body.owner_email
             else:
                 db.add(ConversationOwner(phone=norm, owner_name=body.owner_name, owner_email=body.owner_email))
+            # Every ownership change gets logged here — not just the requests
+            # that needed approval — so the audit trail covers direct
+            # reassigns too, not only the ones routed through the request flow.
+            db.add(ReassignmentRequest(
+                phone=norm, from_owner_name=from_name, from_owner_email=from_email,
+                to_owner_name=body.owner_name, to_owner_email=body.owner_email,
+                requested_by_name=ctx.get("name", "Agent"), requested_by_email=ctx.get("email"),
+                requested_by_role=ctx.get("role"), reason=body.reason.strip(),
+                status="auto_approved", decided_by_name=ctx.get("name", "Agent"),
+                decided_by_email=ctx.get("email"), decided_at=datetime.utcnow(),
+            ))
             db.commit()
             return {"ok": True, "phone": norm, "owner_name": body.owner_name}
         finally:
             db.close()
     return await run_in_threadpool(_upsert)
+
+
+class ReassignmentRequestIn(BaseModel):
+    reason: str
+    to_owner_email: Optional[str] = None  # team_lead/admin/super_admin may direct it to someone else; otherwise defaults to the requester
+
+
+@router.post("/conversations/{phone}/reassignment-requests")
+async def request_reassignment(phone: str, body: ReassignmentRequestIn, ctx: dict = Depends(get_admin_ctx)):
+    """The escape hatch for the wall conversation_guard puts up: an agent who
+    has no access to a conversation (someone else already owns it, often in
+    another department) can ask for it here instead of being stuck. A team_
+    lead or admin's request takes effect immediately, since they already have
+    the authority to make that call; anyone else's sits pending for a team_
+    lead (their own department) or an admin to decide. Always requires a
+    stated reason, same as the direct endpoint above."""
+    if not body.reason or not body.reason.strip():
+        raise HTTPException(400, "Please state a reason for this request")
+    role = ctx.get("role")
+    requester_email = ctx.get("email")
+    requester_name = ctx.get("name", "Agent")
+    norm = normalize_phone(phone)
+
+    def _run():
+        db = get_db()
+        try:
+            to_email = body.to_owner_email or requester_email
+            if to_email != requester_email and role not in ("admin", "super_admin", "team_lead"):
+                raise HTTPException(403, "You can only request a conversation for yourself")
+            if role == "team_lead" and to_email != requester_email and not _dept_match(db, ctx.get("agent_id"), to_email):
+                raise HTTPException(403, "You can only assign within your own department")
+
+            target_agent = db.query(Agent).filter(Agent.email == to_email).first() if to_email else None
+            to_name = target_agent.name if target_agent else requester_name
+
+            existing_owner = db.query(ConversationOwner).filter(ConversationOwner.phone == norm).first()
+            from_name = existing_owner.owner_name if existing_owner else None
+            from_email = existing_owner.owner_email if existing_owner else None
+
+            auto = role in ("admin", "super_admin", "team_lead")
+            req = ReassignmentRequest(
+                phone=norm, from_owner_name=from_name, from_owner_email=from_email,
+                to_owner_name=to_name, to_owner_email=to_email,
+                requested_by_name=requester_name, requested_by_email=requester_email,
+                requested_by_role=role, reason=body.reason.strip(),
+                status="auto_approved" if auto else "pending",
+            )
+            if auto:
+                req.decided_by_name = requester_name
+                req.decided_by_email = requester_email
+                req.decided_at = datetime.utcnow()
+                if existing_owner:
+                    existing_owner.owner_name = to_name
+                    existing_owner.owner_email = to_email
+                else:
+                    db.add(ConversationOwner(phone=norm, owner_name=to_name, owner_email=to_email))
+            db.add(req)
+            db.commit()
+            db.refresh(req)
+            return {
+                "id": req.id, "status": req.status, "phone": norm, "to_owner_name": to_name,
+                "message": "Reassigned — you can message this conversation now." if auto
+                           else "Request sent — a team lead or admin needs to approve it.",
+            }
+        finally:
+            db.close()
+    return await run_in_threadpool(_run)
+
+
+def _can_decide(db, ctx: dict, req: ReassignmentRequest) -> bool:
+    role = ctx.get("role")
+    if role in ("admin", "super_admin"):
+        return True
+    if role == "team_lead":
+        scope = get_conversation_scope(db, ctx)
+        return req.requested_by_email in scope.get("dept_emails", set())
+    return False
+
+
+def _serialize_request(r: ReassignmentRequest) -> dict:
+    return {
+        "id": r.id, "phone": r.phone,
+        "from_owner_name": r.from_owner_name, "from_owner_email": r.from_owner_email,
+        "to_owner_name": r.to_owner_name, "to_owner_email": r.to_owner_email,
+        "requested_by_name": r.requested_by_name, "requested_by_email": r.requested_by_email,
+        "requested_by_role": r.requested_by_role, "reason": r.reason, "status": r.status,
+        "decided_by_name": r.decided_by_name, "decided_by_email": r.decided_by_email,
+        "decision_note": r.decision_note,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "decided_at": r.decided_at.isoformat() if r.decided_at else None,
+    }
+
+
+@router.get("/reassignment-requests")
+async def list_reassignment_requests(
+    status: Optional[str] = Query(None),
+    ctx: dict = Depends(get_admin_ctx),
+):
+    """pending (default filter target on the frontend) for the approval queue;
+    pass status=all to see the full audit history. Scope: admin/super_admin
+    see everything; team_lead sees their own department's requests plus their
+    own; everyone else sees only requests they personally made."""
+    role = ctx.get("role")
+
+    def _run():
+        db = get_db()
+        try:
+            q = db.query(ReassignmentRequest)
+            if status and status != "all":
+                q = q.filter(ReassignmentRequest.status == status)
+            if role not in ("admin", "super_admin"):
+                if role == "team_lead":
+                    scope = get_conversation_scope(db, ctx)
+                    dept_emails = scope.get("dept_emails", set()) | {ctx.get("email")}
+                    q = q.filter(ReassignmentRequest.requested_by_email.in_(dept_emails))
+                else:
+                    q = q.filter(ReassignmentRequest.requested_by_email == ctx.get("email"))
+            rows = q.order_by(ReassignmentRequest.created_at.desc()).limit(200).all()
+            return [_serialize_request(r) for r in rows]
+        finally:
+            db.close()
+    return await run_in_threadpool(_run)
+
+
+class DecisionIn(BaseModel):
+    note: Optional[str] = None
+
+
+@router.post("/reassignment-requests/{req_id}/approve")
+async def approve_reassignment_request(req_id: int, body: DecisionIn, ctx: dict = Depends(get_admin_ctx)):
+    def _run():
+        db = get_db()
+        try:
+            req = db.query(ReassignmentRequest).filter(ReassignmentRequest.id == req_id).first()
+            if not req:
+                raise HTTPException(404, "Request not found")
+            if req.status != "pending":
+                raise HTTPException(400, f"Request already {req.status}")
+            if not _can_decide(db, ctx, req):
+                raise HTTPException(403, "You can't approve this request")
+            existing_owner = db.query(ConversationOwner).filter(ConversationOwner.phone == req.phone).first()
+            if existing_owner:
+                existing_owner.owner_name = req.to_owner_name
+                existing_owner.owner_email = req.to_owner_email
+            else:
+                db.add(ConversationOwner(phone=req.phone, owner_name=req.to_owner_name, owner_email=req.to_owner_email))
+            req.status = "approved"
+            req.decided_by_name = ctx.get("name", "Admin")
+            req.decided_by_email = ctx.get("email")
+            req.decided_at = datetime.utcnow()
+            if body.note:
+                req.decision_note = body.note.strip()
+            db.commit()
+            return {"ok": True}
+        finally:
+            db.close()
+    return await run_in_threadpool(_run)
+
+
+@router.post("/reassignment-requests/{req_id}/deny")
+async def deny_reassignment_request(req_id: int, body: DecisionIn, ctx: dict = Depends(get_admin_ctx)):
+    def _run():
+        db = get_db()
+        try:
+            req = db.query(ReassignmentRequest).filter(ReassignmentRequest.id == req_id).first()
+            if not req:
+                raise HTTPException(404, "Request not found")
+            if req.status != "pending":
+                raise HTTPException(400, f"Request already {req.status}")
+            if not _can_decide(db, ctx, req):
+                raise HTTPException(403, "You can't deny this request")
+            req.status = "denied"
+            req.decided_by_name = ctx.get("name", "Admin")
+            req.decided_by_email = ctx.get("email")
+            req.decided_at = datetime.utcnow()
+            if body.note:
+                req.decision_note = body.note.strip()
+            db.commit()
+            return {"ok": True}
+        finally:
+            db.close()
+    return await run_in_threadpool(_run)
 
 
 class HandoffRequest(BaseModel):
