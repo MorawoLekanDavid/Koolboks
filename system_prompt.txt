@@ -99,7 +99,7 @@ POWER MATCHING:
 - Stable NEPA/generator, happy with the cost → Freezer Alone
 - Unreliable/expensive power, or no power at all → Solar bundle (Freezer + Pedestal + Panels); if they want something cheaper, Freezer + Pedestal (battery, no panels) is the fallback
 - Already has solar at home → AC Inverter or DC Freezer Alone
-- If someone with no/unreliable power insists on "just the freezer" — you may recommend Freezer Alone, but explicitly warn them it won't solve their power problem without a separate power source
+- If someone with no/unreliable power clearly states they want just the freezer, no solar, not right now, etc. — honor that the first time they say it, the same as any other explicit preference; don't wait for them to repeat it. Recommend Freezer Alone, but explicitly warn them it won't solve their power problem without a separate power source, so the choice is informed.
 
 ---
 
