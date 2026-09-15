@@ -93,6 +93,51 @@ def inventory_text(products: List[Product]) -> str:
     return "\n".join(lines)
 
 
+def fix_multi_product_prices(raw: str, cards: list) -> str:
+    """Same trust problem the single-product price guard exists for, extended
+    to the multi-product comparison case it deliberately skips. Real, observed
+    bug: listing several products, the model priced the first one correctly
+    then reused that exact figure for the next two — three different products,
+    two different real prices, one number in the message. Checked per line
+    (the model's own bullet-per-product format) against only the products it
+    already tagged in this reply (`cards`, already resolved to real DB rows),
+    never the wider catalog — this catalog has several near-identical SKUs
+    differing only by an add-on (a solar panel, an inverter), so scoring
+    against everything risks confidently "fixing" a price to the WRONG
+    neighbor instead of catching a real mistake. Requires prices on 2+
+    different lines before it applies at all; a single stray price with no
+    product words nearby is left alone rather than guessed at."""
+    if len(cards) < 2:
+        return raw
+    price_re = re.compile(r"[N₦]\s?\d[\d,]*(?:\.\d+)?")
+    lines = raw.split("\n")
+    if sum(1 for ln in lines if price_re.search(ln)) < 2:
+        return raw
+    fixed_lines = []
+    for line in lines:
+        m = price_re.search(line)
+        if not m:
+            fixed_lines.append(line)
+            continue
+        line_lower = line.lower()
+        best_card, best_score = None, 0
+        for card in cards:
+            words = set(w for w in re.findall(r"[a-z0-9]+", card.name.lower()) if len(w) > 2)
+            score = sum(1 for w in words if w in line_lower)
+            if score > best_score:
+                best_score, best_card = score, card
+        if best_card and best_score >= 2:
+            try:
+                correct_price = float(best_card.price)
+                stated = float(m.group(0)[1:].replace(",", "").replace("₦", "").strip())
+                if abs(stated - correct_price) > 1:
+                    line = line[:m.start()] + f"N{correct_price:,.0f}" + line[m.end():]
+            except (ValueError, TypeError):
+                pass
+        fixed_lines.append(line)
+    return "\n".join(fixed_lines)
+
+
 def bnpl_breakdown(price: float) -> str:
     """20% down, zero-interest balance over up to 23 months. Computed here rather than
     left to the model — a wrong monthly figure quoted to a customer is a real trust
@@ -474,6 +519,8 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
             raw = re.sub(r"[N₦]\s?\d[\d,]*(?:\.\d+)?", _fix_price, raw)
         except (ValueError, TypeError):
             pass
+    elif len(cards) > 1:
+        raw = fix_multi_product_prices(raw, cards)
 
     # Strip a stray extra number the model occasionally appends right after
     # a price with nothing between them — observed live, reproducibly, as
