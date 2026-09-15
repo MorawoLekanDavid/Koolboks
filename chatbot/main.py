@@ -28,6 +28,7 @@ from chatbot.routers import (
 )
 from chatbot.workers.conversation_scorer import conversation_scoring_worker
 from chatbot.workers.follow_up import follow_up_worker
+from chatbot.workers.handoff_watchdog import handoff_watchdog_worker
 from chatbot.workers.reengagement import reengagement_worker
 
 
@@ -39,10 +40,11 @@ async def lifespan(app: FastAPI):
     fu_task = asyncio.create_task(follow_up_worker())
     re_task = asyncio.create_task(reengagement_worker())
     cs_task = asyncio.create_task(conversation_scoring_worker())
+    hw_task = asyncio.create_task(handoff_watchdog_worker())
 
     yield
 
-    for task in (fu_task, re_task, cs_task):
+    for task in (fu_task, re_task, cs_task, hw_task):
         task.cancel()
         try:
             await task
