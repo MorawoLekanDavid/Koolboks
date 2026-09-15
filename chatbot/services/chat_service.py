@@ -120,13 +120,19 @@ def fix_multi_product_prices(raw: str, cards: list) -> str:
             fixed_lines.append(line)
             continue
         line_lower = line.lower()
-        best_card, best_score = None, 0
+        # Score against every card, not just track the best one — several
+        # cards can plausibly share descriptive words (e.g. a base unit and
+        # its +panel upgrade both look "solar"-ish in casual phrasing), and
+        # picking a close-scoring runner-up with false confidence is worse
+        # than leaving an already-wrong price alone. Require a real margin.
+        scored = []
         for card in cards:
             words = set(w for w in re.findall(r"[a-z0-9]+", card.name.lower()) if len(w) > 2)
-            score = sum(1 for w in words if w in line_lower)
-            if score > best_score:
-                best_score, best_card = score, card
-        if best_card and best_score >= 2:
+            scored.append((sum(1 for w in words if w in line_lower), card))
+        scored.sort(key=lambda x: -x[0])
+        best_score, best_card = scored[0]
+        runner_up_score = scored[1][0] if len(scored) > 1 else 0
+        if best_card and best_score >= 2 and (best_score - runner_up_score) >= 2:
             try:
                 correct_price = float(best_card.price)
                 stated = float(m.group(0)[1:].replace(",", "").replace("₦", "").strip())
@@ -157,7 +163,18 @@ def proxy_image_url(original_url: Optional[str]) -> Optional[str]:
 
 
 def match_products(products: List[Product], names: List[str]) -> List[ProductCard]:
-    """Match requested product names with available products"""
+    """Match requested product names (from the PRODUCTS: tag) with real
+    inventory rows. Tries exact substring containment first — fast and
+    precise on the common case where the model copies a name verbatim. Falls
+    back to fuzzy word-overlap scoring when that fails, since the model
+    doesn't always reproduce a name exactly (reordered words, a dropped
+    parenthetical) — without this fallback that product silently drops out
+    of the result entirely, which is how a multi-product reply's downstream
+    price-accuracy check (fix_multi_product_prices, gated on having 2+ cards
+    to check against) ends up with too few products to catch a wrong price
+    against — a real, observed failure: a 4-product listing where only the
+    first name matched exactly, so the other three products' wrong prices
+    went completely unvalidated."""
     if not products or not names:
         return []
 
@@ -165,18 +182,33 @@ def match_products(products: List[Product], names: List[str]) -> List[ProductCar
     seen = set()
     for req_name in names:
         req_lower = req_name.strip().lower()
+        matched = None
         for p in products:
             if req_lower in p.name.lower() and p.id not in seen:
-                cards.append(ProductCard(
-                    name=p.name,
-                    price=str(p.price),
-                    image_url=proxy_image_url(p.image_url),
-                    original_image_url=p.image_url,
-                    product_url=p.product_url,
-                    description=p.description,
-                ))
-                seen.add(p.id)
+                matched = p
                 break
+        if not matched:
+            req_words = set(w for w in re.findall(r"[a-z0-9]+", req_lower) if len(w) > 2)
+            best_score, best_p = 0, None
+            for p in products:
+                if p.id in seen:
+                    continue
+                p_words = set(w for w in re.findall(r"[a-z0-9]+", p.name.lower()) if len(w) > 2)
+                score = len(req_words & p_words)
+                if score > best_score:
+                    best_score, best_p = score, p
+            if best_score >= 3:
+                matched = best_p
+        if matched:
+            cards.append(ProductCard(
+                name=matched.name,
+                price=str(matched.price),
+                image_url=proxy_image_url(matched.image_url),
+                original_image_url=matched.image_url,
+                product_url=matched.product_url,
+                description=matched.description,
+            ))
+            seen.add(matched.id)
     return cards
 
 
