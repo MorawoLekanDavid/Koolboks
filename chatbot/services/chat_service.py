@@ -475,6 +475,18 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
         except (ValueError, TypeError):
             pass
 
+    # Strip a stray extra number the model occasionally appends right after
+    # a price with nothing between them — observed live, reproducibly, as
+    # "N1,950,000 953 000". _fix_price above only matches from the currency
+    # symbol up to the first non-digit/comma character (the space before the
+    # stray number), so it never sees this trailing fragment to validate or
+    # remove. A customer skimming this could easily misread it as one much
+    # larger number. Only strips a bare thousand-grouped number sitting
+    # immediately after a price with just whitespace between them — real
+    # sentences have a word there ("down", "for"), so this shouldn't catch
+    # legitimate text.
+    raw = re.sub(r"([N₦]\d[\d,]*(?:\.\d+)?)\s+\d{2,3}[,\s]\d{3}(?!\d)", r"\1", raw)
+
     # Attach an accurate payment-plan breakdown whenever a single product is being
     # priced — computed here instead of trusting the model's mental math, and shown
     # proactively rather than only after the customer objects to the price. Skipped
