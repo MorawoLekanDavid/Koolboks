@@ -14,7 +14,15 @@ DATABASE_URL = os.environ.get(
 )
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "3600")
+
+# How long a conversation's Redis-cached history survives between messages.
+# Was 1 hour — far shorter than realistic gaps in a WhatsApp sales chat (a
+# customer checking with family, sleeping on a decision, etc.), so the model
+# would lose all memory of an ongoing conversation and restart it from
+# scratch (re-greeting, re-asking already-answered questions) well before
+# the *intentional* 24h staleness check in webhook.py ever got a chance to
+# run. 48h keeps it comfortably longer than that 24h decision point.
+CHAT_TTL_STR = os.environ.get("REDIS_CHAT_TTL", "172800")
 MAX_HISTORY_STR = os.environ.get("MAX_HISTORY_MESSAGES", "20")
 LEAD_TTL_STR = os.environ.get("REDIS_LEAD_TTL", "86400")
 WHATSAPP_CONTACT = os.environ.get("WHATSAPP_CONTACT", "+2348116402869")
@@ -48,7 +56,7 @@ FOLLOW_UP_MESSAGE = os.environ.get(
     "and we'll pick up right where we left off! \U0001F60A",
 )
 
-CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 3600
+CHAT_TTL = int(CHAT_TTL_STR) if CHAT_TTL_STR and CHAT_TTL_STR.isdigit() else 172800
 MAX_HISTORY = int(MAX_HISTORY_STR) if MAX_HISTORY_STR and MAX_HISTORY_STR.isdigit() else 20
 LEAD_TTL = int(LEAD_TTL_STR) if LEAD_TTL_STR and LEAD_TTL_STR.isdigit() else 86400
 IDLE_THRESHOLD = 5 * 60
