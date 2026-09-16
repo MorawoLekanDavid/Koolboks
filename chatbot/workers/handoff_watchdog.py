@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import BackgroundTasks
 from sqlalchemy import and_, func, select
@@ -10,6 +10,38 @@ from chatbot.database import get_db
 from chatbot.models import Message
 from chatbot.services.chat_service import ChatRequest, generate_chat_response
 from chatbot.workers.bot_response import deliver_reply
+
+
+# Upper bound on how far back this looks — without one, every conversation
+# that ever went quiet (weeks or months ago, long since closed) would be a
+# "candidate" forever, and a phone whose last message happened to be inbound
+# ("ok thanks 🙏") would get an unprompted bot reply out of nowhere, on a
+# conversation the business has long moved on from. This is for recently
+# abandoned conversations, not an archive replay.
+MAX_STALENESS_HOURS = 72
+
+
+async def _candidate_phones() -> list:
+    """Every phone whose most recent message of ANY kind falls in the window
+    (HANDOFF_AUTO_RESET_HOURS ago, MAX_STALENESS_HOURS ago] — the pool
+    _stale_unanswered_name() below then filters down to the ones that are
+    actually still unanswered. Deliberately NOT scoped to currently-active
+    `koolbuy:handoff:*` Redis keys (see the docstring on run_handoff_watchdog
+    for why that was the bug)."""
+    now = datetime.utcnow()
+    floor = now - timedelta(hours=HANDOFF_AUTO_RESET_HOURS)
+    ceiling = now - timedelta(hours=MAX_STALENESS_HOURS)
+    db = get_db()
+    try:
+        rows = db.execute(
+            select(Message.phone)
+            .group_by(Message.phone)
+            .having(and_(func.max(Message.created_at) < floor,
+                         func.max(Message.created_at) >= ceiling))
+        ).all()
+        return [r.phone for r in rows]
+    finally:
+        db.close()
 
 
 async def _stale_unanswered_name(phone: str):
@@ -40,30 +72,39 @@ async def _stale_unanswered_name(phone: str):
 
 
 async def run_handoff_watchdog():
-    """Catches handoff conversations a human agent claimed and then abandoned.
+    """Catches conversations abandoned after a customer's message went
+    unanswered for HANDOFF_AUTO_RESET_HOURS+ — most commonly a human agent who
+    claimed the conversation and then went silent, but not exclusively that.
 
-    The reactive stale-handoff check in webhook.py (search HANDOFF_AUTO_RESET_HOURS
-    there) only re-evaluates staleness when the CUSTOMER sends another message —
-    a real bot response then, since the whole point is to resume the normal flow
-    for whatever they just said. If they don't send anything further (they already
-    asked something and are simply waiting for a reply that never comes), that
-    check never runs again and the conversation sits stuck in handoff forever,
-    bot silenced, with nobody watching it. This scans active handoffs on a timer
-    instead of waiting on a customer message that may never arrive."""
+    Originally this scanned active `koolbuy:handoff:wa_*` Redis keys, mirroring
+    the reactive stale-handoff check in webhook.py. That missed real cases: the
+    handoff key itself carries its own 24h TTL (see MEDIA_HANDOFF_TTL / the
+    toggle_handoff endpoint) and expires on its own well before anyone reviews
+    it — once it's gone, that scan can never find the conversation again, even
+    though the customer is exactly as unanswered as before. Confirmed live: a
+    customer's "600L" sat unanswered for 40+ hours, spanning right across the
+    key's own expiry, and the very first version of this watchdog never once
+    saw it. This version instead asks Postgres directly for every phone whose
+    latest message (any direction) is older than the threshold — independent
+    of whether a handoff key currently exists, already expired, or was never
+    set at all (e.g. the bot itself silently failed to reply the first time).
+    Still doesn't send anything unless the conversation's actual last message
+    is inbound (see _stale_unanswered_name) — a customer who was already
+    answered and simply hasn't replied since is left alone."""
     if not redis_client.client:
         return
     handled = 0
-    async for key in redis_client.client.scan_iter(match="koolbuy:handoff:wa_*"):
-        session_id = key.split(":", 2)[-1]
-        phone = session_id[len("wa_"):]
+    for phone in await _candidate_phones():
+        session_id = f"wa_{phone}"
         try:
             name = await _stale_unanswered_name(phone)
             if name is None:
                 continue
 
-            await redis_client.client.delete(key)
-            log.info(f"[handoff-watchdog] auto-reset stale handoff for {session_id} "
-                     f"(no agent reply in {HANDOFF_AUTO_RESET_HOURS}h, customer still waiting)")
+            handoff_key = f"koolbuy:handoff:{session_id}"
+            await redis_client.client.delete(handoff_key)
+            log.info(f"[handoff-watchdog] resuming abandoned conversation for {session_id} "
+                     f"(no reply in {HANDOFF_AUTO_RESET_HOURS}h, customer still waiting)")
 
             # The unanswered message is almost certainly the last entry in Redis
             # history too (webhook.py appends every inbound message to history
