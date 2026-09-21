@@ -606,6 +606,15 @@
         }
 
         // ── Boot ──────────────────────────────────────────────────────────────────
+        // ?start=closed opts a fresh embed into bubble-only on load, instead of the
+        // full chat window popping open the instant the host page loads — existing
+        // embeds (no param) keep today's default-open behavior untouched.
+        if (new URLSearchParams(window.location.search).get('start') === 'closed') {
+            document.getElementById('shell').classList.add('closed');
+            document.getElementById('chat-bubble').classList.add('visible');
+            notifyParent('closed');
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
             const restored = restoreMessages();
             if (restored) {
@@ -811,18 +820,35 @@
         function removeTyping() { const el = document.getElementById('typing-row'); if (el) el.remove(); }
 
         // ── Minimize / Close / Open ──────────────────────────────────────────────
+        // Tells a parent page embedding this via widget.js how big the iframe needs
+        // to be right now — harmless no-op when this page isn't inside an iframe (a
+        // direct visit to chat.koolbuystore.com). '*' is required since this page has
+        // no way to know the embedding site's origin in advance; widget.js checks the
+        // message's origin before trusting it, since target origin can't be locked
+        // down from this side.
+        function notifyParent(state) {
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ source: 'koolbuy-chat', state: state }, '*');
+                }
+            } catch (e) {}
+        }
+
         function toggleMinimize() {
             const shell = document.getElementById('shell');
             shell.classList.toggle('minimized');
             const btn = document.getElementById('minimize-btn');
-            btn.textContent = shell.classList.contains('minimized') ? '□' : '─';
-            btn.title = shell.classList.contains('minimized') ? 'Expand' : 'Minimize';
+            const minimized = shell.classList.contains('minimized');
+            btn.textContent = minimized ? '□' : '─';
+            btn.title = minimized ? 'Expand' : 'Minimize';
+            notifyParent(minimized ? 'minimized' : 'open');
         }
 
         function closeChat() {
             const shell = document.getElementById('shell');
             shell.classList.add('closed');
             document.getElementById('chat-bubble').classList.add('visible');
+            notifyParent('closed');
         }
 
         function openChat() {
@@ -834,6 +860,7 @@
             // Scroll to bottom of messages
             const box = document.getElementById('messages');
             if (box) box.scrollTop = box.scrollHeight;
+            notifyParent('open');
         }
 
         function escHtml(s) {

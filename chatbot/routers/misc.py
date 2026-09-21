@@ -18,6 +18,17 @@ async def serve_frontend():
     return FileResponse(os.path.join(BASE_DIR, "index.html"))
 
 
+@router.get("/widget.js")
+async def serve_widget_loader():
+    """The single-script embed a third-party site's developer drops in to
+    show the chat widget there — see widget.js for what it actually does."""
+    return FileResponse(
+        os.path.join(BASE_DIR, "widget.js"),
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.get("/admin")
 async def admin_dashboard():
     return FileResponse(
