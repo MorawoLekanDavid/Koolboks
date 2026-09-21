@@ -582,6 +582,17 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
 
     clean = re.sub(r'PRODUCTS:\s*.+\n?', '', raw, flags=re.IGNORECASE).strip()
 
+    # The prompt explicitly tells the model to re-output a bare PRODUCTS tag
+    # to resend a picture ("re-output the tag with the exact name"), so a
+    # reply that's ONLY that tag is expected and valid — but stripping the
+    # tag then leaves `clean` empty, which both callers (the website widget
+    # and the WhatsApp send) treat as "nothing to show": the widget displays
+    # a raw "No response" error to the customer, and WhatsApp would try to
+    # send an empty-text message alongside the image. Give it real text
+    # either way so the customer never sees an empty/broken-looking reply.
+    if not clean:
+        clean = "Here you go! 👇" if cards else "Sorry, could you say that again? I want to make sure I get you the right info."
+
     now = datetime.now().isoformat()
     # Annotated message (with phone note) plus the reply, ready to commit to
     # Redis history with timestamp — committed by persist(), not here, so a
