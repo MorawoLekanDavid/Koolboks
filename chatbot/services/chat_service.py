@@ -320,26 +320,24 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     is_welcome_sentinel = request.message.strip() == "__welcome__"
     system = await build_system_prompt(request.user_name, inv, "" if is_welcome_sentinel else request.message)
 
-    # Welcome
+    # Welcome — the widget shows its own fixed brand greeting (index.html)
+    # before it ever asks for a name or calls this, so by the time __welcome__
+    # arrives here the customer has already been welcomed and already asked
+    # what they need. Generating and showing a second, LLM-written welcome on
+    # top of that would repeat the greeting and re-ask a question they weren't
+    # given yet a chance to answer. Seed history with that same fixed text
+    # (so the model treats Step 1 as already done on their next real message,
+    # instead of firing it again) and just acknowledge the name — no LLM call
+    # needed for this at all anymore.
     if is_welcome_sentinel:
         history = await redis_client.get_history(request.session_id)
         if not history:
-            welcome_prompt = (
-                f"Greet {request.user_name} warmly. In the SAME sentence, introduce "
-                f"yourself by name ({BOT_NAME}) and say what Koolbuy does in no more "
-                f"than a handful of words, e.g. 'solar freezers, chillers & ice makers "
-                f"for home or business' — never narrow it to just food/spoilage, but "
-                f"keep it that short, this is a WhatsApp opener, not an ad. Both the "
-                f"name and the company line are required. Then ask what they'd be "
-                f"using the freezer for — never assume it's for a business, plenty of "
-                f"customers just want one for the house. Max 3 sentences total."
+            welcome_text = (
+                "Hi there! 👋🏽 Welcome to Koolboks! ❄️\n\n"
+                "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
+                "Tell us what you need, and we'll help you find the right solution."
             )
-            messages = [system, {"role": "user", "content": welcome_prompt}]
-            # 100 was enough for the old one-line greeting, but the required
-            # self-intro + company mention now regularly gets cut off mid-
-            # sentence at that budget — this reasoning model also spends part
-            # of its token budget on hidden reasoning before the visible text.
-            welcome_text = await call_groq(messages, max_tokens=200)
+            ack_text = f"Nice to meet you, {request.user_name}! 😊" if request.user_name else "Nice to meet you! 😊"
 
             async def _persist_welcome():
                 await redis_client.save_history(request.session_id, [{
@@ -347,7 +345,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
                     "content": welcome_text,
                     "ts": datetime.now().isoformat(),
                 }])
-            return ChatResponse(session_id=request.session_id, response=welcome_text), _persist_welcome
+            return ChatResponse(session_id=request.session_id, response=ack_text), _persist_welcome
 
         async def _persist_noop():
             pass
@@ -396,10 +394,8 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     if not history:
         state_summary += (
             f"✓ FIRST MESSAGE — this is {request.user_name}'s very first message in this "
-            f"conversation (or they just asked to restart). Start your reply with a short, "
-            f"warm welcome using their name that also introduces yourself by name "
-            f"({BOT_NAME}) and briefly introduces Koolbuy, before asking Step 1's "
-            f"question. See STEP 1 for how to rotate the intro's angle.\n"
+            f"conversation (or they just asked to restart). Send STEP 1's fixed welcome "
+            f"text, exactly as written there — nothing added, nothing reworded.\n"
         )
         # A real WhatsApp session with genuinely empty history is either a brand-new
         # contact or one that legitimately restarted — but if this phone already has

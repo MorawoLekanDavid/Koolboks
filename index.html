@@ -624,8 +624,15 @@
                 return;
             }
 
-            // Fresh session — show name prompt
-            appendBot("👋 Hi! Welcome to Koolbuy.\n\nWhat's your name?", true);
+            // Fresh session — brand welcome first, then ask their name as its
+            // own follow-up bubble (kept as two messages, not merged into
+            // one, so there's still only one question on screen at a time).
+            appendBot("Hi there! 👋🏽 Welcome to Koolboks! ❄️\n\nLet's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\nTell us what you need, and we'll help you find the right solution.", true);
+            showTyping();
+            setTimeout(() => {
+                removeTyping();
+                appendBot("What's your name?", true);
+            }, 1200);
         });
 
         // ── Send message ──────────────────────────────────────────────────────────
