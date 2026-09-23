@@ -337,7 +337,13 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
                 "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
                 "Tell us what you need, and we'll help you find the right solution."
             )
-            ack_text = f"Nice to meet you, {request.user_name}! 😊" if request.user_name else "Nice to meet you! 😊"
+            # Re-anchors the question the welcome already asked, rather than leaving
+            # the customer on a bare "nice to meet you" with no sense of what to do
+            # next — real customers replied "okay but that's not why i'm here" to the
+            # unadorned version, since the pending question was two messages back by
+            # the time they'd finished giving their name.
+            name_part = f", {request.user_name}" if request.user_name else ""
+            ack_text = f"Nice to meet you{name_part}! 😊 So — what are you looking to keep Kool today?"
 
             async def _persist_welcome():
                 await redis_client.save_history(request.session_id, [{
@@ -394,8 +400,10 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     if not history:
         state_summary += (
             f"✓ FIRST MESSAGE — this is {request.user_name}'s very first message in this "
-            f"conversation (or they just asked to restart). Send STEP 1's fixed welcome "
-            f"text, exactly as written there — nothing added, nothing reworded.\n"
+            f"conversation (or they just asked to restart). See FIRST MESSAGE / WELCOME "
+            f"below for the fixed welcome text — but check that section's own carve-out "
+            f"first: if their message already reads like a specific request or a "
+            f"continuation of something in progress, that takes priority over the welcome.\n"
         )
         # A real WhatsApp session with genuinely empty history is either a brand-new
         # contact or one that legitimately restarted — but if this phone already has

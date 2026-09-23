@@ -355,23 +355,29 @@
 
         .product-card {
             flex-shrink: 0;
-            width: 170px;
+            width: 196px;
             min-height: 180px;
             background: var(--white);
             border: 1.5px solid var(--gray-200);
             border-radius: 14px;
             overflow: hidden;
             box-shadow: var(--shadow-sm);
-            transition: box-shadow 0.2s, transform 0.15s;
+            transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s;
             text-decoration: none;
             display: flex;
             flex-direction: column;
+            cursor: pointer;
         }
 
-        .product-card:hover {
+        .product-card:hover,
+        .product-card:focus-visible {
             box-shadow: var(--shadow-md);
             transform: translateY(-3px);
             border-color: var(--orange);
+        }
+
+        .product-card:active {
+            transform: translateY(-1px);
         }
 
         .product-img-wrap {
@@ -410,6 +416,9 @@
 
         .product-info {
             padding: 9px 10px 10px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
         }
 
         .prod-name {
@@ -429,18 +438,40 @@
             font-size: 12px;
             font-weight: 800;
             color: var(--orange);
-            margin-bottom: 6px;
+            margin-bottom: 5px;
         }
 
-        .shop-link {
-            display: block;
+        .prod-desc {
+            font-size: 10.5px;
+            color: var(--gray-400);
+            line-height: 1.4;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .view-details {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
             text-align: center;
-            font-size: 11.5px;
+            font-size: 11px;
             font-weight: 700;
-            color: #fff;
-            background: var(--orange);
-            padding: 5px 0;
+            color: var(--orange);
+            background: var(--orange-soft);
+            padding: 6px 0;
             border-radius: 7px;
+            margin-top: auto;
+            transition: background 0.15s;
+        }
+
+        .product-card:hover .view-details {
+            background: var(--orange);
+            color: #fff;
         }
 
         .lead-banner {
@@ -803,10 +834,31 @@
                 info.innerHTML = `
                     <div class="prod-name">${escHtml(q.name)}</div>
                     <div class="prod-price">${formatPrice(q.price)}</div>
+                    ${q.description ? `<div class="prod-desc">${escHtml(q.description)}</div>` : ''}
+                    <div class="view-details">View details →</div>
                 `;
 
                 card.appendChild(imgWrap);
                 card.appendChild(info);
+
+                // Clicking (or tapping) a card asks about that exact product through
+                // the normal chat pipeline — same as if the customer had typed it
+                // themselves, so it shows up in history and the model answers with
+                // full detail via the SPECIFIC PRODUCT fast path. No separate detail
+                // view or endpoint needed.
+                card.setAttribute('role', 'button');
+                card.setAttribute('tabindex', '0');
+                card.setAttribute('aria-label', `View details for ${q.name}`);
+                const askAboutProduct = () => {
+                    const input = document.getElementById('msg');
+                    input.value = `Tell me more about ${q.name}`;
+                    sendMsg();
+                };
+                card.addEventListener('click', askAboutProduct);
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); askAboutProduct(); }
+                });
+
                 strip.appendChild(card);
             });
             box.appendChild(strip);
