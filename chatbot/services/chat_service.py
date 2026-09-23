@@ -43,6 +43,17 @@ PHONE_CONSENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A bare "Hi"/"Hello" with nothing else is overwhelmingly the most common first
+# message (confirmed reading real transcripts) — anything beyond a plain greeting
+# (a question, a product mention, a number) fails this and falls through to the
+# model as normal, so the FIRST MESSAGE / WELCOME carve-out for a specific first
+# request still applies exactly as before.
+BARE_GREETING_RE = re.compile(
+    r'^\s*(hi+|hello+|hey+|hiya|yo|good\s*(morning|afternoon|evening|day)|greetings)'
+    r'\s*(there)?[^a-zA-Z0-9]*$',
+    re.IGNORECASE,
+)
+
 
 class ChatRequest(BaseModel):
     session_id:    str = Field(...)
@@ -359,6 +370,28 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
 
     # Normal chat
     history = await redis_client.get_history(request.session_id)
+
+    # A bare greeting as the very first message needs no LLM call at all — it's
+    # always the same fixed welcome, so send it directly. Confirmed live: even
+    # with an explicit "word-for-word, never reworded" instruction, the model
+    # doesn't always reproduce this reliably — one real reply silently
+    # "corrected" the intentional Koolboks pun "Kool" to "cool". A message this
+    # fixed doesn't need to go through the model at all.
+    if not history and BARE_GREETING_RE.match(request.message.strip()):
+        name_part = f", {request.user_name}" if request.user_name and request.user_name != "Customer" else ""
+        welcome_text = (
+            f"Hi there{name_part}! 👋🏽 Welcome to Koolboks! ❄️\n\n"
+            "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
+            "Tell us what you need, and we'll help you find the right solution."
+        )
+
+        async def _persist_bare_greeting():
+            now = datetime.now().isoformat()
+            await redis_client.save_history(request.session_id, [
+                {"role": "user", "content": request.message, "ts": now},
+                {"role": "assistant", "content": welcome_text, "ts": now},
+            ])
+        return ChatResponse(session_id=request.session_id, response=welcome_text), _persist_bare_greeting
 
     # Explicit customer request to restart — the CRITICAL MEMORY RULE in the system
     # prompt otherwise makes the model plow through the existing flow no matter what
