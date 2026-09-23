@@ -1,13 +1,14 @@
 import re
 from typing import Optional
 
-# Koolbuy officially ships to three countries (confirmed live in the bot's own
-# replies and knowledge base): Nigeria, Kenya, Uganda. The phone patterns below
-# only ever covered Nigeria -- a real customer with a Kenyan or Ugandan number
-# was structurally invisible to extract_valid_phone() no matter what they typed,
-# so CAPTURED STATE never flipped to "phone captured" and the bot just kept
-# demanding a Nigerian number forever. Confirmed live: an ICARDA researcher
-# requesting 2 solar freezer systems for Kisumu, Kenya, got stonewalled across
+SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9_\-\+]{8,120}$')
+
+# Real customers exist outside Nigeria (confirmed live), but the phone patterns
+# below only ever covered Nigeria -- a Kenyan or Ugandan number was structurally
+# invisible to extract_valid_phone() no matter what they typed, so CAPTURED
+# STATE never flipped to "phone captured" and the bot just kept demanding a
+# Nigerian number forever. Confirmed live: an ICARDA researcher requesting 2
+# solar freezer systems for Kisumu, Kenya, got stonewalled across
 # two separate attempts, including being told to find a Nigerian colleague's
 # number instead, despite offering an email address as an alternative.
 #
