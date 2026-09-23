@@ -488,7 +488,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
         phone = normalize_phone(request.session_id[3:])
     lead_captured = False
     looks_like_phone = bool(
-        re.search(r'\b0\d{7,11}\b|\+234\d{7,11}\b|\b[789]\d{9}\b', request.message))
+        re.search(r'\b0\d{7,11}\b|\+234\d{7,11}\b|\+254\d{6,9}\b|\+256\d{6,9}\b|\b[789]\d{9}\b', request.message))
 
     if phone and not already_captured:
         background_tasks.add_task(save_lead, request.user_name, phone, history, request.session_id)
@@ -541,9 +541,10 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
             f"[INVALID phone. If this message also contains OTHER details "
             f"(name, location, product, plan, etc.), briefly acknowledge those "
             f"first in one short clause — don't just ignore them. Then ask for "
-            f"a valid Nigerian number — 11 digits starting 070, 080, 081, 090, "
-            f"091 or 10 digits starting 7, 8, or 9. Keep the whole reply to 2 "
-            f"sentences.]"
+            f"a valid number — Nigerian (11 digits starting 070/080/081/090/091), "
+            f"Kenyan (+254 7XX or 1XX XXX XXX), or Ugandan (+256 7XX XXX XXX) — "
+            f"Koolbuy ships to all three countries, don't assume Nigeria. Keep "
+            f"the whole reply to 2 sentences.]"
         )
 
     raw = await call_groq(messages)
