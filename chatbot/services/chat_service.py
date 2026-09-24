@@ -599,7 +599,9 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
             f"\"{replied_product}\" — not a guess, this is which product they tapped "
             f"reply on. Treat it exactly as if they'd typed that full name. Do NOT ask "
             f"them to confirm or choose between it and a similar variant (different "
-            f"battery, panel count, alone vs bundled) — answer about THIS exact product.]"
+            f"battery, panel count, alone vs bundled) — answer about THIS exact product, "
+            f"and end with PRODUCTS: {replied_product} on its own line same as any other "
+            f"product reply, so its photo actually shows again.]"
         )
 
     raw = await call_groq(messages)
