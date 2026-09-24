@@ -510,10 +510,14 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     replied_product = resolve_reply_to_product(request.reply_to_wamid, df)
     if replied_product:
         state_summary += (
-            f"↩ CUSTOMER IS REPLYING TO A PHOTO OF: {replied_product}\n"
-            f"If their message is ambiguous on its own (\"this one,\" \"the second one,\" "
-            f"\"how much is this\"), it means THIS product — answer about it directly, "
-            f"don't ask them to repeat which one they meant.\n"
+            f"↩ CONFIRMED: the customer's message is a WhatsApp reply directly to this "
+            f"exact product's photo — \"{replied_product}\". This is not a guess or a "
+            f"narrowed-down shortlist, it is which product they tapped reply on. Treat "
+            f"their message exactly as if they had typed \"{replied_product}\" by its "
+            f"full name. Do NOT ask them to confirm or choose between it and a similar "
+            f"variant (different battery, different panel count, alone vs bundled) — "
+            f"you already know precisely which one, proceed straight to answering about "
+            f"THIS exact product (price, details, next step).\n"
         )
     state_summary += "───────────────────"
 
