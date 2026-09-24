@@ -4,7 +4,7 @@ from typing import Optional
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import and_, case, exists, func, or_, select
@@ -21,16 +21,18 @@ from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
 from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
+from chatbot.services.chat_service import ChatRequest, generate_chat_response
 from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
+    ensure_whatsapp_audio,
     save_message_db,
     send_whatsapp_media_message,
     send_whatsapp_message,
     upload_whatsapp_media,
     whatsapp_media_type_for,
-    ensure_whatsapp_audio,
 )
 from chatbot.utils.phone import normalize_phone
+from chatbot.workers.bot_response import deliver_reply
 
 router = APIRouter(prefix="/admin", tags=["conversations"])
 
@@ -861,15 +863,64 @@ class HandoffRequest(BaseModel):
     agent_name: str = "Agent"
 
 
+async def _resume_bot_if_pending(phone: str, session_id: str):
+    """Handing a conversation back to the bot doesn't mean the bot was
+    watching the whole time — a customer message that arrived (or simply
+    never got answered) while an agent had this chat is just sitting there.
+    Without this, it would only get answered by the customer's NEXT message,
+    or by the periodic handoff watchdog, which sweeps every 30 minutes and
+    only after HANDOFF_AUTO_RESET_HOURS have passed. An explicit handback is
+    a clear enough signal to act immediately instead: the bot has the full
+    conversation history either way, so if the last message is still
+    unanswered, it can just pick it up now. Mirrors handoff_watchdog.py's
+    per-conversation logic, minus its staleness gate."""
+    def _last_message():
+        db = get_db()
+        try:
+            return db.execute(
+                select(Message).where(Message.phone == phone)
+                .order_by(Message.created_at.desc()).limit(1)
+            ).scalars().first()
+        finally:
+            db.close()
+
+    try:
+        last_msg = await run_in_threadpool(_last_message)
+        if not last_msg or last_msg.direction != "inbound":
+            return  # already answered, or silent both ways -- nothing pending
+
+        pending_text = None
+        if redis_client.client:
+            history = await redis_client.get_history(session_id)
+            if history and history[-1].get("role") == "user":
+                pending_text = history[-1]["content"]
+                await redis_client.save_history(session_id, history[:-1])
+        if not pending_text:
+            pending_text = last_msg.content
+
+        bg = BackgroundTasks()
+        chat_req = ChatRequest(
+            session_id=session_id, message=pending_text,
+            user_name=last_msg.name or "Customer", reply_to_wamid=last_msg.reply_to_wamid,
+        )
+        chat_resp, persist = await generate_chat_response(chat_req, bg)
+        await deliver_reply(session_id, phone, chat_resp, persist, bg)
+        log.info(f"[handback] resumed bot reply for {phone} on handback to bot mode")
+    except Exception as e:
+        log.error(f"[handback] failed to resume bot reply for {phone}: {e}")
+
+
 @router.post("/handoff/{phone}")
 async def toggle_handoff(
     phone: str,
+    background_tasks: BackgroundTasks,
     body: HandoffRequest = HandoffRequest(),
     ctx: dict = Depends(conversation_guard(write=True, claim=True)),
 ):
     if not redis_client.client:
         raise HTTPException(status_code=503, detail="Redis unavailable")
-    session_id = f"wa_{normalize_phone(phone)}"
+    norm = normalize_phone(phone)
+    session_id = f"wa_{norm}"
     handoff_key = f"koolbuy:handoff:{session_id}"
     current = await redis_client.client.get(handoff_key)
     agent_display = ctx.get("name") or body.agent_name or "Agent"
@@ -902,4 +953,6 @@ async def toggle_handoff(
     await run_in_threadpool(_log_handoff)
     if mode == "agent":
         await run_in_threadpool(_claim_owner_if_unassigned, phone, agent_display, ctx.get("email", ""))
+    else:
+        background_tasks.add_task(_resume_bot_if_pending, norm, session_id)
     return {"phone": phone, "mode": mode, "agent": agent}
