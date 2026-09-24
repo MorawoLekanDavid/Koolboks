@@ -221,6 +221,40 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .msg-quote-label{font-weight:700;color:var(--orange-d);font-size:11px;line-height:1.3}
 .msg-quote-text{font-size:12px;color:var(--g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg-flash{animation:msgFlash 1.4s ease}
+/* Hover-reveal reply button on each bubble -- click it to quote that exact
+   message in the composer, the same "reply to this" gesture WhatsApp itself
+   uses. Sits just outside the bubble's corner rather than inside it so it
+   never covers the message content underneath. */
+.msg-reply-btn{position:absolute;top:-9px;width:24px;height:24px;border-radius:50%;background:#fff;border:1px solid var(--g200);box-shadow:var(--sh);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .12s,color .12s;color:var(--g500);z-index:2}
+.msg.outbound .msg-reply-btn{left:-8px}
+.msg.inbound .msg-reply-btn{right:-8px}
+.msg:hover .msg-reply-btn{opacity:1}
+.msg-reply-btn:hover{color:var(--orange)}
+.msg-reply-btn svg{width:13px;height:13px}
+/* The "replying to ..." bar above the composer -- same quote card as inside
+   a bubble, plus a close button since this one is still editable/cancelable
+   before send. */
+.composer-quote{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--g50);border-top:1px solid var(--g200);flex-shrink:0}
+.composer-quote-inner{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:4px 8px;border-left:3px solid var(--orange);background:rgba(0,0,0,.03);border-radius:6px}
+.composer-quote-thumb{width:32px;height:32px;object-fit:cover;border-radius:4px;flex-shrink:0}
+.composer-quote-body{min-width:0;overflow:hidden}
+.composer-quote-label{font-weight:700;color:var(--orange-d);font-size:11px;line-height:1.3}
+.composer-quote-text{font-size:12px;color:var(--g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composer-quote-close{background:none;border:none;cursor:pointer;color:var(--g400);padding:4px;flex-shrink:0;display:flex;border-radius:6px}
+.composer-quote-close:hover{color:var(--g600);background:var(--g100)}
+.composer-quote-close svg{width:15px;height:15px}
+/* Voice-note recording bar -- swaps in for the normal reply-box while
+   recording so there's no ambiguity about what "send" does mid-recording. */
+.voice-record-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;border-top:1px solid var(--g200);flex-shrink:0}
+.vrb-dot{width:10px;height:10px;border-radius:50%;background:#EF4444;flex-shrink:0;animation:vrbPulse 1.2s ease-in-out infinite}
+@keyframes vrbPulse{0%,100%{opacity:1}50%{opacity:.3}}
+.vrb-time{font-variant-numeric:tabular-nums;font-size:13.5px;font-weight:600;color:var(--g700);flex:1}
+.vrb-btn{width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.vrb-btn svg{width:16px;height:16px}
+.vrb-cancel{background:var(--g100);color:var(--g500)}
+.vrb-cancel:hover{background:var(--g200)}
+.vrb-send{background:var(--orange);color:#fff}
+.vrb-send:hover{background:var(--orange-d)}
 @keyframes msgFlash{0%,100%{box-shadow:var(--sh)}25%{box-shadow:0 0 0 2px var(--orange)}}
 .msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
 .msg-time{font-size:10px;color:var(--g400)}
@@ -282,6 +316,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .reply-icon-btn{width:36px;height:36px;background:none;border:none;font-size:18px;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .reply-icon-btn svg{width:18px;height:18px}
 .reply-icon-btn:hover{background:var(--g100)}
+.reply-icon-btn:disabled{opacity:.4;cursor:not-allowed;background:none}
 .reply-box textarea{flex:1;border:1.5px solid var(--g200);border-radius:20px;padding:9px 14px;font-size:14px;resize:none;outline:none;font-family:inherit;max-height:120px;min-height:40px;color:var(--g900);background:var(--g50)}
 .reply-box textarea:focus{border-color:var(--orange);background:#fff}
 .send-btn{width:40px;height:40px;background:var(--orange);color:#fff;border:none;border-radius:50%;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
@@ -1054,10 +1089,20 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             </div>
             <button class="wcb-action" onclick="openSendTemplateModal()">Send Template</button>
           </div>
-          <div class="reply-box">
+          <div class="composer-quote hidden" id="composerQuote"></div>
+          <input type="file" id="mediaFileInput" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="display:none" onchange="handleMediaFileSelected(event)">
+          <div class="voice-record-bar hidden" id="voiceRecordBar">
+            <span class="vrb-dot"></span>
+            <span class="vrb-time" id="vrbTime">0:00</span>
+            <button class="vrb-btn vrb-cancel" onclick="cancelVoiceRecording()" title="Discard"><span data-icon="trash"></span></button>
+            <button class="vrb-btn vrb-send" onclick="stopAndSendVoiceRecording()" title="Send"><span data-icon="send"></span></button>
+          </div>
+          <div class="reply-box" id="replyBoxRow">
             <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies"><span data-icon="clipboard"></span></button>
             <button class="reply-icon-btn" id="prodPickerBtn" onclick="toggleProdPicker()" title="Send Product">🛍️</button>
+            <button class="reply-icon-btn" id="attachBtn" onclick="document.getElementById('mediaFileInput').click()" title="Attach photo, video or file"><span data-icon="paperclip"></span></button>
             <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
+            <button class="reply-icon-btn" id="micBtn" onclick="startVoiceRecording()" title="Record a voice note"><span data-icon="mic"></span></button>
             <button class="send-btn" onclick="sendReply()"><span data-icon="send"></span></button>
           </div>
         </div>
@@ -2552,6 +2597,8 @@ const ICON = {
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10l6-3.5v11l-6-3.5"/></svg>',
   mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg>',
   inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2 3h4l2-3h4"/><path d="M4 12l1.5-7A1.5 1.5 0 0 1 7 4h10a1.5 1.5 0 0 1 1.5 1l1.5 7"/><path d="M4 12v6a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 18v-6"/></svg>',
+  paperclip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12.5l7-7a3.5 3.5 0 0 1 5 5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8-8"/></svg>',
+  reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8L4 12l5 4"/><path d="M4 12h10a6 6 0 0 1 6 6v1"/></svg>',
 };
 function hydrateIcons(root){
   (root||document).querySelectorAll('[data-icon]').forEach(el=>{
@@ -3785,6 +3832,12 @@ async function runAutoTag(){
 async function selectConv(phone,name,mode,agent){
   // Stop any previous poll immediately — must happen before the await
   if(msgPollInterval){clearInterval(msgPollInterval);msgPollInterval=null;}
+  // A pending reply-quote or an in-progress recording belongs to whichever
+  // conversation was open when it started — carrying it over to a different
+  // customer would quote or narrate the wrong chat entirely.
+  cancelReply();
+  if(_voiceRecorder&&_voiceRecorder.state!=='inactive')cancelVoiceRecording();
+  clearProductImage();
   selectedPhone=phone;selectedMode=mode;
   document.getElementById('emptyState').classList.add('hidden');
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
@@ -3819,6 +3872,7 @@ async function loadWindowStatus(phone){
   }
 }
 let _lastDeliveryStatus={};
+let _lastMsgs=[];
 async function loadMessages(){
   if(!selectedPhone)return;
   const phone=selectedPhone; // capture now — selectedPhone may change while awaiting
@@ -3853,6 +3907,7 @@ async function loadMessages(){
     // it was replying to, same blind spot the bot itself used to have.
     const wamidMap=new Map();
     msgs.forEach(m=>{if(m.wamid)wamidMap.set(m.wamid,m);});
+    _lastMsgs=msgs; // looked up by replyToMessage() when the hover reply button is clicked
     msgs.forEach(m=>{
       const d=new Date(m.timestamp+'Z');
       const dayKey=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -3885,7 +3940,10 @@ async function loadMessages(){
           statusHtml=`<span class="msg-status" title="Sent">${ICON.check}</span>`;
         }
       }
-      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div>${quoteHtml}<div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span>${statusHtml}</div></div>`);
+      // Only a message WhatsApp actually gave a wamid to can be quoted —
+      // there's no context id to attach a reply to otherwise.
+      const replyBtnHtml=m.wamid?`<button class="msg-reply-btn" onclick="replyToMessage(${m.id})" title="Reply">${ICON.reply}</button>`:'';
+      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}">${replyBtnHtml}<div class="msg-sender ${sc}">${sl}</div>${quoteHtml}<div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span>${statusHtml}</div></div>`);
     });
     box.innerHTML=parts.join('');
     if(atBottom)box.scrollTop=box.scrollHeight;
@@ -3896,15 +3954,151 @@ function clearProductImage(){
   pendingProductImageUrl=null;
   document.getElementById('imgAttachBadge').style.display='none';
 }
+// ── Reply-by-tagging ───────────────────────────────────────────────────
+// Shared between the in-bubble quote preview (renderQuotePreview, read-only)
+// and the composer's own quote bar (editable, has a close button) so both
+// describe a quoted message identically — a thumbnail for a photo, a plain
+// label for video/audio/document, or a name + text snippet for a quoted
+// text message.
+function _quoteContentParts(quoted){
+  let thumb='',label,text='';
+  let m;
+  if(m=quoted.content.match(/^\[image\](.*)\[\/image\]$/)){
+    thumb=`<img class="msg-quote-thumb" src="${esc(mediaSrc(m[1]))}" onerror="this.style.display='none'">`;
+    label=quoted.direction==='outbound'?'Photo':'Customer photo';
+  }else if(/^\[video\]/.test(quoted.content)){label='Video';}
+  else if(/^\[audio\]/.test(quoted.content)){label='Voice note';}
+  else if(/^\[document\]/.test(quoted.content)){label='Document';}
+  else{label=quoted.direction==='inbound'?esc(quoted.name||'Customer'):'Itura';text=esc(quoted.content).slice(0,80);}
+  return {thumb,label,text};
+}
+let pendingReplyToWamid=null;
+function replyToMessage(id){
+  const m=_lastMsgs.find(x=>x.id===id);
+  if(!m||!m.wamid)return;
+  pendingReplyToWamid=m.wamid;
+  const {thumb,label,text}=_quoteContentParts(m);
+  document.getElementById('composerQuote').innerHTML=
+    `<div class="composer-quote-inner">${thumb}<div class="composer-quote-body"><div class="composer-quote-label">Replying to ${label}</div>${text?`<div class="composer-quote-text">${text}</div>`:''}</div></div><button class="composer-quote-close" onclick="cancelReply()" title="Cancel reply">${ICON.close}</button>`;
+  document.getElementById('composerQuote').classList.remove('hidden');
+  document.getElementById('replyText').focus();
+}
+function cancelReply(){
+  pendingReplyToWamid=null;
+  const el=document.getElementById('composerQuote');
+  el.classList.add('hidden');
+  el.innerHTML='';
+}
 async function sendReply(){
   const text=document.getElementById('replyText').value.trim();
   if(!text||!selectedPhone)return;
   document.getElementById('replyText').value='';
   const payload={message:text,agent_name:agentName};
   if(pendingProductImageUrl)payload.image_url=pendingProductImageUrl;
+  if(pendingReplyToWamid)payload.reply_to_wamid=pendingReplyToWamid;
   clearProductImage();
+  cancelReply();
   await fetch(`/admin/conversations/${selectedPhone}/reply?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(e=>console.error(e));
   await loadMessages();
+}
+// ── Agent-sent media: photo / video / document / voice note ────────────
+let _mediaSending=false;
+async function sendMediaFile(file,opts){
+  opts=opts||{};
+  if(!selectedPhone||_mediaSending)return;
+  _mediaSending=true;
+  const attachBtn=document.getElementById('attachBtn'),micBtn=document.getElementById('micBtn');
+  attachBtn.disabled=true;micBtn.disabled=true;
+  try{
+    const fd=new FormData();
+    fd.append('file',file,file.name||'upload');
+    // A voice note's typed-text field (if any) isn't a caption for it —
+    // WhatsApp doesn't render captions on audio anyway — so it's left alone
+    // rather than silently consumed and cleared.
+    if(!opts.isVoice){
+      const caption=document.getElementById('replyText').value.trim();
+      if(caption)fd.append('caption',caption);
+    }
+    if(pendingReplyToWamid)fd.append('reply_to_wamid',pendingReplyToWamid);
+    const r=await fetch(`/admin/conversations/${selectedPhone}/send-media?key=${encodeURIComponent(adminKey)}`,{method:'POST',body:fd});
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      alert(err.detail||'Failed to send file');
+      return;
+    }
+    if(!opts.isVoice)document.getElementById('replyText').value='';
+    cancelReply();
+    await loadMessages();
+  }catch(e){
+    console.error(e);
+    alert('Failed to send — check your connection and try again.');
+  }finally{
+    _mediaSending=false;
+    attachBtn.disabled=false;micBtn.disabled=false;
+  }
+}
+async function handleMediaFileSelected(e){
+  const file=e.target.files[0];
+  e.target.value=''; // so picking the exact same file again still fires onchange
+  if(!file)return;
+  await sendMediaFile(file);
+}
+// ── Voice notes ──────────────────────────────────────────────────────
+let _voiceRecorder=null,_voiceChunks=[],_voiceStream=null,_voiceStartTs=0,_voiceTimerInt=null;
+async function startVoiceRecording(){
+  if(!selectedPhone)return;
+  try{
+    _voiceStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch(e){
+    alert('Microphone access was denied or is unavailable in this browser.');
+    return;
+  }
+  // Chrome's MediaRecorder can only produce webm/opus, Firefox's can do
+  // ogg/opus directly — WhatsApp only accepts the latter, so whichever we
+  // get, the backend transcodes it before upload. Recording in whatever the
+  // browser natively supports (rather than forcing one) keeps this working
+  // everywhere instead of failing outright on Chrome.
+  const mimeType=MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')?'audio/ogg;codecs=opus':
+                 MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'';
+  _voiceChunks=[];
+  _voiceRecorder=mimeType?new MediaRecorder(_voiceStream,{mimeType}):new MediaRecorder(_voiceStream);
+  _voiceRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)_voiceChunks.push(e.data);};
+  _voiceRecorder.start();
+  _voiceStartTs=Date.now();
+  document.getElementById('replyBoxRow').classList.add('hidden');
+  document.getElementById('voiceRecordBar').classList.remove('hidden');
+  document.getElementById('vrbTime').textContent='0:00';
+  _voiceTimerInt=setInterval(()=>{
+    const s=Math.floor((Date.now()-_voiceStartTs)/1000);
+    document.getElementById('vrbTime').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+  },250);
+}
+function _closeVoiceRecordingUI(){
+  if(_voiceTimerInt){clearInterval(_voiceTimerInt);_voiceTimerInt=null;}
+  if(_voiceStream){_voiceStream.getTracks().forEach(t=>t.stop());_voiceStream=null;}
+  document.getElementById('voiceRecordBar').classList.add('hidden');
+  document.getElementById('replyBoxRow').classList.remove('hidden');
+}
+function cancelVoiceRecording(){
+  if(_voiceRecorder&&_voiceRecorder.state!=='inactive'){
+    _voiceRecorder.ondataavailable=null;
+    _voiceRecorder.stop();
+  }
+  _voiceRecorder=null;_voiceChunks=[];
+  _closeVoiceRecordingUI();
+}
+function stopAndSendVoiceRecording(){
+  if(!_voiceRecorder||_voiceRecorder.state==='inactive')return;
+  const mimeType=_voiceRecorder.mimeType||'audio/webm';
+  _voiceRecorder.onstop=async()=>{
+    const blob=new Blob(_voiceChunks,{type:mimeType});
+    _voiceChunks=[];
+    const ext=mimeType.includes('ogg')?'ogg':'webm';
+    const file=new File([blob],`voice-note.${ext}`,{type:mimeType});
+    _closeVoiceRecordingUI();
+    await sendMediaFile(file,{isVoice:true});
+  };
+  _voiceRecorder.stop();
 }
 // ── Canned Responses ───────────────────────────────────────────────────
 let cannedData=[];
@@ -7801,15 +7995,7 @@ function renderMediaBody(content){
 // exactly which of several products "this one" meant); anything else gets a
 // short label. Clicking it jumps to and briefly highlights the original.
 function renderQuotePreview(quoted){
-  let thumb='',label,text='';
-  let m;
-  if(m=quoted.content.match(/^\[image\](.*)\[\/image\]$/)){
-    thumb=`<img class="msg-quote-thumb" src="${esc(mediaSrc(m[1]))}" onerror="this.style.display='none'">`;
-    label=quoted.direction==='outbound'?'Photo':'Customer photo';
-  }else if(/^\[video\]/.test(quoted.content)){label='Video';}
-  else if(/^\[audio\]/.test(quoted.content)){label='Voice note';}
-  else if(/^\[document\]/.test(quoted.content)){label='Document';}
-  else{label=quoted.direction==='inbound'?esc(quoted.name||'Customer'):'Itura';text=esc(quoted.content).slice(0,80);}
+  const {thumb,label,text}=_quoteContentParts(quoted);
   return `<div class="msg-quote" onclick="scrollToQuotedMsg(${quoted.id})">${thumb}<div class="msg-quote-body"><div class="msg-quote-label">↩ ${label}</div>${text?`<div class="msg-quote-text">${text}</div>`:''}</div></div>`;
 }
 function scrollToQuotedMsg(id){

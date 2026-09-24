@@ -195,7 +195,20 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
 
 
 def _blurb(p):
-    return f"🛒 *{p.name}*\n💰 N{float(p.price):,.0f}"
+    """The caption WhatsApp attaches directly under a product photo -- this
+    IS the "image card" the website shows, just delivered through WhatsApp's
+    native image+caption bubble instead of a separate HTML card. Previously
+    only carried name + price, so the actual description lived in a second,
+    disconnected text bubble instead of under the photo it described."""
+    lines = [f"🛒 *{p.name}*", f"💰 N{float(p.price):,.0f}"]
+    if p.description:
+        desc = p.description.strip()
+        # WhatsApp image captions cap at 1024 bytes; this leaves comfortable
+        # headroom for the name/price lines above plus multi-byte emoji.
+        if len(desc) > 600:
+            desc = desc[:600].rsplit(" ", 1)[0] + "…"
+        lines.append(desc)
+    return "\n".join(lines)
 
 
 async def deliver_reply(session_id: str, wa_from: str, chat_resp, persist, bg: BackgroundTasks, escalate: bool = False):

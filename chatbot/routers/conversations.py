@@ -1,9 +1,10 @@
 import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import and_, case, exists, func, or_, select
@@ -20,7 +21,15 @@ from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
 from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
-from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message
+from chatbot.services.whatsapp_service import (
+    WHATSAPP_MEDIA_MAX_BYTES,
+    save_message_db,
+    send_whatsapp_media_message,
+    send_whatsapp_message,
+    upload_whatsapp_media,
+    whatsapp_media_type_for,
+    ensure_whatsapp_audio,
+)
 from chatbot.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/admin", tags=["conversations"])
@@ -493,12 +502,18 @@ class AgentReply(BaseModel):
     message: str
     agent_name: str = "Agent"
     image_url: Optional[str] = None
+    reply_to_wamid: Optional[str] = None
 
 
 @router.post("/conversations/{phone}/reply")
 async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversation_guard(write=True, claim=True))):
     session_id = f"wa_{phone}"
     display_name = ctx.get("name") or body.agent_name or "Agent"
+    # The quote context can only attach to one WhatsApp send -- whichever
+    # bubble the agent was actually pointing at. When both an image and text
+    # go out together, that's the image (the product photo is the thing
+    # being replied to; the text below it is just the caption-equivalent).
+    reply_claimed_by_image = bool(body.image_url and body.reply_to_wamid)
 
     if body.image_url:
         try:
@@ -508,6 +523,8 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
                 "type": "image",
                 "image": {"link": body.image_url},
             }
+            if reply_claimed_by_image:
+                img_payload["context"] = {"message_id": body.reply_to_wamid}
             async with httpx.AsyncClient(
                 timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")
             ) as _c:
@@ -520,12 +537,15 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
             save_message_db(
                 session_id, phone, display_name, "outbound",
                 f"[image]{body.image_url}[/image]", wamid=img_wamid,
+                reply_to_wamid=body.reply_to_wamid if reply_claimed_by_image else None,
             )
         except Exception as e:
             log.warning(f"Agent image send error: {e}")
 
-    wamid, _ = await send_whatsapp_message(phone, body.message)
-    save_message_db(session_id, phone, display_name, "outbound", body.message, wamid=wamid)
+    text_reply_to = None if reply_claimed_by_image else body.reply_to_wamid
+    wamid, _ = await send_whatsapp_message(phone, body.message, reply_to_wamid=text_reply_to)
+    save_message_db(session_id, phone, display_name, "outbound", body.message, wamid=wamid,
+                     reply_to_wamid=text_reply_to)
 
     if redis_client.client:
         history = await redis_client.get_history(session_id)
@@ -540,6 +560,69 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
 
     await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
     return {"status": "sent"}
+
+
+@router.post("/conversations/{phone}/send-media")
+async def agent_send_media(
+    phone: str,
+    file: UploadFile = File(...),
+    caption: Optional[str] = Form(None),
+    reply_to_wamid: Optional[str] = Form(None),
+    ctx: dict = Depends(conversation_guard(write=True, claim=True)),
+):
+    """Lets an agent send a photo, video, voice note or document straight from
+    their own device -- previously the only image an agent could send was one
+    already in the product catalogue (a hosted URL); this is the first path
+    for anything the agent has locally. Reuses the exact [image]/[video]/
+    [audio]/[document] content convention the webhook already writes for
+    customer-sent media, so the transcript renderer needs no changes to
+    display these the same way."""
+    session_id = f"wa_{phone}"
+    display_name = ctx.get("name") or "Agent"
+    norm = normalize_phone(phone)
+
+    data = await file.read()
+    content_type = file.content_type or "application/octet-stream"
+    media_type = whatsapp_media_type_for(content_type)
+
+    if media_type == "audio":
+        data, content_type = await ensure_whatsapp_audio(data, content_type)
+
+    max_bytes = WHATSAPP_MEDIA_MAX_BYTES.get(media_type, WHATSAPP_MEDIA_MAX_BYTES["document"])
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"{media_type} exceeds WhatsApp's {max_bytes // (1024*1024)}MB limit")
+
+    media_id = await upload_whatsapp_media(data, content_type, file.filename or "upload")
+    if not media_id:
+        raise HTTPException(status_code=502, detail="Upload to WhatsApp failed")
+
+    wamid = await send_whatsapp_media_message(
+        norm.lstrip("+"), media_type, media_id,
+        caption=caption or None, filename=file.filename, reply_to_wamid=reply_to_wamid,
+    )
+    if not wamid:
+        raise HTTPException(status_code=502, detail="Send failed")
+
+    if media_type == "document":
+        label = file.filename or "Document"
+        media_url = f"/admin/media-proxy/{media_id}" + (f"?filename={quote(file.filename)}" if file.filename else "")
+        content = f"[document]{media_url}|{label}[/document]"
+    else:
+        content = f"[{media_type}]/admin/media-proxy/{media_id}[/{media_type}]"
+    save_message_db(session_id, phone, display_name, "outbound", content, wamid=wamid,
+                     reply_to_wamid=reply_to_wamid)
+
+    if redis_client.client:
+        history = await redis_client.get_history(session_id)
+        history.append({
+            "role": "assistant",
+            "content": f"[Agent {display_name}]: sent a {media_type}" + (f" — {caption}" if caption else ""),
+            "ts": datetime.now().isoformat(),
+        })
+        await redis_client.save_history(session_id, history)
+
+    await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
+    return {"status": "sent", "wamid": wamid, "media_type": media_type}
 
 
 class OwnerUpdate(BaseModel):

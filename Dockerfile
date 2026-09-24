@@ -10,8 +10,12 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-# Install system dependencies (if needed for any native extensions)
+# ffmpeg: transcodes agent-recorded voice notes to the ogg/opus container
+# WhatsApp's Cloud API actually accepts -- browsers can only record
+# audio/webm;codecs=opus (Chrome) or audio/ogg;codecs=opus (Firefox) via
+# MediaRecorder, and WhatsApp silently rejects the former.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for better caching)

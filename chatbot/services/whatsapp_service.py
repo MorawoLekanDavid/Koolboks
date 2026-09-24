@@ -80,7 +80,7 @@ async def transcribe_whatsapp_audio(media_id: str) -> Optional[str]:
 
 
 async def send_whatsapp_message(
-    to: str, body: str, image_url: str = None, image_caption: str = None
+    to: str, body: str, image_url: str = None, image_caption: str = None, reply_to_wamid: str = None
 ) -> tuple[Optional[str], Optional[str]]:
     """Returns (text_wamid, image_wamid) -- always a pair, either half None if
     that part wasn't sent or the send failed. Callers that only sent text can
@@ -88,7 +88,12 @@ async def send_whatsapp_message(
     need the second one too: a customer replying to a specific product photo
     quotes the IMAGE message, not the caption text, so a caller that only
     tracks the text's wamid (the previous behavior here) can never resolve
-    that reply back to which product it was about."""
+    that reply back to which product it was about.
+
+    `reply_to_wamid`, when given, makes WhatsApp show the sent message as a
+    quoted reply to that earlier message -- attached to the image send when
+    one is included (that's the bubble a human would actually be pointing
+    at), otherwise to the text send."""
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         log.warning("WhatsApp credentials not configured")
         return None, None
@@ -103,6 +108,8 @@ async def send_whatsapp_message(
                                 "image": {"link": image_url}}
                 if image_caption:
                     img_payload["image"]["caption"] = image_caption
+                if reply_to_wamid:
+                    img_payload["context"] = {"message_id": reply_to_wamid}
                 img_resp = await client.post(url, json=img_payload, headers=headers)
                 if img_resp.is_success:
                     log.info(f"Product image sent to {to}")
@@ -115,6 +122,8 @@ async def send_whatsapp_message(
             resp = None
             if body:
                 text_payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}}
+                if reply_to_wamid and not image_url:
+                    text_payload["context"] = {"message_id": reply_to_wamid}
                 resp = await client.post(url, json=text_payload, headers=headers)
         if resp is not None:
             log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
@@ -125,6 +134,138 @@ async def send_whatsapp_message(
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
     return text_wamid, image_wamid
+
+
+# WhatsApp's media upload only accepts these -- audio in particular is far
+# narrower than it looks (no webm, no plain mp3-as-anything-else): only a
+# handful of containers/codecs are actually accepted, everything else has to
+# be transcoded first. See ensure_whatsapp_audio() below.
+_WHATSAPP_AUDIO_MIME_OK = {"audio/aac", "audio/mp4", "audio/mpeg", "audio/amr", "audio/ogg"}
+# Per-type caps WhatsApp itself enforces -- checked before upload so a file
+# that's too large fails fast with a clear reason instead of a cryptic 400
+# from Graph partway through.
+WHATSAPP_MEDIA_MAX_BYTES = {
+    "image": 5 * 1024 * 1024,
+    "video": 16 * 1024 * 1024,
+    "audio": 16 * 1024 * 1024,
+    "document": 100 * 1024 * 1024,
+}
+
+
+def whatsapp_media_type_for(content_type: str) -> str:
+    """Maps a browser-supplied MIME type to one of WhatsApp's four message
+    types. Anything that isn't clearly image/video/audio is sent as a
+    document -- WhatsApp has no generic "file" type, document is the
+    catch-all (PDFs, Office files, zips, ...)."""
+    if content_type.startswith("image/"):
+        return "image"
+    if content_type.startswith("video/"):
+        return "video"
+    if content_type.startswith("audio/"):
+        return "audio"
+    return "document"
+
+
+async def ensure_whatsapp_audio(data: bytes, content_type: str) -> tuple[bytes, str]:
+    """Browsers can only record voice notes as audio/webm;codecs=opus (Chrome)
+    or audio/ogg;codecs=opus (Firefox) via MediaRecorder -- WhatsApp's Cloud
+    API accepts the latter but silently rejects the former. Rather than limit
+    voice notes to Firefox-recorded audio, this transcodes anything not
+    already in an accepted container to ogg/opus with ffmpeg (installed in
+    the image specifically for this) before upload. Returns the original
+    bytes/type unchanged if no transcode is needed or ffmpeg fails -- the
+    upload call downstream still surfaces a clear error either way."""
+    base_type = content_type.split(";")[0].strip().lower()
+    if base_type in _WHATSAPP_AUDIO_MIME_OK:
+        return data, content_type
+    import asyncio as _asyncio
+    import tempfile
+    import os as _os
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".in", delete=False) as src:
+            src.write(data)
+            src_path = src.name
+        dst_path = src_path + ".ogg"
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-i", src_path, "-c:a", "libopus", "-b:a", "32k", dst_path,
+                stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr = await _asyncio.wait_for(proc.communicate(), timeout=30)
+            if proc.returncode != 0 or not _os.path.exists(dst_path):
+                log.warning(f"Voice note transcode failed: {stderr.decode(errors='ignore')[:500]}")
+                return data, content_type
+            with open(dst_path, "rb") as f:
+                return f.read(), "audio/ogg"
+        finally:
+            for p in (src_path, dst_path):
+                try:
+                    _os.remove(p)
+                except OSError:
+                    pass
+    except Exception as e:
+        log.warning(f"Voice note transcode error: {e}")
+        return data, content_type
+
+
+async def upload_whatsapp_media(data: bytes, content_type: str, filename: str) -> Optional[str]:
+    """Uploads raw bytes to WhatsApp's own media store and returns the media
+    ID to reference in a send call. This is the only way to send a file the
+    agent uploaded from their own device -- unlike product images, there's no
+    public URL for it to hand WhatsApp instead."""
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        log.warning("WhatsApp credentials not configured")
+        return None
+    url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/media"
+    headers = {"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            files = {"file": (filename, data, content_type)}
+            form = {"messaging_product": "whatsapp"}
+            resp = await client.post(url, data=form, files=files, headers=headers)
+        if resp.is_success:
+            return resp.json().get("id")
+        log.warning(f"WhatsApp media upload failed ({resp.status_code}): {resp.text}")
+        return None
+    except Exception as e:
+        log.error(f"WhatsApp media upload error: {e}")
+        return None
+
+
+async def send_whatsapp_media_message(
+    to: str, media_type: str, media_id: str, caption: str = None,
+    filename: str = None, reply_to_wamid: str = None,
+) -> Optional[str]:
+    """Sends a message referencing media already uploaded via
+    upload_whatsapp_media(). Returns the sent message's wamid, or None on
+    failure. Captions only render for image/video/document -- WhatsApp drops
+    them silently on audio, so callers shouldn't bother passing one there."""
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        log.warning("WhatsApp credentials not configured")
+        return None
+    url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
+    media_obj = {"id": media_id}
+    if caption and media_type in ("image", "video", "document"):
+        media_obj["caption"] = caption
+    if media_type == "document" and filename:
+        media_obj["filename"] = filename
+    payload = {"messaging_product": "whatsapp", "to": to, "type": media_type, media_type: media_obj}
+    if reply_to_wamid:
+        payload["context"] = {"message_id": reply_to_wamid}
+    try:
+        async with httpx.AsyncClient(timeout=15.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.is_success:
+            try:
+                return resp.json()["messages"][0]["id"]
+            except Exception:
+                return None
+        log.warning(f"WhatsApp {media_type} send failed ({resp.status_code}): {resp.text}")
+        return None
+    except Exception as e:
+        log.error(f"WhatsApp {media_type} send error: {e}")
+        return None
 
 
 async def send_whatsapp_template(to: str, template_name: str, variables: list[str] = None, language: str = "en") -> bool:
