@@ -515,17 +515,6 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
         state_summary += "× Delivery location: NOT YET CAPTURED\n"
 
     replied_product = resolve_reply_to_product(request.reply_to_wamid, df)
-    if replied_product:
-        state_summary += (
-            f"↩ CONFIRMED: the customer's message is a WhatsApp reply directly to this "
-            f"exact product's photo — \"{replied_product}\". This is not a guess or a "
-            f"narrowed-down shortlist, it is which product they tapped reply on. Treat "
-            f"their message exactly as if they had typed \"{replied_product}\" by its "
-            f"full name. Do NOT ask them to confirm or choose between it and a similar "
-            f"variant (different battery, different panel count, alone vs bundled) — "
-            f"you already know precisely which one, proceed straight to answering about "
-            f"THIS exact product (price, details, next step).\n"
-        )
     state_summary += "───────────────────"
 
     messages = [system, {"role": "user", "content": state_summary}] + history_for_groq + \
@@ -594,6 +583,23 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
             f"Kenyan (+254 7XX or 1XX XXX XXX), or Ugandan (+256 7XX XXX XXX) — "
             f"Koolbuy ships to all three countries, don't assume Nigeria. Keep "
             f"the whole reply to 2 sentences.]"
+        )
+
+    # Appended directly onto the CURRENT message (not the earlier CAPTURED
+    # STATE block) deliberately — that's the same high-salience spot the
+    # phone/delivery markers above use, right next to what the model is about
+    # to respond to. Confirmed live this actually matters, not just style: on
+    # a long, messy real conversation (16+ turns, the same ambiguity hit three
+    # times), the identical hint sitting in CAPTURED STATE earlier in context
+    # got silently dropped entirely — not even hedged on, just ignored — while
+    # this position held on a apples-to-apples replay of the same failure.
+    if replied_product:
+        messages[-1]["content"] += (
+            f"\n\n[CONFIRMED: this message is a WhatsApp reply directly to a photo of "
+            f"\"{replied_product}\" — not a guess, this is which product they tapped "
+            f"reply on. Treat it exactly as if they'd typed that full name. Do NOT ask "
+            f"them to confirm or choose between it and a similar variant (different "
+            f"battery, panel count, alone vs bundled) — answer about THIS exact product.]"
         )
 
     raw = await call_groq(messages)
