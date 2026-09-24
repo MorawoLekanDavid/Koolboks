@@ -81,13 +81,21 @@ async def transcribe_whatsapp_audio(media_id: str) -> Optional[str]:
 
 async def send_whatsapp_message(
     to: str, body: str, image_url: str = None, image_caption: str = None
-) -> Optional[str]:
+) -> tuple[Optional[str], Optional[str]]:
+    """Returns (text_wamid, image_wamid) -- always a pair, either half None if
+    that part wasn't sent or the send failed. Callers that only sent text can
+    keep unpacking just the first element; callers sending a product image
+    need the second one too: a customer replying to a specific product photo
+    quotes the IMAGE message, not the caption text, so a caller that only
+    tracks the text's wamid (the previous behavior here) can never resolve
+    that reply back to which product it was about."""
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         log.warning("WhatsApp credentials not configured")
-        return None
+        return None, None
     url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"}
-    wamid = None
+    text_wamid = None
+    image_wamid = None
     try:
         async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
             if image_url:
@@ -98,6 +106,10 @@ async def send_whatsapp_message(
                 img_resp = await client.post(url, json=img_payload, headers=headers)
                 if img_resp.is_success:
                     log.info(f"Product image sent to {to}")
+                    try:
+                        image_wamid = img_resp.json()["messages"][0]["id"]
+                    except Exception:
+                        pass
                 else:
                     log.warning(f"Product image send failed ({img_resp.status_code}): {img_resp.text}")
             resp = None
@@ -107,12 +119,12 @@ async def send_whatsapp_message(
         if resp is not None:
             log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
             try:
-                wamid = resp.json()["messages"][0]["id"]
+                text_wamid = resp.json()["messages"][0]["id"]
             except Exception:
                 pass
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
-    return wamid
+    return text_wamid, image_wamid
 
 
 async def send_whatsapp_template(to: str, template_name: str, variables: list[str] = None, language: str = "en") -> bool:
@@ -195,11 +207,13 @@ async def send_whatsapp_otp_template(to: str, template_name: str, code: str, lan
         return False
 
 
-def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None, delivery_status: str = "sent"):
+def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None,
+                     delivery_status: str = "sent", reply_to_wamid: str = None):
     try:
         db = get_db()
         norm = normalize_phone(phone)
-        db.add(Message(session_id=session_id, phone=norm, name=name, direction=direction, content=content, wamid=wamid, delivery_status=delivery_status))
+        db.add(Message(session_id=session_id, phone=norm, name=name, direction=direction, content=content,
+                        wamid=wamid, delivery_status=delivery_status, reply_to_wamid=reply_to_wamid))
         if direction == "inbound":
             lead = db.query(Lead).filter(Lead.phone == norm).first()
             if lead:

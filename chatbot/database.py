@@ -30,6 +30,14 @@ def init_database():
 
     try:
         with db_engine.connect() as _c:
+            _c.execute(sa_text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_wamid VARCHAR(100)"))
+            _c.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_messages_reply_to_wamid ON messages (reply_to_wamid)"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"reply_to_wamid migration: {_e}")
+
+    try:
+        with db_engine.connect() as _c:
             _c.execute(sa_text("""
                 CREATE TABLE IF NOT EXISTS canned_responses (
                     id SERIAL PRIMARY KEY,

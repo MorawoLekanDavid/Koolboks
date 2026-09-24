@@ -131,8 +131,23 @@ async def run_handoff_watchdog():
             if not pending_text:
                 continue
 
+            # Redis history doesn't carry WhatsApp's quoted-reply relationship,
+            # only Postgres does — look it up directly so a customer who quoted
+            # a specific product photo still gets resolved correctly here too,
+            # not just on the immediate/non-watchdog reply path.
+            db = get_db()
+            try:
+                last_msg = db.execute(
+                    select(Message).where(Message.phone == phone)
+                    .order_by(Message.created_at.desc()).limit(1)
+                ).scalars().first()
+                reply_to_wamid = last_msg.reply_to_wamid if last_msg else None
+            finally:
+                db.close()
+
             bg = BackgroundTasks()
-            chat_req = ChatRequest(session_id=session_id, message=pending_text, user_name=name)
+            chat_req = ChatRequest(session_id=session_id, message=pending_text, user_name=name,
+                                    reply_to_wamid=reply_to_wamid)
             chat_resp, persist = await generate_chat_response(chat_req, bg)
             await deliver_reply(session_id, phone, chat_resp, persist, bg)
             handled += 1

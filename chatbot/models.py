@@ -59,6 +59,12 @@ class Message(Base):
     direction = Column(String(10))  # inbound / outbound
     content = Column(String(4000))
     wamid = Column(String(100), nullable=True)
+    # Set on an inbound message when the customer used WhatsApp's own "reply to
+    # this message" feature — the wamid of whichever message they quoted (e.g.
+    # a specific product photo). Lets the bot resolve an otherwise-ambiguous
+    # "this one" / "the second freezer" back to the actual product, the same
+    # way a human reading the chat can see what was quoted.
+    reply_to_wamid = Column(String(100), nullable=True, index=True)
     delivery_status = Column(String(20), default="sent")  # sent | delivered | read | failed
     delivery_error = Column(String(255), nullable=True)  # Meta's failure reason, set only when delivery_status='failed'
     delivered_at = Column(DateTime, nullable=True)  # set from Meta's status callback timestamp; null for messages sent before this was tracked

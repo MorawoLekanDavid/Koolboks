@@ -335,6 +335,8 @@ async def get_conversation(phone: str, ctx: dict = Depends(conversation_guard())
                     "name": m.name,
                     "delivery_status": m.delivery_status if m.direction == "outbound" else None,
                     "delivery_error": m.delivery_error,
+                    "wamid": m.wamid,
+                    "reply_to_wamid": m.reply_to_wamid,
                 }
                 for m in rows
             ]
@@ -492,7 +494,7 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
         except Exception as e:
             log.warning(f"Agent image send error: {e}")
 
-    wamid = await send_whatsapp_message(phone, body.message)
+    wamid, _ = await send_whatsapp_message(phone, body.message)
     save_message_db(session_id, phone, display_name, "outbound", body.message, wamid=wamid)
 
     if redis_client.client:

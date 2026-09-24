@@ -56,12 +56,13 @@ BARE_GREETING_RE = re.compile(
 
 
 class ChatRequest(BaseModel):
-    session_id:    str = Field(...)
-    message:       str = Field(..., min_length=1, max_length=2000)
-    user_name:     str = Field(default="Customer")
-    business_type: str = Field(default="")
-    volume:        str = Field(default="")
-    power:         str = Field(default="")
+    session_id:      str = Field(...)
+    message:         str = Field(..., min_length=1, max_length=2000)
+    user_name:       str = Field(default="Customer")
+    business_type:   str = Field(default="")
+    volume:          str = Field(default="")
+    power:           str = Field(default="")
+    reply_to_wamid:  Optional[str] = Field(default=None)
 
 
 class ProductCard(BaseModel):
@@ -102,6 +103,34 @@ def inventory_text(products: List[Product]) -> str:
         desc = str(p.description)[:250].replace('\n', ' ') if p.description else ''
         lines.append(f"{p.name} | {p.price} | {desc}")
     return "\n".join(lines)
+
+
+def resolve_reply_to_product(reply_to_wamid: Optional[str], products: List[Product]) -> Optional[str]:
+    """A customer can use WhatsApp's own "reply to this message" feature to
+    quote a specific product photo the bot sent ("this one" while replying to
+    the 2nd of 4 pictures) — real, observed failure: the bot had no way to
+    know which photo, kept asking the customer to repeat which product they
+    meant, and even a human agent reading the transcript couldn't tell either,
+    since the quote relationship wasn't captured or shown anywhere. Resolves
+    the quoted wamid back to the actual product by matching the stored
+    "[image]<url>[/image]" row's URL against real INVENTORY."""
+    if not reply_to_wamid:
+        return None
+    db = get_db()
+    try:
+        quoted = db.query(Message).filter(Message.wamid == reply_to_wamid).first()
+        if not quoted or not quoted.content:
+            return None
+        m = re.match(r'\[image\](.+)\[/image\]', quoted.content.strip())
+        if not m:
+            return None
+        quoted_url = m.group(1)
+        for p in products:
+            if p.image_url == quoted_url:
+                return p.name
+        return None
+    finally:
+        db.close()
 
 
 def fix_multi_product_prices(raw: str, cards: list) -> str:
@@ -477,6 +506,15 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
         state_summary += "✓ Delivery location CAPTURED\n"
     elif already_captured:
         state_summary += "× Delivery location: NOT YET CAPTURED\n"
+
+    replied_product = resolve_reply_to_product(request.reply_to_wamid, df)
+    if replied_product:
+        state_summary += (
+            f"↩ CUSTOMER IS REPLYING TO A PHOTO OF: {replied_product}\n"
+            f"If their message is ambiguous on its own (\"this one,\" \"the second one,\" "
+            f"\"how much is this\"), it means THIS product — answer about it directly, "
+            f"don't ask them to repeat which one they meant.\n"
+        )
     state_summary += "───────────────────"
 
     messages = [system, {"role": "user", "content": state_summary}] + history_for_groq + \

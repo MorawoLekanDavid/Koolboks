@@ -210,6 +210,17 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .msg-sender.agent-s{color:var(--g700)}
 .msg-sender.customer{color:var(--g500)}
 .msg{position:relative}
+/* Quoted-reply preview — same convention WhatsApp itself uses (a customer
+   tapped "reply" on a specific earlier message, most often a product photo),
+   so it reads as instantly familiar rather than a custom notion of our own. */
+.msg-quote{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:6px;border-left:3px solid var(--orange);background:rgba(0,0,0,.04);border-radius:6px;cursor:pointer;transition:background .15s}
+.msg-quote:hover{background:rgba(0,0,0,.07)}
+.msg-quote-thumb{width:32px;height:32px;object-fit:cover;border-radius:4px;flex-shrink:0}
+.msg-quote-body{min-width:0;overflow:hidden}
+.msg-quote-label{font-weight:700;color:var(--orange-d);font-size:11px;line-height:1.3}
+.msg-quote-text{font-size:12px;color:var(--g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-flash{animation:msgFlash 1.4s ease}
+@keyframes msgFlash{0%,100%{box-shadow:var(--sh)}25%{box-shadow:0 0 0 2px var(--orange)}}
 .msg-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:4px}
 .msg-time{font-size:10px;color:var(--g400)}
 .msg-status{font-size:10px;color:var(--g400);cursor:default;display:inline-flex;align-items:center;gap:3px;vertical-align:middle}
@@ -3793,6 +3804,12 @@ async function loadMessages(){
     const yestKey=`${yest.getFullYear()}-${yest.getMonth()}-${yest.getDate()}`;
     let lastDayKey=null;
     const parts=[];
+    // A customer's WhatsApp "reply to this message" quotes a specific earlier
+    // message (most often one of several product photos we sent) — without
+    // this lookup an agent reading "this one" has no way to tell which photo
+    // it was replying to, same blind spot the bot itself used to have.
+    const wamidMap=new Map();
+    msgs.forEach(m=>{if(m.wamid)wamidMap.set(m.wamid,m);});
     msgs.forEach(m=>{
       const d=new Date(m.timestamp+'Z');
       const dayKey=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -3807,6 +3824,8 @@ async function loadMessages(){
       const isAgent=m.direction==='outbound'&&m.name&&m.name!=='KoolBot'&&m.name!=='Itura';
       const sc=m.direction==='inbound'?'customer':(isAgent?'agent-s':'bot');
       const sl=m.direction==='inbound'?esc(m.name||'Customer'):(isAgent?`<span class="msg-sender-icon">${ICON.person}</span>${esc(m.name)}`:`<span class="msg-sender-icon">${ICON.robot}</span>Itura`);
+      const quoted=m.reply_to_wamid?wamidMap.get(m.reply_to_wamid):null;
+      const quoteHtml=quoted?renderQuotePreview(quoted):'';
       const bodyHtml=renderMediaBody(m.content);
       const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
       let statusHtml='';
@@ -3823,7 +3842,7 @@ async function loadMessages(){
           statusHtml=`<span class="msg-status" title="Sent">${ICON.check}</span>`;
         }
       }
-      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div><div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span>${statusHtml}</div></div>`);
+      parts.push(`<div class="msg ${m.direction}" data-msgid="${m.id}"><div class="msg-sender ${sc}">${sl}</div>${quoteHtml}<div class="msg-body">${bodyHtml}</div><div class="msg-footer"><span class="msg-time">${timeStr}</span>${statusHtml}</div></div>`);
     });
     box.innerHTML=parts.join('');
     if(atBottom)box.scrollTop=box.scrollHeight;
@@ -7732,6 +7751,31 @@ function renderMediaBody(content){
   if(m=content.match(/^\[document\](.*)\|(.*)\[\/document\]$/))
     return `<a href="${esc(mediaSrc(m[1]))}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:var(--orange);text-decoration:none;font-size:13px;font-weight:600"><span class="icon-sm">${ICON.file}</span>${esc(m[2])}</a>`;
   return esc(content);
+}
+// The small "replying to" preview shown above a message that quoted an
+// earlier one — same convention WhatsApp itself uses. A quoted product photo
+// gets its actual thumbnail (the whole point: an agent or the bot can now see
+// exactly which of several products "this one" meant); anything else gets a
+// short label. Clicking it jumps to and briefly highlights the original.
+function renderQuotePreview(quoted){
+  let thumb='',label,text='';
+  let m;
+  if(m=quoted.content.match(/^\[image\](.*)\[\/image\]$/)){
+    thumb=`<img class="msg-quote-thumb" src="${esc(mediaSrc(m[1]))}" onerror="this.style.display='none'">`;
+    label=quoted.direction==='outbound'?'Photo':'Customer photo';
+  }else if(/^\[video\]/.test(quoted.content)){label='Video';}
+  else if(/^\[audio\]/.test(quoted.content)){label='Voice note';}
+  else if(/^\[document\]/.test(quoted.content)){label='Document';}
+  else{label=quoted.direction==='inbound'?esc(quoted.name||'Customer'):'Itura';text=esc(quoted.content).slice(0,80);}
+  return `<div class="msg-quote" onclick="scrollToQuotedMsg(${quoted.id})">${thumb}<div class="msg-quote-body"><div class="msg-quote-label">↩ ${label}</div>${text?`<div class="msg-quote-text">${text}</div>`:''}</div></div>`;
+}
+function scrollToQuotedMsg(id){
+  const el=document.querySelector(`[data-msgid="${id}"]`);
+  if(!el)return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.classList.remove('msg-flash');
+  void el.offsetWidth; // restart the animation if clicked again on the same message
+  el.classList.add('msg-flash');
 }
 // Short, human labels for the compact contact-history preview drawer, which
 // shows truncated plain text only — a raw [video]/admin/media-proxy/...

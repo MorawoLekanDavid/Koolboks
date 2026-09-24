@@ -58,7 +58,8 @@ async def _set_media_handoff(session_id: str, wa_from: str):
     log.info(f"[delay] {session_id} escalated to a human agent (unviewable media)")
 
 
-async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str, my_seq: str = None):
+async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str, my_seq: str = None,
+                                reply_to_wamid: str = None):
     """Wait for the agent takeover window, then respond if no agent claimed the session.
 
     `my_seq` is this message's debounce ticket (see webhook.py). If a newer message
@@ -105,6 +106,11 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
                     entry = _parse_pending_entry(raw)
                     if entry.get("escalate"):
                         escalate = True
+                    # Last one in the burst wins if more than one message in this
+                    # combined turn quoted something — the most recent quote is
+                    # the one still relevant by the time we're replying to all of them.
+                    if entry.get("reply_to_wamid"):
+                        reply_to_wamid = entry["reply_to_wamid"]
                     audio_id = entry.get("audio_media_id")
                     if audio_id:
                         transcript = await transcribe_whatsapp_audio(audio_id)
@@ -143,7 +149,7 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
     # those happens, instead of a stale reply getting saved to history as if
     # it had actually been sent.
     bg = BackgroundTasks()
-    chat_req = ChatRequest(session_id=session_id, message=text, user_name=name)
+    chat_req = ChatRequest(session_id=session_id, message=text, user_name=name, reply_to_wamid=reply_to_wamid)
     try:
         chat_resp, persist = await generate_chat_response(chat_req, bg)
     except Exception as e:
@@ -152,7 +158,7 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         # prompt, nothing — whenever the AI backend has a hiccup.
         try:
             fallback_text = "Sorry, I had trouble processing that — could you try sending your message again?"
-            wamid = await send_whatsapp_message(wa_from, fallback_text)
+            wamid, _ = await send_whatsapp_message(wa_from, fallback_text)
             save_message_db(session_id, wa_from, BOT_NAME, "outbound", fallback_text, wamid=wamid)
         except Exception as e2:
             log.error(f"[delay] fallback message also failed for {session_id}: {e2}")
@@ -203,30 +209,34 @@ async def deliver_reply(session_id: str, wa_from: str, chat_resp, persist, bg: B
 
     if chat_resp.products:
         first = chat_resp.products[0]
-        wamid = await send_whatsapp_message(
+        text_wamid, image_wamid = await send_whatsapp_message(
             wa_from, chat_resp.response,
             first.original_image_url,  # raw S3/CDN URL — WhatsApp fetches directly
             image_caption=_blurb(first),
         )
-        save_message_db(session_id, wa_from, BOT_NAME, "outbound", chat_resp.response, wamid=wamid)
-        # One [image]...[/image] row per product actually sent to WhatsApp —
-        # without this, bot-sent pictures were invisible in the admin
-        # transcript (only the agent-sent-image path recorded that marker),
-        # making it look like the bot never sends pictures at all even
-        # though delivery to the customer was working the whole time.
+        save_message_db(session_id, wa_from, BOT_NAME, "outbound", chat_resp.response, wamid=text_wamid)
+        # One [image]...[/image] row per product actually sent to WhatsApp, each
+        # tagged with the IMAGE's own wamid (not the caption text's) -- that's
+        # what a customer's WhatsApp "reply" actually quotes when they tap a
+        # specific product photo, so it's what has to be on this row for a later
+        # quoted reply to resolve back to this exact product. Without this row
+        # at all, bot-sent pictures were invisible in the admin transcript too
+        # (only the agent-sent-image path recorded that marker).
         if first.original_image_url:
-            save_message_db(session_id, wa_from, BOT_NAME, "outbound", f"[image]{first.original_image_url}[/image]")
+            save_message_db(session_id, wa_from, BOT_NAME, "outbound",
+                             f"[image]{first.original_image_url}[/image]", wamid=image_wamid)
 
         # Every recommended product gets its own image + caption, not just the first —
         # a customer comparing several options should see all of them, not just one.
         for product in chat_resp.products[1:]:
-            await send_whatsapp_message(
+            _, product_image_wamid = await send_whatsapp_message(
                 wa_from, "", product.original_image_url, image_caption=_blurb(product)
             )
             if product.original_image_url:
-                save_message_db(session_id, wa_from, BOT_NAME, "outbound", f"[image]{product.original_image_url}[/image]")
+                save_message_db(session_id, wa_from, BOT_NAME, "outbound",
+                                 f"[image]{product.original_image_url}[/image]", wamid=product_image_wamid)
     else:
-        wamid = await send_whatsapp_message(wa_from, chat_resp.response)
+        wamid, _ = await send_whatsapp_message(wa_from, chat_resp.response)
         save_message_db(session_id, wa_from, BOT_NAME, "outbound", chat_resp.response, wamid=wamid)
 
     # Run background tasks queued by chat_handler (save_lead, update_lead_address, etc.)

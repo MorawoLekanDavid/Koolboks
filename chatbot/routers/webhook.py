@@ -195,6 +195,12 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     name = contacts[0].get("profile", {}).get("name", "Customer") if contacts else "Customer"
                     session_id = f"wa_{wa_from}"
                     msg_id = msg.get("id")
+                    # Set when the customer used WhatsApp's own "reply to this message"
+                    # feature — the wamid of whatever they quoted (often a specific
+                    # product photo). Resolved to the actual product later in
+                    # chat_service.py, so an otherwise-ambiguous "this one" can be
+                    # answered correctly instead of asked about again.
+                    reply_to_wamid = (msg.get("context") or {}).get("id")
                     log.info(f"WhatsApp message from {wa_from} ({name}): {text}")
 
                     # Mark message as read immediately
@@ -202,7 +208,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         background_tasks.add_task(mark_whatsapp_read, msg_id)
 
                     # Save inbound message to DB
-                    background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text)
+                    background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text,
+                                               reply_to_wamid=reply_to_wamid)
                     # A caption gets its own row, same convention already used for
                     # outbound product sends — the media marker stays a pure media tag,
                     # caption text is a separate readable line in the transcript.
@@ -328,6 +335,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         "text": llm_text,
                         "escalate": escalate,
                         "audio_media_id": audio_media_id,
+                        "reply_to_wamid": reply_to_wamid,
                     })
                     my_seq = None
                     if redis_client.client:
@@ -350,7 +358,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     asyncio.create_task(delayed_bot_response(
                         session_id, wa_from, name,
                         llm_text or "[Customer sent a voice note. Acknowledge warmly and ask them to type their message.]",
-                        my_seq,
+                        my_seq, reply_to_wamid,
                     ))
     except Exception as e:
         log.error(f"WhatsApp webhook processing error: {e}")
