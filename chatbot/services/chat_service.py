@@ -105,6 +105,22 @@ def inventory_text(products: List[Product]) -> str:
     return "\n".join(lines)
 
 
+def fixed_welcome_text(name: str = "") -> str:
+    """The one, single source of truth for the fixed brand welcome — every
+    caller (the website's own sentinel path, the WhatsApp bare-greeting
+    short-circuit, and the marker the model can trigger for any other
+    non-request opener) must go through this, not carry its own copy of the
+    literal string. That's not just tidiness: three independent copies is
+    three chances for one of them to drift, which is exactly the class of
+    bug this function exists to close off for good."""
+    name_part = f", {name}" if name and name != "Customer" else ""
+    return (
+        f"Hi there{name_part}! 👋🏽 Welcome to Koolboks! ❄️\n\n"
+        "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
+        "Tell us what you need, and we'll help you find the right solution."
+    )
+
+
 def resolve_reply_to_product(reply_to_wamid: Optional[str], products: List[Product]) -> Optional[str]:
     """A customer can use WhatsApp's own "reply to this message" feature to
     quote a specific product photo the bot sent ("this one" while replying to
@@ -372,11 +388,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     if is_welcome_sentinel:
         history = await redis_client.get_history(request.session_id)
         if not history:
-            welcome_text = (
-                "Hi there! 👋🏽 Welcome to Koolboks! ❄️\n\n"
-                "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
-                "Tell us what you need, and we'll help you find the right solution."
-            )
+            welcome_text = fixed_welcome_text()
             # Re-anchors the question the welcome already asked, rather than leaving
             # the customer on a bare "nice to meet you" with no sense of what to do
             # next — real customers replied "okay but that's not why i'm here" to the
@@ -407,12 +419,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     # "corrected" the intentional Koolboks pun "Kool" to "cool". A message this
     # fixed doesn't need to go through the model at all.
     if not history and BARE_GREETING_RE.match(request.message.strip()):
-        name_part = f", {request.user_name}" if request.user_name and request.user_name != "Customer" else ""
-        welcome_text = (
-            f"Hi there{name_part}! 👋🏽 Welcome to Koolboks! ❄️\n\n"
-            "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
-            "Tell us what you need, and we'll help you find the right solution."
-        )
+        welcome_text = fixed_welcome_text(request.user_name)
 
         async def _persist_bare_greeting():
             now = datetime.now().isoformat()
@@ -590,6 +597,18 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
         )
 
     raw = await call_groq(messages)
+
+    # FIRST MESSAGE / WELCOME (prompt) tells the model to output this marker,
+    # verbatim and alone, for any opener that isn't a specific request rather
+    # than trying to write the welcome text itself — a classification task,
+    # not a generation one. This is the substitution that makes that promise
+    # real: the model's actual words here are discarded and replaced with the
+    # one deterministic source of truth, closing off the whole class of bug
+    # where an LLM asked to reproduce fixed text verbatim occasionally doesn't
+    # (confirmed live, twice, on this exact text before this fix existed).
+    if "[SEND_FIXED_WELCOME]" in raw:
+        raw = fixed_welcome_text(request.user_name)
+
     cards: List[ProductCard] = []
     m = re.search(r'PRODUCTS:\s*(.+)', raw, re.IGNORECASE)
     if m:
