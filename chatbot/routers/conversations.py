@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
@@ -340,6 +340,36 @@ async def get_conversation(phone: str, ctx: dict = Depends(conversation_guard())
                 }
                 for m in rows
             ]
+        finally:
+            db.close()
+
+    return await run_in_threadpool(_fetch)
+
+
+@router.get("/conversations/{phone}/window-status")
+async def get_conversation_window_status(phone: str, ctx: dict = Depends(conversation_guard())):
+    """WhatsApp only allows free-form text within 24h of the customer's last
+    message (error 131047, "Re-engagement message", otherwise) -- outside
+    that window only an approved template can reach them. Confirmed live: an
+    agent typed two normal replies into a conversation whose window had
+    already closed and both silently failed, with nothing telling them why
+    until after the fact. This lets the UI warn before that happens instead
+    of after."""
+    def _fetch():
+        db = get_db()
+        try:
+            last_inbound = db.execute(
+                select(func.max(Message.created_at))
+                .where(and_(Message.phone == phone, Message.direction == "inbound"))
+            ).scalar()
+            if last_inbound is None:
+                return {"window_open": False, "last_customer_message_at": None, "closed_at": None}
+            closed_at = last_inbound + timedelta(hours=24)
+            return {
+                "window_open": datetime.utcnow() < closed_at,
+                "last_customer_message_at": last_inbound.isoformat(),
+                "closed_at": closed_at.isoformat(),
+            }
         finally:
             db.close()
 

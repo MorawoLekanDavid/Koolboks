@@ -15,6 +15,7 @@
   --bg:#F5F6FA; --surface:#fff; --border:#E2E8F0;
   --text:#1E293B; --text-2:#64748B; --text-3:#94A3B8;
   --green:#22c55e; --green-s:#dcfce7; --red:#EF4444; --red-s:#fee2e2;
+  --amber:#D97706; --amber-s:#FEF3C7; --amber-b:#FDE68A;
   --sh:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
   --sh-md:0 4px 12px rgba(0,0,0,.08); --sh-lg:0 8px 30px rgba(0,0,0,.12);
   --sidebar-bg:#1A1D23; --sidebar-text:#94A3B8;
@@ -288,6 +289,23 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .send-btn:hover{background:var(--orange-d)}
 .reply-disabled{padding:12px;background:var(--g50);border-top:1px solid var(--g200);text-align:center;font-size:13px;color:var(--g400);flex-shrink:0}
 .reply-disabled [data-icon]{display:inline-flex;vertical-align:-3px}
+/* Warns before an agent types into a conversation WhatsApp will actually
+   reject (error 131047 -- more than 24h since the customer's last message,
+   free text can't be delivered until they message again). Sits above the
+   reply box so it's seen before typing starts, not discovered afterward
+   from a small failed-delivery icon on a message that never arrived. */
+.window-closed-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--amber-s);border-top:1px solid var(--amber-b);flex-shrink:0}
+.wcb-icon{flex-shrink:0;width:20px;height:20px;color:var(--amber);display:flex;align-items:center;justify-content:center}
+.wcb-icon svg{width:18px;height:18px}
+.wcb-text{flex:1;min-width:0}
+.wcb-title{font-size:12.5px;font-weight:700;color:#92400E;line-height:1.3}
+.wcb-sub{font-size:11.5px;color:#92400E;opacity:.85;line-height:1.4;margin-top:1px}
+.wcb-action{flex-shrink:0;background:var(--amber);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
+.wcb-action:hover{background:#B45309}
+@media (max-width:520px){
+  .window-closed-banner{flex-wrap:wrap}
+  .wcb-action{margin-left:30px}
+}
 .reply-disabled svg{width:15px;height:15px}
 .ai-perf-title [data-icon]{display:inline-flex;vertical-align:-3px}
 .ai-perf-title svg{width:17px;height:17px}
@@ -1027,6 +1045,14 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <div class="img-attach-badge" id="imgAttachBadge">
             🖼️ Product image will be sent
             <button onclick="clearProductImage()" title="Remove image"><span data-icon="close"></span></button>
+          </div>
+          <div class="window-closed-banner hidden" id="windowClosedBanner">
+            <span class="wcb-icon" data-icon="clock"></span>
+            <div class="wcb-text">
+              <div class="wcb-title">This customer's 24-hour window has closed</div>
+              <div class="wcb-sub">Free messages can't be delivered until they message again — send an approved template instead.</div>
+            </div>
+            <button class="wcb-action" onclick="openSendTemplateModal()">Send Template</button>
           </div>
           <div class="reply-box">
             <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies"><span data-icon="clipboard"></span></button>
@@ -3776,10 +3802,27 @@ async function selectConv(phone,name,mode,agent){
   const conv=allConversations.find(c=>c.phone===phone);if(conv){conv.unread=0;renderConversations();}
   msgPollInterval=setInterval(loadMessages,7000);
 }
+// Called from loadMessages() itself, so it's checked immediately on open and
+// again on every 7s poll tick — the banner reflects reality even if the
+// window closes, or reopens because the customer messages back, while an
+// agent has the conversation sitting open.
+async function loadWindowStatus(phone){
+  const banner=document.getElementById('windowClosedBanner');
+  try{
+    const r=await fetch(`/admin/conversations/${phone}/window-status?key=${encodeURIComponent(adminKey)}`);
+    if(selectedPhone!==phone)return;
+    const d=await r.json();
+    if(selectedPhone!==phone)return;
+    banner.classList.toggle('hidden',d.window_open!==false);
+  }catch(e){
+    console.error(e);
+  }
+}
 let _lastDeliveryStatus={};
 async function loadMessages(){
   if(!selectedPhone)return;
   const phone=selectedPhone; // capture now — selectedPhone may change while awaiting
+  loadWindowStatus(phone);
   try{
     const r=await fetch(`/admin/conversations/${phone}?key=${encodeURIComponent(adminKey)}`);
     if(selectedPhone!==phone)return; // conversation switched while fetching — discard
