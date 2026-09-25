@@ -270,9 +270,13 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     if msg_id:
                         background_tasks.add_task(mark_whatsapp_read, msg_id, show_typing=not bot_globally_off)
 
-                    # Save inbound message to DB
+                    # Save inbound message to DB -- wamid included so the admin
+                    # panel can attach a typing-indicator call to "whatever the
+                    # customer last sent" while an agent is composing a manual
+                    # reply (see /conversations/{phone}/typing), not just when
+                    # the bot's own auto-reply path shows one.
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text,
-                                               reply_to_wamid=reply_to_wamid)
+                                               wamid=msg_id, reply_to_wamid=reply_to_wamid)
                     # A caption gets its own row, same convention already used for
                     # outbound product sends — the media marker stays a pure media tag,
                     # caption text is a separate readable line in the transcript.

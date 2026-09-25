@@ -114,13 +114,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .notif-badge{position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:1px 4px;border-radius:10px;min-width:14px;text-align:center}
 .sb-logout{padding:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--sidebar-text);text-align:center;transition:all .15s;width:100%}
 .sb-logout:hover{background:rgba(255,107,0,.18);border-color:var(--orange);color:var(--orange)}
-/* Super-admin-only account-wide kill switch -- deliberately separate from
-   the per-conversation Away toggle above it, since flipping this off
-   silences the bot for every conversation, not just this agent's status. */
-.sb-bot-switch{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px}
-.sb-bot-switch-label{font-size:11px;font-weight:700;color:var(--sidebar-text);display:flex;align-items:center;gap:6px}
-.sb-bot-status-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;transition:background .15s}
-.sb-bot-status-dot.off{background:#EF4444}
 
 /* Main area */
 .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;background:var(--bg)}
@@ -1009,13 +1002,6 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           </label>
         </div>
       </div>
-      <div id="botSwitchRow" class="hidden sb-bot-switch" title="Turn the AI bot off or on for every conversation, account-wide">
-        <span class="sb-bot-switch-label"><span id="botStatusDot" class="sb-bot-status-dot"></span>Bot</span>
-        <label class="perm-sw">
-          <input type="checkbox" id="globalBotToggle" checked onchange="onGlobalBotToggleClicked(this)">
-          <span class="perm-sw-slider"></span>
-        </label>
-      </div>
       <button class="sb-logout" onclick="logout()">Sign Out</button>
     </div>
   </aside>
@@ -1156,7 +1142,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
                 <button onclick="requestLocationFromCustomer()"><span class="icon-sm" data-icon="pin"></span>Request location</button>
               </div>
             </div>
-            <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
+            <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)" oninput="onReplyTyping()"></textarea>
             <button class="reply-icon-btn" id="micBtn" onclick="startVoiceRecording()" title="Record a voice note"><span data-icon="mic"></span></button>
             <button class="send-btn" onclick="sendReply()"><span data-icon="send"></span></button>
           </div>
@@ -1633,6 +1619,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
       <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab hidden" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -1835,6 +1822,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
       <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab hidden" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
     </div>
     <div class="card">
       <h3>Team Members</h3>
@@ -1883,6 +1871,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
       <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab hidden" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
     </div>
     <div class="card" id="rolePermCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -1907,6 +1896,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab active" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
       <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab hidden" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
     </div>
     <div class="ai-settings-layout">
 
@@ -2038,6 +2028,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab active" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
       <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab hidden" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
     </div>
     <div class="card" style="max-width:640px">
       <h3>Auto-Routing</h3>
@@ -2105,6 +2096,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
       <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
       <button class="bulk-tab active" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab hidden" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
     </div>
     <div class="card" id="reassignApprovalCard" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px">
@@ -2118,6 +2110,37 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <h3 id="reassignHistoryTitle" style="margin-bottom:4px">Recent Activity</h3>
       <p id="reassignHistoryDesc" style="font-size:12px;color:var(--g400);margin-bottom:6px">Every ownership change, including the reason behind any that needed a request.</p>
       <div id="reassignHistoryList"></div>
+    </div>
+  </div>
+
+  <!-- System tab — super admin only, both in the nav (see data-super-admin-only)
+       and enforced server-side (require_super_admin on the write endpoint;
+       the read endpoint is open to any agent, but nothing routes a non-super-
+       admin here to see it). -->
+  <div id="systemTab" class="tab-full hidden">
+    <div class="bulk-tabs tmpl-subnav" id="settingsSubNavSystem">
+      <button class="bulk-tab" data-subtab="team" data-permtab="team" onclick="switchTab('team')">Team</button>
+      <button class="bulk-tab" data-subtab="rolePerm" data-permtab="team" onclick="switchTab('rolePerm')">Roles &amp; Permissions</button>
+      <button class="bulk-tab" data-subtab="templates" data-permtab="templates" onclick="switchTab('templates')">Templates</button>
+      <button class="bulk-tab" data-subtab="aiSettings" data-permtab="aiSettings" onclick="switchTab('aiSettings')">AI Settings</button>
+      <button class="bulk-tab" data-subtab="routing" data-permtab="routing" onclick="switchTab('routing')">Auto-Routing</button>
+      <button class="bulk-tab" data-subtab="reassign" onclick="switchTab('reassign')">Requests</button>
+      <button class="bulk-tab active" data-subtab="system" data-super-admin-only="1" onclick="switchTab('system')">System</button>
+    </div>
+    <div class="card" style="max-width:640px">
+      <h3>Bot Control</h3>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:20px">Account-wide, not per-conversation — turning this off silences the AI for every chat at once, not just one you've personally taken over. Every agent sees a banner while it's off; only a super admin can see or change this page.</p>
+
+      <div class="routing-rule-row">
+        <div>
+          <div class="routing-rule-title">AI Bot</div>
+          <div class="routing-rule-desc" id="systemBotStatusDesc">Checking status…</div>
+        </div>
+        <label class="perm-sw">
+          <input type="checkbox" id="globalBotToggle" checked onchange="onGlobalBotToggleClicked(this)">
+          <span class="perm-sw-slider"></span>
+        </label>
+      </div>
     </div>
   </div>
 
@@ -2737,7 +2760,11 @@ async function showApp(){
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   applyNavPermissions(agentRole);
   applyReadOnlyRole();
-  document.getElementById('botSwitchRow').classList.toggle('hidden',agentRole!=='super_admin');
+  // The System settings page (global bot switch) is super-admin-only and
+  // deliberately NOT part of the configurable per-role permission system
+  // every other settings tab uses -- it's not meant to be grantable to any
+  // other role, so this is a hard role check, not a fetched permission.
+  document.querySelectorAll('[data-super-admin-only]').forEach(el=>el.classList.toggle('hidden',agentRole!=='super_admin'));
   loadGlobalBotStatus();
   setInterval(loadGlobalBotStatus,20000);
   // Nav visibility is handled dynamically via applyNavPermissions
@@ -2844,30 +2871,32 @@ async function toggleAway(checked){
 // ── Global bot on/off switch (super admin only) ─────────────────────────
 // Separate from per-conversation "Take Over" -- this silences the AI
 // everywhere at once. Every agent sees the banner when it's active (so
-// nobody wonders why chats have gone quiet); only a super admin sees the
-// sidebar toggle or the banner's own "Turn Bot On" button.
+// nobody wonders why chats have gone quiet); only a super admin can even
+// navigate to the control itself, on the System settings sub-tab.
 async function loadGlobalBotStatus(){
   try{
     const r=await fetch(`/admin/system/bot-status?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok)return;
-    const d=await r.json();
-    _renderGlobalBotStatus(d);
+    _renderGlobalBotStatus(await r.json());
   }catch(e){console.error(e);}
 }
 function _renderGlobalBotStatus(d){
-  const banner=document.getElementById('globalBotOffBanner');
-  const dot=document.getElementById('botStatusDot');
+  document.getElementById('globalBotOffBanner').classList.toggle('hidden',!d.disabled);
   const toggle=document.getElementById('globalBotToggle');
-  const turnOnBtn=document.getElementById('gboTurnOnBtn');
-  banner.classList.toggle('hidden',!d.disabled);
-  dot?.classList.toggle('off',d.disabled);
   if(toggle && document.activeElement!==toggle)toggle.checked=!d.disabled;
+  const turnOnBtn=document.getElementById('gboTurnOnBtn');
   if(agentRole==='super_admin')turnOnBtn.classList.remove('hidden');
+  const who=d.by?` by ${esc(d.by)}`:'';
+  const when=d.since?` · ${timeAgo(d.since)}`:'';
   if(d.disabled){
-    const who=d.by?` by ${esc(d.by)}`:'';
-    const when=d.since?` · ${timeAgo(d.since)}`:'';
     document.getElementById('gboSubtext').textContent=
       `Every message needs a human reply until it's turned back on. Turned off${who}${when}.`;
+  }
+  const desc=document.getElementById('systemBotStatusDesc');
+  if(desc){
+    desc.textContent=d.disabled
+      ? `Off — every conversation is silent until this is switched back on. Turned off${who}${when}.`
+      : 'On — replying normally across every conversation.';
   }
 }
 async function onGlobalBotToggleClicked(el){
@@ -3384,10 +3413,10 @@ async function confirmReassignReason(){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab',reassign:'reassignTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings',reassign:'htabSettings'};
+const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab',reassign:'reassignTab',system:'systemTab'};
+const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings',reassign:'htabSettings',system:'htabSettings'};
 const MESSAGING_TABS=['broadcast','canned'];
-const SETTINGS_TABS=['team','rolePerm','templates','aiSettings','routing','reassign'];
+const SETTINGS_TABS=['team','rolePerm','templates','aiSettings','routing','reassign','system'];
 let _lastMessagingTab='broadcast';
 let _lastSettingsTab='team';
 function switchTab(t){
@@ -3417,6 +3446,7 @@ function switchTab(t){
   if(t==='usage')loadUsage();
   if(t==='routing')loadRoutingConfig();
   if(t==='reassign')loadReassignmentRequests();
+  if(t==='system')loadGlobalBotStatus();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
@@ -3953,6 +3983,7 @@ async function selectConv(phone,name,mode,agent){
   if(_voiceRecorder&&_voiceRecorder.state!=='inactive')cancelVoiceRecording();
   clearProductImage();
   document.getElementById('attachMenu')?.classList.add('hidden');
+  _lastTypingPing=0; // so the first keystroke in this chat isn't throttled by the previous one's timer
   selectedPhone=phone;selectedMode=mode;
   document.getElementById('emptyState').classList.add('hidden');
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
@@ -4503,6 +4534,18 @@ function updateChatUI(mode,agent){
   }
 }
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendReply();}}
+// Shows WhatsApp's native "typing..." to the customer while an agent is
+// composing -- throttled well under the indicator's own ~25s lifespan so it
+// stays continuously lit while someone keeps typing, without firing on
+// every keystroke.
+let _lastTypingPing=0;
+function onReplyTyping(){
+  if(!selectedPhone)return;
+  const now=Date.now();
+  if(now-_lastTypingPing<18000)return;
+  _lastTypingPing=now;
+  fetch(`/admin/conversations/${selectedPhone}/typing?key=${encodeURIComponent(adminKey)}`,{method:'POST'}).catch(()=>{});
+}
 function quickReply(text){document.getElementById('replyText').value=text;document.getElementById('replyText').focus();}
 function openWhatsApp(){if(selectedPhone)window.open(`https://wa.me/${selectedPhone.replace(/\D/g,'')}`);}
 function toggleDetailPanel(){

@@ -72,6 +72,108 @@ async def _stale_unanswered_name(phone: str):
         db.close()
 
 
+async def resume_bot_if_pending(phone: str, session_id: str) -> bool:
+    """Generates and sends a bot reply for a phone's last message, IF that
+    message is still unanswered (last message in the conversation is
+    inbound) -- otherwise a no-op. Pure mechanic, no staleness/eligibility
+    decision baked in: callers decide WHETHER a phone should be resumed
+    (run_handoff_watchdog gates on HANDOFF_AUTO_RESET_HOURS staleness; a
+    handback or the global switch being re-enabled act immediately,
+    un-gated, since those are explicit signals rather than a passive sweep).
+    Shared by all three so there's exactly one implementation of "how to
+    actually resume a conversation" instead of three drifting copies.
+    Returns True if a reply was generated and sent, False if there was
+    nothing pending."""
+    if await is_bot_globally_disabled():
+        return False  # a super admin paused the bot everywhere -- nothing here can override that
+
+    db = get_db()
+    try:
+        last_msg = db.execute(
+            select(Message).where(Message.phone == phone)
+            .order_by(Message.created_at.desc()).limit(1)
+        ).scalars().first()
+    finally:
+        db.close()
+    if not last_msg or last_msg.direction != "inbound":
+        return False  # already answered, or silent both ways -- nothing pending
+
+    try:
+        # The unanswered message is almost certainly the last entry in Redis
+        # history too (webhook.py appends every inbound message to history
+        # even while silenced, just without generating a reply for it) — pop
+        # it back off before regenerating, since generate_chat_response()
+        # always re-appends whatever it's given as the current turn; leaving
+        # the original entry in place would duplicate it in history.
+        pending_text = None
+        if redis_client.client:
+            history = await redis_client.get_history(session_id)
+            if history and history[-1].get("role") == "user":
+                pending_text = history[-1]["content"]
+                await redis_client.save_history(session_id, history[:-1])
+        if not pending_text:
+            # Redis history didn't have it (TTL'd out, Redis restart, etc.) —
+            # fall back to what Postgres already has.
+            pending_text = last_msg.content
+        if not pending_text:
+            return False
+
+        bg = BackgroundTasks()
+        chat_req = ChatRequest(
+            session_id=session_id, message=pending_text,
+            user_name=last_msg.name or "Customer", reply_to_wamid=last_msg.reply_to_wamid,
+        )
+        chat_resp, persist = await generate_chat_response(chat_req, bg)
+        await deliver_reply(session_id, phone, chat_resp, persist, bg)
+        return True
+    except Exception as e:
+        log.error(f"[resume] failed to resume bot reply for {phone}: {e}")
+        return False
+
+
+async def resume_all_pending_after_reenable(since_iso: str, triggered_by: str) -> None:
+    """Called once, as a background task, right after a super admin turns the
+    global bot switch back on. Any conversation whose last message came in
+    WHILE the bot was off is sitting exactly as unanswered as one caught by
+    the handoff watchdog above -- the difference is there's no reason to
+    wait: a super admin flipping the switch is as clear a signal to act now
+    as an explicit per-conversation handback is (see resume_bot_if_pending's
+    other caller in conversations.py). Skips any conversation currently in
+    its OWN per-conversation handoff -- an agent's individual takeover isn't
+    undone just because the global switch changed state."""
+    try:
+        since = datetime.fromisoformat(since_iso) if since_iso else None
+    except ValueError:
+        since = None
+    if since is None:
+        return
+
+    db = get_db()
+    try:
+        candidates = db.execute(
+            select(Message.phone)
+            .group_by(Message.phone)
+            .having(func.max(Message.created_at) >= since)
+        ).all()
+        phones = [r.phone for r in candidates]
+    finally:
+        db.close()
+
+    resumed = 0
+    for phone in phones:
+        session_id = f"wa_{phone}"
+        try:
+            if redis_client.client and await redis_client.client.get(f"koolbuy:handoff:{session_id}"):
+                continue  # still individually handed off to an agent -- leave it
+            if await resume_bot_if_pending(phone, session_id):
+                resumed += 1
+        except Exception as e:
+            log.error(f"[global-bot-resume] failed for {phone}: {e}")
+
+    log.info(f"[global-bot-resume] {triggered_by} re-enabled the bot; "
+             f"resumed {resumed} conversation(s) left pending while it was off")
+
+
 async def run_handoff_watchdog():
     """Catches conversations abandoned after a customer's message went
     unanswered for HANDOFF_AUTO_RESET_HOURS+ — most commonly a human agent who
@@ -100,60 +202,14 @@ async def run_handoff_watchdog():
     for phone in await _candidate_phones():
         session_id = f"wa_{phone}"
         try:
-            name = await _stale_unanswered_name(phone)
-            if name is None:
+            if await _stale_unanswered_name(phone) is None:
                 continue
-
             handoff_key = f"koolbuy:handoff:{session_id}"
             await redis_client.client.delete(handoff_key)
             log.info(f"[handoff-watchdog] resuming abandoned conversation for {session_id} "
                      f"(no reply in {HANDOFF_AUTO_RESET_HOURS}h, customer still waiting)")
-
-            # The unanswered message is almost certainly the last entry in Redis
-            # history too (webhook.py appends every inbound message to history
-            # even while in handoff, just without generating a reply for it) —
-            # pop it back off before regenerating, since generate_chat_response()
-            # always re-appends whatever it's given as the current turn; leaving
-            # the original entry in place would duplicate it in history.
-            history = await redis_client.get_history(session_id)
-            if history and history[-1].get("role") == "user":
-                pending_text = history[-1]["content"]
-                await redis_client.save_history(session_id, history[:-1])
-            else:
-                # Redis history didn't have it (TTL'd out, Redis restart, etc.) —
-                # fall back to Postgres so there's still something to reply to.
-                db = get_db()
-                try:
-                    last_msg = db.execute(
-                        select(Message).where(Message.phone == phone)
-                        .order_by(Message.created_at.desc()).limit(1)
-                    ).scalars().first()
-                    pending_text = last_msg.content if last_msg else None
-                finally:
-                    db.close()
-            if not pending_text:
-                continue
-
-            # Redis history doesn't carry WhatsApp's quoted-reply relationship,
-            # only Postgres does — look it up directly so a customer who quoted
-            # a specific product photo still gets resolved correctly here too,
-            # not just on the immediate/non-watchdog reply path.
-            db = get_db()
-            try:
-                last_msg = db.execute(
-                    select(Message).where(Message.phone == phone)
-                    .order_by(Message.created_at.desc()).limit(1)
-                ).scalars().first()
-                reply_to_wamid = last_msg.reply_to_wamid if last_msg else None
-            finally:
-                db.close()
-
-            bg = BackgroundTasks()
-            chat_req = ChatRequest(session_id=session_id, message=pending_text, user_name=name,
-                                    reply_to_wamid=reply_to_wamid)
-            chat_resp, persist = await generate_chat_response(chat_req, bg)
-            await deliver_reply(session_id, phone, chat_resp, persist, bg)
-            handled += 1
+            if await resume_bot_if_pending(phone, session_id):
+                handled += 1
         except Exception as e:
             log.error(f"[handoff-watchdog] failed for {session_id}: {e}")
 

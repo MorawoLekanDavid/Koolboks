@@ -21,11 +21,10 @@ from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
 from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
-from chatbot.services.bot_control import is_bot_globally_disabled
-from chatbot.services.chat_service import ChatRequest, generate_chat_response
 from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
     ensure_whatsapp_audio,
+    mark_whatsapp_read,
     save_message_db,
     send_whatsapp_location_request,
     send_whatsapp_media_message,
@@ -34,7 +33,7 @@ from chatbot.services.whatsapp_service import (
     whatsapp_media_type_for,
 )
 from chatbot.utils.phone import normalize_phone
-from chatbot.workers.bot_response import deliver_reply
+from chatbot.workers.handoff_watchdog import resume_bot_if_pending
 
 router = APIRouter(prefix="/admin", tags=["conversations"])
 
@@ -648,6 +647,33 @@ async def request_customer_location(phone: str, ctx: dict = Depends(conversation
     return {"status": "sent", "wamid": wamid}
 
 
+@router.post("/conversations/{phone}/typing")
+async def agent_typing(phone: str, ctx: dict = Depends(conversation_guard(write=True))):
+    """Shows WhatsApp's native "typing..." indicator while an agent is
+    composing a manual reply -- the bot's own auto-reply path already shows
+    this (see mark_whatsapp_read's show_typing param in webhook.py); this is
+    the same signal, just triggered by agent keystrokes in the admin panel
+    instead of an inbound message arriving. Attaches to the customer's most
+    recent message, so it needs that message's own wamid -- doesn't claim
+    ownership (unlike an actual reply/media send), since typing alone
+    shouldn't hand a conversation to whoever happens to glance at it."""
+    def _last_inbound_wamid():
+        db = get_db()
+        try:
+            return db.execute(
+                select(Message.wamid)
+                .where(Message.phone == phone, Message.direction == "inbound", Message.wamid.isnot(None))
+                .order_by(Message.created_at.desc()).limit(1)
+            ).scalar()
+        finally:
+            db.close()
+
+    wamid = await run_in_threadpool(_last_inbound_wamid)
+    if wamid:
+        await mark_whatsapp_read(wamid, show_typing=True)
+    return {"status": "ok"}
+
+
 class OwnerUpdate(BaseModel):
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
@@ -884,56 +910,6 @@ class HandoffRequest(BaseModel):
     agent_name: str = "Agent"
 
 
-async def _resume_bot_if_pending(phone: str, session_id: str):
-    """Handing a conversation back to the bot doesn't mean the bot was
-    watching the whole time — a customer message that arrived (or simply
-    never got answered) while an agent had this chat is just sitting there.
-    Without this, it would only get answered by the customer's NEXT message,
-    or by the periodic handoff watchdog, which sweeps every 30 minutes and
-    only after HANDOFF_AUTO_RESET_HOURS have passed. An explicit handback is
-    a clear enough signal to act immediately instead: the bot has the full
-    conversation history either way, so if the last message is still
-    unanswered, it can just pick it up now. Mirrors handoff_watchdog.py's
-    per-conversation logic, minus its staleness gate."""
-    if await is_bot_globally_disabled():
-        return  # a super admin paused the bot everywhere -- an individual handback can't override that
-
-    def _last_message():
-        db = get_db()
-        try:
-            return db.execute(
-                select(Message).where(Message.phone == phone)
-                .order_by(Message.created_at.desc()).limit(1)
-            ).scalars().first()
-        finally:
-            db.close()
-
-    try:
-        last_msg = await run_in_threadpool(_last_message)
-        if not last_msg or last_msg.direction != "inbound":
-            return  # already answered, or silent both ways -- nothing pending
-
-        pending_text = None
-        if redis_client.client:
-            history = await redis_client.get_history(session_id)
-            if history and history[-1].get("role") == "user":
-                pending_text = history[-1]["content"]
-                await redis_client.save_history(session_id, history[:-1])
-        if not pending_text:
-            pending_text = last_msg.content
-
-        bg = BackgroundTasks()
-        chat_req = ChatRequest(
-            session_id=session_id, message=pending_text,
-            user_name=last_msg.name or "Customer", reply_to_wamid=last_msg.reply_to_wamid,
-        )
-        chat_resp, persist = await generate_chat_response(chat_req, bg)
-        await deliver_reply(session_id, phone, chat_resp, persist, bg)
-        log.info(f"[handback] resumed bot reply for {phone} on handback to bot mode")
-    except Exception as e:
-        log.error(f"[handback] failed to resume bot reply for {phone}: {e}")
-
-
 @router.post("/handoff/{phone}")
 async def toggle_handoff(
     phone: str,
@@ -978,5 +954,5 @@ async def toggle_handoff(
     if mode == "agent":
         await run_in_threadpool(_claim_owner_if_unassigned, phone, agent_display, ctx.get("email", ""))
     else:
-        background_tasks.add_task(_resume_bot_if_pending, norm, session_id)
+        background_tasks.add_task(resume_bot_if_pending, norm, session_id)
     return {"phone": phone, "mode": mode, "agent": agent}
