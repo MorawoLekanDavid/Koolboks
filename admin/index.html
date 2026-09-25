@@ -76,6 +76,38 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .sb-nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--sidebar-text);transition:background .15s,color .15s;text-align:left}
 .sb-nav-item:hover{background:var(--sidebar-hover);color:#fff}
 .sb-nav-item.active{background:var(--sidebar-active);color:var(--orange)}
+.esc-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:10px;min-width:16px;text-align:center;line-height:1.4;flex-shrink:0}
+/* Needs Attention queue -- a left color bar by priority is the "make new
+   escalations visually obvious" requirement: scannable at a glance down a
+   long list, without needing to read the pill text on every card. */
+.esc-card{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:1px solid var(--g200);border-left:4px solid var(--g300);border-radius:10px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s;background:#fff}
+.esc-card:hover{box-shadow:var(--sh-md)}
+.esc-card.esc-p-high{border-left-color:var(--red)}
+.esc-card.esc-p-medium{border-left-color:var(--amber)}
+.esc-card.esc-p-low{border-left-color:var(--g300)}
+.esc-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.esc-pill{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;text-transform:uppercase}
+.esc-pill-high{background:var(--red-s);color:#991B1B}
+.esc-pill-medium{background:var(--amber-s);color:#92400E}
+.esc-pill-low{background:var(--g100);color:var(--g500)}
+.esc-pill-category{background:var(--g100);color:var(--g600);text-transform:none}
+.esc-time{margin-left:auto;font-size:11.5px;color:var(--g400);font-weight:600;white-space:nowrap}
+.esc-customer{font-size:14px;font-weight:700;color:var(--g900)}
+.esc-customer .esc-phone{font-weight:500;color:var(--g400);font-size:12.5px;margin-left:6px}
+.esc-summary{font-size:13px;color:var(--g600);line-height:1.4}
+.esc-card-bottom{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.esc-status-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.esc-status-open{background:var(--red-s);color:#991B1B}
+.esc-status-assigned,.esc-status-in_progress{background:var(--amber-s);color:#92400E}
+.esc-status-resolved{background:var(--green-s);color:#166534}
+.esc-status-reopened{background:var(--red-s);color:#991B1B}
+.esc-assigned-to{font-size:12px;color:var(--g500);flex:1}
+.esc-actions{display:flex;gap:8px}
+.esc-actions button{font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid var(--g200);background:#fff;color:var(--g700);cursor:pointer;transition:all .15s}
+.esc-actions button:hover{background:var(--g50)}
+.esc-actions .esc-btn-resolve{background:var(--orange);color:#fff;border-color:var(--orange)}
+.esc-actions .esc-btn-resolve:hover{background:var(--orange-d)}
+.esc-notify-fail{font-size:11px;color:var(--red);display:flex;align-items:center;gap:4px}
 .sb-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
 .sb-icon svg{width:18px;height:18px}
 /* Generic small icon-only action button (delete/trash/edit-style controls
@@ -963,6 +995,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
     </div>
     <nav class="sb-nav">
       <button class="htab sb-nav-item active" id="htabConv"       onclick="switchTab('conv')"><span class="sb-icon" data-icon="chat"></span><span class="sb-label">Conversations</span></button>
+      <button class="htab sb-nav-item hidden" id="htabEscalations" onclick="switchTab('escalations')"><span class="sb-icon" data-icon="warning"></span><span class="sb-label">Needs Attention</span><span class="esc-badge hidden" id="escalationBadge">0</span></button>
       <button class="htab sb-nav-item"        id="htabLeads"      onclick="switchTab('leads')"><span class="sb-icon" data-icon="users"></span><span class="sb-label">Leads</span></button>
       <button class="htab sb-nav-item"        id="htabContacts"   onclick="switchTab('contacts')"><span class="sb-icon" data-icon="clipboard"></span><span class="sb-label">Contacts</span></button>
       <button class="htab sb-nav-item"        id="htabProducts"   onclick="switchTab('products')"><span class="sb-icon" data-icon="box"></span><span class="sb-label">Products</span></button>
@@ -1228,6 +1261,24 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         </div>
       </div>
     </aside>
+  </div>
+
+  <!-- Needs Attention (Escalations) tab -->
+  <div id="escalationsTab" class="tab-full hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="warning"></span>Needs Attention</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">Conversations Itura has flagged for a human — sorted by priority, oldest first.</p>
+        </div>
+        <div class="bulk-tabs" style="margin:0">
+          <button class="bulk-tab active" data-escfilter="open" onclick="setEscalationFilter('open')">Open</button>
+          <button class="bulk-tab" data-escfilter="resolved" onclick="setEscalationFilter('resolved')">Resolved</button>
+          <button class="bulk-tab" data-escfilter="all" onclick="setEscalationFilter('all')">All</button>
+        </div>
+      </div>
+      <div id="escalationList"></div>
+    </div>
   </div>
 
   <!-- Leads tab -->
@@ -2783,6 +2834,8 @@ async function showApp(){
   syncPresenceUI();
   startPresenceHeartbeat();
   pollInterval=setInterval(loadConversations,15000);
+  loadEscalationBadgeCount();
+  setInterval(loadEscalationBadgeCount,30000);
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);clearInterval(bcPollInterval);clearInterval(_presenceInterval);
@@ -3413,8 +3466,8 @@ async function confirmReassignReason(){
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────
-const TABS={conv:'convTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab',reassign:'reassignTab',system:'systemTab'};
-const HTABS={conv:'htabConv',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings',reassign:'htabSettings',system:'htabSettings'};
+const TABS={conv:'convTab',escalations:'escalationsTab',leads:'leadsTab',contacts:'contactsTab',products:'productsTab',analytics:'analyticsTab',broadcast:'broadcastTab',canned:'cannedTab',team:'teamTab',rolePerm:'rolePermTab',templates:'templatesTab',aiSettings:'aiSettingsTab',usage:'usageTab',routing:'routingTab',reassign:'reassignTab',system:'systemTab'};
+const HTABS={conv:'htabConv',escalations:'htabEscalations',leads:'htabLeads',contacts:'htabContacts',products:'htabProducts',analytics:'htabAnalytics',broadcast:'htabMessaging',canned:'htabMessaging',team:'htabSettings',rolePerm:'htabSettings',templates:'htabSettings',aiSettings:'htabSettings',usage:'htabUsage',routing:'htabSettings',reassign:'htabSettings',system:'htabSettings'};
 const MESSAGING_TABS=['broadcast','canned'];
 const SETTINGS_TABS=['team','rolePerm','templates','aiSettings','routing','reassign','system'];
 let _lastMessagingTab='broadcast';
@@ -3447,6 +3500,7 @@ function switchTab(t){
   if(t==='routing')loadRoutingConfig();
   if(t==='reassign')loadReassignmentRequests();
   if(t==='system')loadGlobalBotStatus();
+  if(t==='escalations')loadEscalations();
   document.querySelectorAll('.tmpl-subnav .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.subtab===t));
 }
 
@@ -4826,6 +4880,106 @@ async function assignLeadFromDetail(agentName){
   if(!currentDetailPhone)return;
   await assignLead(currentDetailPhone,agentName,null);
 }
+
+// ── Needs Attention (Escalations) ──────────────────────────────────────
+let escalationFilter='open',allEscalations=[];
+const ESC_ALL_STATUSES='open,assigned,in_progress,resolved,reopened';
+async function loadEscalations(){
+  const p=new URLSearchParams({key:adminKey});
+  if(escalationFilter==='resolved')p.append('status','resolved');
+  else if(escalationFilter==='all')p.append('status',ESC_ALL_STATUSES);
+  try{
+    const r=await fetch(`/admin/escalations?${p}`);
+    if(r.status===403){logout();return;}
+    allEscalations=r.ok?await r.json():[];
+  }catch(e){console.error(e);allEscalations=[];}
+  renderEscalations();
+  loadEscalationBadgeCount();
+}
+async function loadEscalationBadgeCount(){
+  if(!adminKey)return;
+  try{
+    const r=await fetch(`/admin/escalations?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    updateEscalationBadge((await r.json()).length);
+  }catch(e){}
+}
+function updateEscalationBadge(count){
+  const badge=document.getElementById('escalationBadge');
+  if(!badge)return;
+  badge.textContent=count;
+  badge.classList.toggle('hidden',count===0);
+}
+function setEscalationFilter(filter){
+  escalationFilter=filter;
+  document.querySelectorAll('#escalationsTab .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.escfilter===filter));
+  loadEscalations();
+}
+function renderEscalations(){
+  const list=document.getElementById('escalationList');
+  if(!list)return;
+  if(!allEscalations.length){
+    list.innerHTML=emptyState(ICON.check,'Nothing needs attention','Conversations Itura flags for a human will show up here.');
+    return;
+  }
+  list.innerHTML=allEscalations.map(renderEscalationCard).join('');
+}
+function renderEscalationCard(e){
+  const name=e.customer_name||e.phone;
+  const catLabel=(e.category||'other').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const statusLabel=(e.status||'open').replace(/_/g,' ');
+  const assignedTo=e.assigned_agent_name?`Assigned to ${esc(e.assigned_agent_name)}`:'Unassigned';
+  const notifyFail=e.notification_status==='failed'
+    ?`<span class="esc-notify-fail">${ICON.warning}Alert not delivered${e.notification_error?': '+esc(e.notification_error):''}</span>`:'';
+  const isOpenish=['open','assigned','in_progress','reopened'].includes(e.status);
+  const canAct=!READ_ONLY_CONV_ROLES.includes(agentRole);
+  const claimBtn=(isOpenish&&!e.assigned_agent_id&&myAgentId&&canAct)?`<button onclick="event.stopPropagation();claimEscalation(${e.id})">Claim</button>`:'';
+  const resolveBtn=(isOpenish&&canAct)?`<button class="esc-btn-resolve" onclick="event.stopPropagation();resolveEscalationPrompt(${e.id})">Resolve</button>`:'';
+  const safeName=esc(name).replace(/'/g,"\\'");
+  return `<div class="esc-card esc-p-${esc(e.priority)}" onclick="openEscalationConv('${e.phone}','${safeName}')">
+    <div class="esc-card-top">
+      <span class="esc-pill esc-pill-${esc(e.priority)}">${esc(e.priority)}</span>
+      <span class="esc-pill esc-pill-category">${esc(catLabel)}</span>
+      <span class="esc-time">${timeAgo(e.created_at)}</span>
+    </div>
+    <div class="esc-customer">${esc(name)}${e.customer_name?`<span class="esc-phone">${esc(e.phone)}</span>`:''}</div>
+    ${e.summary?`<div class="esc-summary">${esc(e.summary)}</div>`:''}
+    <div class="esc-card-bottom">
+      <span class="esc-status-pill esc-status-${esc(e.status)}">${esc(statusLabel)}</span>
+      <span class="esc-assigned-to">${assignedTo}</span>
+      ${notifyFail}
+      <div class="esc-actions">${claimBtn}${resolveBtn}</div>
+    </div>
+  </div>`;
+}
+async function claimEscalation(id){
+  if(!myAgentId)return;
+  try{
+    const r=await fetch(`/admin/escalations/${id}?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({assigned_agent_id:myAgentId})
+    });
+    if(!r.ok)throw new Error();
+    await loadEscalations();
+  }catch(e){alert('Failed to claim this escalation.');}
+}
+async function resolveEscalationPrompt(id){
+  const resolution=prompt('How was this resolved? (optional)');
+  if(resolution===null)return;
+  try{
+    const r=await fetch(`/admin/escalations/${id}?key=${encodeURIComponent(adminKey)}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status:'resolved',resolution:resolution||null})
+    });
+    if(!r.ok)throw new Error();
+    await loadEscalations();
+  }catch(e){alert('Failed to resolve this escalation.');}
+}
+function openEscalationConv(phone,name){
+  switchTab('conv');
+  const conv=allConversations.find(c=>c.phone===phone);
+  selectConv(phone,name||phone,conv?conv.mode:'bot',conv?(conv.agent||''):'');
+}
 async function updateLeadStatus(phone,status){
   if(!phone)return;
   try{
@@ -5329,6 +5483,7 @@ function _applyPerms(perms){
   // Top-level tabs with a single dedicated sidebar button
   const directMap={
     conv:['htabConv'],
+    escalations:['htabEscalations'],
     leads:['htabLeads'],contacts:['htabContacts'],products:['htabProducts'],
     analytics:['htabAnalytics','inavAnalytics'],
     usage:['htabUsage'],
