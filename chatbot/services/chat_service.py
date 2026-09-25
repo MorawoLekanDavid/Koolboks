@@ -341,6 +341,53 @@ async def build_system_prompt(user_name: str, inv: str, query_text: str = "") ->
     return {"role": "system", "content": content}
 
 
+def _sanitize_for_history(content: str) -> str:
+    """Postgres stores the raw [image]url[/image]-style tag the admin panel
+    renders as a thumbnail -- meaningless markup to the model, so it gets a
+    short semantic placeholder instead when reconstructing history."""
+    for tag, label in (
+        ("[image]", "[Sent a photo]"), ("[video]", "[Sent a video]"),
+        ("[audio]", "[Sent a voice note]"), ("[document]", "[Sent a document]"),
+        ("[location]", "[Shared a location]"),
+    ):
+        if content.startswith(tag):
+            return label
+    return content
+
+
+def _reconstruct_history_from_db(phone: str, limit: int = 20) -> list:
+    """Rebuilds a Redis-history-shaped list from Postgres when Redis's own
+    copy has been unexpectedly lost -- without this, a resumed conversation
+    looks brand new to the model even though the customer has real prior
+    context, and the reply regresses to square-one discovery questions
+    instead of picking up where things left off. Confirmed live: a returning
+    customer already quoted two products, who'd objected on price and been
+    offered a payment plan, got asked "what size are you interested in" on
+    their very next message purely because Redis history was empty at that
+    moment (an AOF corruption/recovery incident, in that case) -- the
+    customer had all that context on their end and the bot had none."""
+    db = get_db()
+    try:
+        rows = (
+            db.query(Message)
+            .filter(Message.phone == phone)
+            .order_by(Message.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+    finally:
+        db.close()
+    rows.reverse()
+    return [
+        {
+            "role": "user" if m.direction == "inbound" else "assistant",
+            "content": _sanitize_for_history(m.content),
+            "ts": m.created_at.isoformat(),
+        }
+        for m in rows
+    ]
+
+
 async def generate_chat_response(request: ChatRequest, background_tasks: BackgroundTasks):
     """Does everything chat_handler does EXCEPT commit the turn to Redis
     history — returns (ChatResponse, persist), where persist is a zero-arg
@@ -412,6 +459,27 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     # Normal chat
     history = await redis_client.get_history(request.session_id)
 
+    # Empty Redis history normally means a genuinely new contact -- but if
+    # Postgres already has messages for this phone, something wiped Redis's
+    # copy (confirmed cause once: an AOF corruption/recovery incident) rather
+    # than this being anyone's actual first message. Reconstruct from
+    # Postgres and persist it back, BEFORE the bare-greeting fast path below
+    # -- a returning customer whose next message happens to be "Hi" would
+    # otherwise get the brand-new-contact welcome text instead of their real
+    # context, which is exactly what happened live during that incident.
+    if not history and request.session_id.startswith("wa_"):
+        phone = request.session_id[3:]
+        reconstructed = _reconstruct_history_from_db(phone)
+        if reconstructed:
+            log.warning(
+                f"Session {request.session_id} had empty Redis history but {phone} has "
+                f"{len(reconstructed)} prior message(s) in Postgres — reconstructing "
+                f"history from there instead of treating this as a new conversation."
+            )
+            history = reconstructed
+            if redis_client.client:
+                await redis_client.save_history(request.session_id, history)
+
     # A bare greeting as the very first message needs no LLM call at all — it's
     # always the same fixed welcome, so send it directly. Confirmed live: even
     # with an explicit "word-for-word, never reworded" instruction, the model
@@ -474,28 +542,11 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
             f"first: if their message already reads like a specific request or a "
             f"continuation of something in progress, that takes priority over the welcome.\n"
         )
-        # A real WhatsApp session with genuinely empty history is either a brand-new
-        # contact or one that legitimately restarted — but if this phone already has
-        # prior outbound messages in the DB, an empty history here means something
-        # reset it unexpectedly. There's a confirmed occurrence of this we couldn't
-        # trace after the fact (no logs survived); this makes any recurrence visible
-        # immediately instead of only discoverable by re-reading a transcript later.
-        if request.session_id.startswith("wa_"):
-            try:
-                _db = get_db()
-                phone = request.session_id[3:]
-                prior = _db.query(Message).filter(
-                    Message.phone == phone, Message.direction == "outbound"
-                ).first()
-                _db.close()
-                if prior:
-                    log.warning(
-                        f"Session {request.session_id} has empty history but {phone} has "
-                        f"prior outbound messages in the DB — likely an unexpected session "
-                        f"reset, not a genuinely new contact."
-                    )
-            except Exception as e:
-                log.warning(f"First-message reset diagnostic check failed: {e}")
+        # Reaching here with empty history now means either a genuinely new
+        # contact (nothing to reconstruct, checked above) or an explicit
+        # customer-requested restart (RESTART_RE, which intentionally clears
+        # history) -- the "Redis lost real history" case is already caught
+        # and recovered from earlier, before the bare-greeting fast path.
     if already_captured:
         if phone_redis:
             extracted_phone = phone_redis
