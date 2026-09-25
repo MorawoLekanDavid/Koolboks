@@ -4929,8 +4929,8 @@ function renderEscalationCard(e){
   const catLabel=(e.category||'other').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
   const statusLabel=(e.status||'open').replace(/_/g,' ');
   const assignedTo=e.assigned_agent_name?`Assigned to ${esc(e.assigned_agent_name)}`:'Unassigned';
-  const notifyFail=e.notification_status==='failed'
-    ?`<span class="esc-notify-fail">${ICON.warning}Alert not delivered${e.notification_error?': '+esc(e.notification_error):''}</span>`:'';
+  const notifyFail=(e.notification_status==='failed'||e.notification_status==='skipped')
+    ?`<span class="esc-notify-fail">${ICON.warning}No agent notified${e.notification_error?': '+esc(e.notification_error):''}</span>`:'';
   const isOpenish=['open','assigned','in_progress','reopened'].includes(e.status);
   const canAct=!READ_ONLY_CONV_ROLES.includes(agentRole);
   const claimBtn=(isOpenish&&!e.assigned_agent_id&&myAgentId&&canAct)?`<button onclick="event.stopPropagation();claimEscalation(${e.id})">Claim</button>`:'';
