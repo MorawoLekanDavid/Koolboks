@@ -12,7 +12,15 @@ ssh -i "$KEY" -o StrictHostKeyChecking=no "$HOST" "
   echo '→ Pulling latest code...'
   git pull
   echo '→ Building new image...'
-  sudo docker compose build --no-cache api
+  # No --no-cache: Docker's layer cache already invalidates correctly on
+  # file changes (the COPY . . layer, and everything after it, rebuilds
+  # whenever any tracked file changes) -- --no-cache instead forces a fully
+  # fresh image on every single deploy, and since nothing ever cleaned up
+  # the superseded layers, this filled the server's disk to 99% and broke
+  # a deploy outright (pip install failing with 'No space left on device').
+  sudo docker compose build api
+  echo '→ Removing superseded images (keeps what running containers need)...'
+  sudo docker image prune -f
   echo '→ Stopping old container (graceful SIGTERM, up to 30s)...'
   # Was 'kill -9' on the raw process -- SIGKILL can't be caught or handled,
   # so any customer mid-debounce-wait (up to BOT_RESPONSE_DELAY_SECONDS,
