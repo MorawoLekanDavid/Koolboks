@@ -308,6 +308,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         # Auto-reset stale handoffs — if no agent has replied in 8+ hours,
                         # the conversation was abandoned. Let the bot resume.
                         stale = False
+                        _db = None
                         try:
                             _db = get_db()
                             last_out = _db.execute(
@@ -315,12 +316,14 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                                 .where(and_(Message.phone == wa_from,
                                             Message.direction == "outbound"))
                             ).scalar()
-                            _db.close()
                             if last_out is None or \
                                (datetime.utcnow() - last_out).total_seconds() > HANDOFF_AUTO_RESET_HOURS * 3600:
                                 stale = True
                         except Exception as _e:
                             log.warning(f"Handoff stale-check failed: {_e}")
+                        finally:
+                            if _db:
+                                _db.close()
                         if stale:
                             await redis_client.client.delete(handoff_key)
                             in_handoff = None
@@ -348,6 +351,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                                      f"acknowledgment — not restarting the script")
                         elif is_complete:
                             stale = False
+                            _db = None
                             try:
                                 _db = get_db()
                                 last_out = _db.execute(
@@ -355,12 +359,14 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                                     .where(and_(Message.phone == wa_from,
                                                 Message.direction == "outbound"))
                                 ).scalar()
-                                _db.close()
                                 if last_out is None or \
                                    (datetime.utcnow() - last_out).total_seconds() > COMPLETE_SESSION_RESET_HOURS * 3600:
                                     stale = True
                             except Exception as _e:
                                 log.warning(f"Complete-session stale-check failed: {_e}")
+                            finally:
+                                if _db:
+                                    _db.close()
                             if stale:
                                 await redis_client.client.delete(history_key)
                                 await redis_client.client.delete(f"koolbuy:phone:{session_id}")

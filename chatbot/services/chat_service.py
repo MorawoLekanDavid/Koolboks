@@ -82,15 +82,22 @@ class ChatResponse(BaseModel):
 
 
 def load_products() -> List[Product]:
-    """Load all products from database"""
+    """Load all products from database. Called on every single chat turn, so
+    a connection that leaks here on any exception (db.close() was outside
+    the try/finally, meaning a failed query never returned its connection to
+    the pool) compounds fast -- confirmed live: exhausted the pool (size 5,
+    overflow 10) within about an hour, at which point every DB-backed request
+    on the whole app started timing out after 30s instead of failing fast."""
+    db = None
     try:
         db = get_db()
-        products = db.query(Product).all()
-        db.close()
-        return products
+        return db.query(Product).all()
     except Exception as e:
         log.warning(f"Failed to load products from DB: {e}")
         return []
+    finally:
+        if db:
+            db.close()
 
 
 def inventory_text(products: List[Product]) -> str:

@@ -416,6 +416,15 @@ async def send_whatsapp_otp_template(to: str, template_name: str, code: str, lan
 
 def save_message_db(session_id: str, phone: str, name: str, direction: str, content: str, wamid: str = None,
                      delivery_status: str = "sent", reply_to_wamid: str = None):
+    # Called on every single inbound and outbound message across the whole
+    # app -- db.close() being a bare statement instead of in a finally block
+    # (so any exception between acquiring the connection and reaching it --
+    # the Lead query, db.commit() itself under contention -- leaked the
+    # connection permanently) was one of the two hottest-path contributors
+    # to a real incident: exhausted the pool (size 5, overflow 10) within
+    # about an hour, after which every DB-backed request on the whole app
+    # started timing out after 30s instead of failing fast.
+    db = None
     try:
         db = get_db()
         norm = normalize_phone(phone)
@@ -435,6 +444,8 @@ def save_message_db(session_id: str, phone: str, name: str, direction: str, cont
                 if lead.source in ("manual", "import") and (lead.outreach_stage or "not_contacted") in ("not_contacted", "contacted"):
                     lead.outreach_stage = "responded"
         db.commit()
-        db.close()
     except Exception as e:
         log.error(f"Failed to save message: {e}")
+    finally:
+        if db:
+            db.close()

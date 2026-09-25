@@ -108,6 +108,7 @@ async def save_lead(user_name: str, phone: str, history: list, session_id: str =
     except Exception as e:
         log.warning(f"Lead extraction failed: {e}")
 
+    db = None
     try:
         db = get_db()
         clean = clean_name(data.get("name") or user_name)
@@ -143,9 +144,11 @@ async def save_lead(user_name: str, phone: str, history: list, session_id: str =
             db.add(lead)
             log.info(f"Lead saved: {clean} | {phone} | duration={duration}")
         db.commit()
-        db.close()
     except Exception as e:
         log.error(f"Failed to save lead to DB: {e}")
+    finally:
+        if db:
+            db.close()
 
     # ── Push to CRM via Zapier webhook ─────────────────────────────────────────
     if ZAPIER_WEBHOOK:
@@ -174,6 +177,7 @@ async def update_lead_address(phone: str, address: str):
     """Update delivery address for a lead in database"""
     if not phone or not address:
         return
+    db = None
     try:
         db = get_db()
         lead = db.query(Lead).filter(
@@ -187,6 +191,8 @@ async def update_lead_address(phone: str, address: str):
             lead.address = address.strip()
             db.commit()
             log.info(f"Lead address updated: {phone} -> {address}")
-        db.close()
     except Exception as e:
         log.warning(f"Failed to update lead address: {e}")
+    finally:
+        if db:
+            db.close()
