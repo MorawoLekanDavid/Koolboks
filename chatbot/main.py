@@ -13,6 +13,7 @@ from chatbot.routers import (
     assignment,
     chat,
     conversations,
+    escalations,
     followup,
     invite_auth,
     leads,
@@ -79,3 +80,4 @@ app.include_router(routing.router)
 app.include_router(presence.router)
 app.include_router(invite_auth.router)
 app.include_router(system.router)
+app.include_router(escalations.router)

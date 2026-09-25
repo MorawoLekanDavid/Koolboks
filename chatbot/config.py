@@ -46,6 +46,16 @@ WABA_ID = os.environ.get("WABA_ID", "")
 REENGAGEMENT_TEMPLATE = os.environ.get("REENGAGEMENT_TEMPLATE", "")
 REENGAGEMENT_TEMPLATE_LANG = os.environ.get("REENGAGEMENT_TEMPLATE_LANG", "en")
 
+# WhatsApp template used to alert an agent that a new escalation needs
+# attention (see chatbot/services/escalation_service.py). Agents don't chat
+# with the bot's own WhatsApp number, so they're essentially never inside a
+# free-text-eligible 24h window -- same reason INVITE_TEMPLATE/OTP_TEMPLATE
+# above are templates, not plain sends. Blank by default: notification is
+# attempted and, until a template with this name exists and is approved,
+# fails gracefully (logged, escalation still created and visible in-app --
+# see requirement that a failed notification must never lose the escalation).
+ESCALATION_ALERT_TEMPLATE = os.environ.get("ESCALATION_ALERT_TEMPLATE", "koolbuy_escalation_alert")
+
 FOLLOW_UP_ENABLED = os.environ.get("FOLLOW_UP_ENABLED", "true").lower() == "true"
 FOLLOW_UP_HOURS = int(os.environ.get("FOLLOW_UP_HOURS", "24"))
 FOLLOW_UP_RECHECK_DAYS = int(os.environ.get("FOLLOW_UP_RECHECK_DAYS", "7"))

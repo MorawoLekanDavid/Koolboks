@@ -12,7 +12,7 @@ from chatbot.utils.phone import normalize_phone
 router = APIRouter(prefix="/admin/role-permissions", tags=["permissions"])
 
 # Tabs that can be toggled per role (conv is always visible — not in this list)
-ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings", "usage", "routing"]
+ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings", "usage", "routing", "escalations"]
 
 # Roles whose permissions are configurable via the Team tab UI
 CONFIGURABLE_ROLES = [
@@ -30,26 +30,32 @@ DEFAULTS: Dict[str, Dict[str, bool]] = {
     "super_admin": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True, "routing": True,
+        "escalations": True,
     },
     "admin": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True, "routing": True,
+        "escalations": True,
     },
     "customer_success_agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
+        "escalations": True,
     },
     "telesales_agent": {
         "leads": False, "contacts": False, "products": False, "canned": False,
         "analytics": True, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
+        "escalations": False,
     },
     "bi_analyst": {
         "leads": False, "contacts": False, "products": False, "canned": False,
         "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": True, "routing": False,
+        "escalations": True,
     },
     "team_lead": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
+        "escalations": True,
     },
 }
 

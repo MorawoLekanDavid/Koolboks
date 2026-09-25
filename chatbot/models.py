@@ -141,6 +141,53 @@ class HandoffEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class Escalation(Base):
+    """A structured, trackable record of "Itura needs a human" -- distinct
+    from HandoffEvent (a bare audit log of takeover/handback) in that this
+    has a real lifecycle (status, who's assigned, when it was first responded
+    to, how it was resolved) instead of just a timestamped line. Creating one
+    also still writes a HandoffEvent and sets the usual Redis handoff key --
+    this table doesn't replace that mechanism, it sits on top of it so the
+    bot actually goes silent the same proven way it always has.
+
+    Phone-keyed like every other conversation-scoped table here (HandoffEvent,
+    ConversationOwner, ConversationTag, ConversationScore) -- there's no
+    Conversation table in this codebase to hang a real FK off of, so this
+    matches existing convention rather than inventing one."""
+    __tablename__ = "escalations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String(20), index=True, nullable=False)
+    customer_name = Column(String(255), nullable=True)
+
+    # Fixed vocabularies enforced in application code (chatbot/services/
+    # escalation_service.py), not a DB-level enum -- same convention as
+    # ConversationScore.issues elsewhere in this file.
+    category = Column(String(30), nullable=False, default="other")
+    priority = Column(String(10), nullable=False, default="medium")  # low | medium | high
+    trigger = Column(String(30), nullable=False)  # customer_request | bot_unresolved | sensitive | unviewable_media
+    status = Column(String(15), nullable=False, default="open", index=True)
+    # open | assigned | in_progress | resolved | reopened
+
+    summary = Column(String(1000), nullable=True)  # AI-written, from the same turn that triggered this
+
+    assigned_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    assigned_agent = relationship("Agent")
+
+    # Notification tracking -- kept separate from status: a notification can
+    # fail without the escalation itself being lost (see escalation_service).
+    notified_at = Column(DateTime, nullable=True)
+    notification_status = Column(String(15), nullable=True)  # sent | failed | skipped
+    notification_error = Column(String(500), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    assigned_at = Column(DateTime, nullable=True)
+    first_response_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution = Column(String(1000), nullable=True)
+    reopen_count = Column(Integer, default=0)
+
+
 class AgentLoginEvent(Base):
     """One row per login — powers the Shift & Login audit table. logout_at
     stays null for crash/force-quit sessions (no clean-exit signal fires);

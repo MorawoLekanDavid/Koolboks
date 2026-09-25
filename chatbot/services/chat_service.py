@@ -16,6 +16,7 @@ from chatbot.services.ai_settings_service import get_live_content
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Message, Product
+from chatbot.services.escalation_service import parse_escalation_tag, strip_escalation_tag
 from chatbot.services.groq_service import call_groq
 from chatbot.services.lead_service import save_lead, update_lead_address
 from chatbot.utils.phone import SESSION_ID_RE, extract_valid_phone, normalize_phone, phone_from_history
@@ -79,6 +80,7 @@ class ChatResponse(BaseModel):
     response:      str
     products:      List[ProductCard] = []
     lead_captured: bool = False
+    escalation:    Optional[dict] = None  # {"category","priority","summary"} when this turn needs a human
 
 
 def load_products() -> List[Product]:
@@ -675,6 +677,16 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     if "[SEND_FIXED_WELCOME]" in raw:
         raw = fixed_welcome_text(request.user_name)
 
+    # The model flags its own turn for human handoff with a single trailing
+    # line (ESCALATE: trigger=... category=... priority=... summary=...)
+    # rather than a separate classifier call -- same single-call, same-turn
+    # pattern as the PRODUCTS: tag below. Parsed and stripped before any of
+    # the downstream price/products regexes run, so a summary that happens
+    # to contain something price-shaped can't get mangled by those.
+    escalation = parse_escalation_tag(raw)
+    if escalation:
+        raw = strip_escalation_tag(raw)
+
     cards: List[ProductCard] = []
     m = re.search(r'PRODUCTS:\s*(.+)', raw, re.IGNORECASE)
     if m:
@@ -770,7 +782,8 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     async def _persist():
         await redis_client.save_history(request.session_id, history)
 
-    return ChatResponse(session_id=request.session_id, response=clean, products=cards, lead_captured=lead_captured), _persist
+    return ChatResponse(session_id=request.session_id, response=clean, products=cards,
+                         lead_captured=lead_captured, escalation=escalation), _persist
 
 
 async def chat_handler(request: ChatRequest, background_tasks: BackgroundTasks):

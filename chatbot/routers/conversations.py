@@ -21,6 +21,7 @@ from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
 from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
+from chatbot.services.escalation_service import mark_first_response_if_needed
 from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
     ensure_whatsapp_audio,
@@ -562,6 +563,7 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
         await redis_client.save_history(session_id, history)
 
     await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
+    await mark_first_response_if_needed(phone)
     return {"status": "sent"}
 
 
@@ -625,6 +627,7 @@ async def agent_send_media(
         await redis_client.save_history(session_id, history)
 
     await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
+    await mark_first_response_if_needed(phone)
     return {"status": "sent", "wamid": wamid, "media_type": media_type}
 
 

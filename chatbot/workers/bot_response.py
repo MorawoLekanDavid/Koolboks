@@ -2,19 +2,12 @@ import asyncio
 import json
 
 from fastapi import BackgroundTasks
-from fastapi.concurrency import run_in_threadpool
 
 from chatbot.config import BOT_NAME, BOT_RESPONSE_DELAY, log
 from chatbot.core import redis_client
-from chatbot.database import get_db
-from chatbot.models import HandoffEvent
 from chatbot.services.chat_service import ChatRequest, generate_chat_response
+from chatbot.services.escalation_service import create_escalation
 from chatbot.services.whatsapp_service import save_message_db, send_whatsapp_message, transcribe_whatsapp_audio
-
-# Matches the 24h TTL an agent-initiated takeover already uses
-# (conversations.py's toggle_handoff) — same mechanism, different trigger.
-MEDIA_HANDOFF_TTL = 86400
-MEDIA_HANDOFF_LABEL = "Awaiting agent (media)"
 
 
 def _parse_pending_entry(raw: str) -> dict:
@@ -28,34 +21,6 @@ def _parse_pending_entry(raw: str) -> dict:
     except (json.JSONDecodeError, TypeError):
         pass
     return {"text": raw, "escalate": False, "audio_media_id": None}
-
-
-async def _set_media_handoff(session_id: str, wa_from: str):
-    """Hand a conversation to a human because the customer sent something the
-    bot can't meaningfully respond to (an image, video, or document) — reuses
-    the exact mechanism a manual agent takeover uses, just system-triggered,
-    so it shows up the same way in the admin dashboard and auto-resets the
-    same way (HANDOFF_AUTO_RESET_HOURS) if nobody picks it up."""
-    if redis_client.client:
-        try:
-            await redis_client.client.set(
-                f"koolbuy:handoff:{session_id}", MEDIA_HANDOFF_LABEL, ex=MEDIA_HANDOFF_TTL
-            )
-        except Exception as e:
-            log.warning(f"[delay] failed to set media handoff for {session_id}: {e}")
-
-    def _log():
-        db = get_db()
-        try:
-            db.add(HandoffEvent(phone=wa_from, agent_name=MEDIA_HANDOFF_LABEL, event_type="takeover"))
-            db.commit()
-        except Exception as e:
-            log.warning(f"[delay] failed to log media handoff event for {wa_from}: {e}")
-        finally:
-            db.close()
-
-    await run_in_threadpool(_log)
-    log.info(f"[delay] {session_id} escalated to a human agent (unviewable media)")
 
 
 async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: str, my_seq: str = None,
@@ -163,7 +128,11 @@ async def delayed_bot_response(session_id: str, wa_from: str, name: str, text: s
         except Exception as e2:
             log.error(f"[delay] fallback message also failed for {session_id}: {e2}")
         if escalate:
-            await _set_media_handoff(session_id, wa_from)
+            await create_escalation(
+                session_id=session_id, phone=wa_from, customer_name=name,
+                trigger="unviewable_media", category="general_enquiry", priority="medium",
+                summary="Customer sent a photo, video, or document the bot can't view.",
+            )
         return
 
     # This is the check that closes the gap the pre-generation checks above
@@ -278,5 +247,22 @@ async def deliver_reply(session_id: str, wa_from: str, chat_resp, persist, bg: B
 
     # The reply just sent was the escalation announcement — hand off to a human
     # now, after it's out, so this doesn't silence the announcement itself.
+    # Two independent sources: `escalate` is the pre-existing unviewable-media
+    # trigger (decided in delayed_bot_response before the LLM ever ran);
+    # chat_resp.escalation is the model's own ESCALATE: tag from this turn
+    # (see chat_service.py) -- both go through the same create_escalation so
+    # every handoff reason gets identical tracking and notification, not just
+    # the newer ones.
     if escalate:
-        await _set_media_handoff(session_id, wa_from)
+        await create_escalation(
+            session_id=session_id, phone=wa_from,
+            trigger="unviewable_media", category="general_enquiry", priority="medium",
+            summary="Customer sent a photo, video, or document the bot can't view.",
+        )
+    elif chat_resp.escalation:
+        e = chat_resp.escalation
+        await create_escalation(
+            session_id=session_id, phone=wa_from,
+            trigger=e["trigger"], category=e["category"], priority=e["priority"],
+            summary=e["summary"],
+        )
