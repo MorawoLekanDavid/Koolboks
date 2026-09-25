@@ -26,6 +26,7 @@ from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
     ensure_whatsapp_audio,
     save_message_db,
+    send_whatsapp_location_request,
     send_whatsapp_media_message,
     send_whatsapp_message,
     upload_whatsapp_media,
@@ -625,6 +626,25 @@ async def agent_send_media(
 
     await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
     return {"status": "sent", "wamid": wamid, "media_type": media_type}
+
+
+@router.post("/conversations/{phone}/request-location")
+async def request_customer_location(phone: str, ctx: dict = Depends(conversation_guard(write=True, claim=True))):
+    """Sends WhatsApp's native location-share prompt instead of asking the
+    customer to type their delivery address -- see
+    send_whatsapp_location_request for why."""
+    session_id = f"wa_{phone}"
+    display_name = ctx.get("name") or "Agent"
+    norm = normalize_phone(phone)
+    body_text = "Please share your delivery location so we can confirm shipping."
+
+    wamid = await send_whatsapp_location_request(norm.lstrip("+"), body_text)
+    if not wamid:
+        raise HTTPException(status_code=502, detail="Failed to send location request")
+
+    save_message_db(session_id, phone, display_name, "outbound", body_text, wamid=wamid)
+    await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
+    return {"status": "sent", "wamid": wamid}
 
 
 class OwnerUpdate(BaseModel):

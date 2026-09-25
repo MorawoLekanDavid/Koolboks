@@ -188,8 +188,34 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         else:  # sticker
                             llm_text = ("[Customer sent a sticker. Acknowledge briefly and "
                                         "warmly, then continue the conversation naturally.]")
+                    elif msg_type == "location":
+                        # Shared via WhatsApp's own picker (a customer tapping the
+                        # attachment menu, or in response to a location-request we
+                        # sent — see send_whatsapp_location_request). Treated as a
+                        # real delivery address, not escalated — the bot already
+                        # handles a typed address the same way, and a shared pin is
+                        # strictly less ambiguous than one.
+                        loc = msg.get("location") or {}
+                        lat, lng = loc.get("latitude"), loc.get("longitude")
+                        loc_name = (loc.get("name") or "").strip()
+                        loc_address = (loc.get("address") or "").strip()
+                        label = " — ".join(p for p in (loc_name, loc_address) if p) or "Shared location"
+                        if lat is not None and lng is not None:
+                            text = f"[location]{lat},{lng}|{label}[/location]"
+                            maps_link = f"https://www.google.com/maps?q={lat},{lng}"
+                            llm_text = (
+                                f'[Customer shared their location via WhatsApp: "{label}" '
+                                f"({maps_link}). Treat this as their confirmed delivery "
+                                f"location -- acknowledge it and continue naturally, exactly "
+                                f"as you would if they had typed their address.]"
+                            )
+                        else:
+                            text = "[Customer shared a location]"
+                            llm_text = ("[Customer tried to share a location but it came "
+                                        "through without coordinates. Ask them to try sharing "
+                                        "it again, or to type their address instead.]")
                     else:
-                        continue  # location, contacts, reactions, interactive replies, etc. — out of scope for now
+                        continue  # contacts, reactions, interactive replies, etc. — out of scope for now
                     wa_from = normalize_phone(msg["from"])
                     contacts = value.get("contacts", [{}])
                     name = contacts[0].get("profile", {}).get("name", "Customer") if contacts else "Customer"
@@ -203,9 +229,15 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     reply_to_wamid = (msg.get("context") or {}).get("id")
                     log.info(f"WhatsApp message from {wa_from} ({name}): {text}")
 
-                    # Mark message as read immediately
+                    # Mark message as read immediately, and show the native
+                    # "typing..." indicator -- the customer sees a live sign
+                    # something's happening instead of silence for however
+                    # long the debounce wait + generation takes. It clears
+                    # itself automatically, so there's no "stop typing" call
+                    # needed even for the (rare) handoff-silent case where the
+                    # bot ends up not replying at all.
                     if msg_id:
-                        background_tasks.add_task(mark_whatsapp_read, msg_id)
+                        background_tasks.add_task(mark_whatsapp_read, msg_id, show_typing=True)
 
                     # Save inbound message to DB
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text,

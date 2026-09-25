@@ -13,11 +13,19 @@ from chatbot.models import Lead, Message
 from chatbot.utils.phone import normalize_phone
 
 
-async def mark_whatsapp_read(message_id: str):
+async def mark_whatsapp_read(message_id: str, show_typing: bool = False):
+    """Marks an inbound message read. `show_typing=True` also shows the
+    native "typing..." indicator in the customer's chat -- WhatsApp ties
+    this to the same read-receipt call rather than a separate endpoint, and
+    it clears itself automatically after ~25s or as soon as the next message
+    is actually sent, whichever comes first, so there's nothing to turn back
+    off explicitly."""
     if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         return
     url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
     payload = {"messaging_product": "whatsapp", "status": "read", "message_id": message_id}
+    if show_typing:
+        payload["typing_indicator"] = {"type": "text"}
     try:
         async with httpx.AsyncClient(timeout=5.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
             await client.post(url, json=payload, headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"})
@@ -156,6 +164,42 @@ async def send_whatsapp_message(
     except Exception as e:
         log.error(f"Failed to send WhatsApp message: {e}")
     return text_wamid, image_wamid
+
+
+async def send_whatsapp_location_request(to: str, body_text: str) -> Optional[str]:
+    """Sends WhatsApp's native "share your location" prompt -- a button in
+    the chat that opens the customer's own location picker -- instead of
+    asking them to type an address by hand. A typed address is the single
+    biggest source of delivery-cost disputes and back-and-forth in this
+    codebase's history; a shared pin has no typos to have. Returns the sent
+    message's wamid, or None on failure."""
+    if not WHATSAPP_API_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
+        log.warning("WhatsApp credentials not configured")
+        return None
+    url = f"{WHATSAPP_API_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "location_request_message",
+            "body": {"text": body_text},
+            "action": {"name": "send_location"},
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0, transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0")) as client:
+            resp = await client.post(url, json=payload, headers={"Authorization": f"Bearer {WHATSAPP_API_TOKEN}"})
+        if resp.is_success:
+            try:
+                return resp.json()["messages"][0]["id"]
+            except Exception:
+                return None
+        log.warning(f"Location request send failed ({resp.status_code}): {resp.text}")
+        return None
+    except Exception as e:
+        log.error(f"Location request send error: {e}")
+        return None
 
 
 # WhatsApp's media upload only accepts these -- audio in particular is far

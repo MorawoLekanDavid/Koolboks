@@ -317,6 +317,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .reply-icon-btn svg{width:18px;height:18px}
 .reply-icon-btn:hover{background:var(--g100)}
 .reply-icon-btn:disabled{opacity:.4;cursor:not-allowed;background:none}
+.attach-wrap{position:relative;flex-shrink:0}
+.attach-menu{position:absolute;bottom:44px;left:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:50;min-width:210px;padding:4px 0}
+.attach-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:9px 14px;border:none;background:none;cursor:pointer;text-align:left;font-size:13px;color:var(--text);white-space:nowrap}
+.attach-menu button:hover{background:var(--g100)}
+.attach-menu .icon-sm{color:var(--g500);flex-shrink:0}
+.attach-menu .icon-sm svg{width:16px;height:16px}
 .reply-box textarea{flex:1;border:1.5px solid var(--g200);border-radius:20px;padding:9px 14px;font-size:14px;resize:none;outline:none;font-family:inherit;max-height:120px;min-height:40px;color:var(--g900);background:var(--g50)}
 .reply-box textarea:focus{border-color:var(--orange);background:#fff}
 .send-btn{width:40px;height:40px;background:var(--orange);color:#fff;border:none;border-radius:50%;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
@@ -1100,7 +1106,13 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <div class="reply-box" id="replyBoxRow">
             <button class="reply-icon-btn" id="cannedPickerBtn" onclick="toggleCannedPicker()" title="Quick Replies"><span data-icon="clipboard"></span></button>
             <button class="reply-icon-btn" id="prodPickerBtn" onclick="toggleProdPicker()" title="Send Product">🛍️</button>
-            <button class="reply-icon-btn" id="attachBtn" onclick="document.getElementById('mediaFileInput').click()" title="Attach photo, video or file"><span data-icon="paperclip"></span></button>
+            <div class="attach-wrap">
+              <button class="reply-icon-btn" id="attachBtn" onclick="toggleAttachMenu()" title="Attach"><span data-icon="paperclip"></span></button>
+              <div id="attachMenu" class="attach-menu hidden">
+                <button onclick="pickMediaFile()"><span class="icon-sm" data-icon="paperclip"></span>Photo, video or file</button>
+                <button onclick="requestLocationFromCustomer()"><span class="icon-sm" data-icon="pin"></span>Request location</button>
+              </div>
+            </div>
             <textarea id="replyText" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
             <button class="reply-icon-btn" id="micBtn" onclick="startVoiceRecording()" title="Record a voice note"><span data-icon="mic"></span></button>
             <button class="send-btn" onclick="sendReply()"><span data-icon="send"></span></button>
@@ -3838,6 +3850,7 @@ async function selectConv(phone,name,mode,agent){
   cancelReply();
   if(_voiceRecorder&&_voiceRecorder.state!=='inactive')cancelVoiceRecording();
   clearProductImage();
+  document.getElementById('attachMenu')?.classList.add('hidden');
   selectedPhone=phone;selectedMode=mode;
   document.getElementById('emptyState').classList.add('hidden');
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
@@ -3969,6 +3982,7 @@ function _quoteContentParts(quoted){
   }else if(/^\[video\]/.test(quoted.content)){label='Video';}
   else if(/^\[audio\]/.test(quoted.content)){label='Voice note';}
   else if(/^\[document\]/.test(quoted.content)){label='Document';}
+  else if(/^\[location\]/.test(quoted.content)){label='Location';}
   else{label=quoted.direction==='inbound'?esc(quoted.name||'Customer'):'Itura';text=esc(quoted.content).slice(0,80);}
   return {thumb,label,text};
 }
@@ -4042,6 +4056,37 @@ async function handleMediaFileSelected(e){
   e.target.value=''; // so picking the exact same file again still fires onchange
   if(!file)return;
   await sendMediaFile(file);
+}
+// ── Attach menu: photo/video/file, or request the customer's location ──
+function toggleAttachMenu(){
+  const el=document.getElementById('attachMenu');
+  el.classList.toggle('hidden');
+}
+document.addEventListener('click',e=>{
+  const el=document.getElementById('attachMenu');
+  if(el&&!el.classList.contains('hidden')&&!el.contains(e.target)&&e.target.id!=='attachBtn'&&!e.target.closest('#attachBtn')){
+    el.classList.add('hidden');
+  }
+});
+function pickMediaFile(){
+  document.getElementById('attachMenu').classList.add('hidden');
+  document.getElementById('mediaFileInput').click();
+}
+async function requestLocationFromCustomer(){
+  document.getElementById('attachMenu').classList.add('hidden');
+  if(!selectedPhone)return;
+  try{
+    const r=await fetch(`/admin/conversations/${selectedPhone}/request-location?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      alert(err.detail||'Failed to send location request');
+      return;
+    }
+    await loadMessages();
+  }catch(e){
+    console.error(e);
+    alert('Failed to send location request — check your connection and try again.');
+  }
 }
 // ── Voice notes ──────────────────────────────────────────────────────
 let _voiceRecorder=null,_voiceChunks=[],_voiceStream=null,_voiceStartTs=0,_voiceTimerInt=null;
@@ -7987,6 +8032,8 @@ function renderMediaBody(content){
     return `<audio src="${esc(mediaSrc(m[1]))}" controls style="max-width:240px"></audio>`;
   if(m=content.match(/^\[document\](.*)\|(.*)\[\/document\]$/))
     return `<a href="${esc(mediaSrc(m[1]))}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:var(--orange);text-decoration:none;font-size:13px;font-weight:600"><span class="icon-sm">${ICON.file}</span>${esc(m[2])}</a>`;
+  if(m=content.match(/^\[location\](-?[\d.]+),(-?[\d.]+)\|(.*)\[\/location\]$/))
+    return `<a href="https://www.google.com/maps?q=${m[1]},${m[2]}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:var(--orange);text-decoration:none;font-size:13px;font-weight:600"><span class="icon-sm">${ICON.pin}</span>${esc(m[3])}</a>`;
   return esc(content);
 }
 // The small "replying to" preview shown above a message that quoted an
@@ -8014,6 +8061,7 @@ function mediaLabel(content){
   if(/^\[video\]/.test(content))return 'Video';
   if(/^\[audio\]/.test(content))return 'Voice note';
   if(/^\[document\]/.test(content))return 'Document';
+  if(/^\[location\]/.test(content))return 'Location';
   return content.length>200?content.slice(0,200)+'…':content;
 }
 function openLightbox(src){
