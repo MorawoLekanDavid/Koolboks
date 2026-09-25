@@ -21,6 +21,7 @@ from chatbot.routers import (
     presence,
     products,
     routing,
+    system,
     tags,
     templates,
     usage,
@@ -77,3 +78,4 @@ app.include_router(usage.router)
 app.include_router(routing.router)
 app.include_router(presence.router)
 app.include_router(invite_auth.router)
+app.include_router(system.router)

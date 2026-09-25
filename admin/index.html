@@ -114,6 +114,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .notif-badge{position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:1px 4px;border-radius:10px;min-width:14px;text-align:center}
 .sb-logout{padding:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--sidebar-text);text-align:center;transition:all .15s;width:100%}
 .sb-logout:hover{background:rgba(255,107,0,.18);border-color:var(--orange);color:var(--orange)}
+/* Super-admin-only account-wide kill switch -- deliberately separate from
+   the per-conversation Away toggle above it, since flipping this off
+   silences the bot for every conversation, not just this agent's status. */
+.sb-bot-switch{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px}
+.sb-bot-switch-label{font-size:11px;font-weight:700;color:var(--sidebar-text);display:flex;align-items:center;gap:6px}
+.sb-bot-status-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;transition:background .15s}
+.sb-bot-status-dot.off{background:#EF4444}
 
 /* Main area */
 .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;background:var(--bg)}
@@ -346,6 +353,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 @media (max-width:520px){
   .window-closed-banner{flex-wrap:wrap}
   .wcb-action{margin-left:30px}
+}
+/* Account-wide, not conversation-scoped -- sits above whichever tab is
+   active (see the banner's placement, first child of .main-area) rather
+   than inside a single chat's reply area like window-closed-banner above. */
+.global-bot-off-banner{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--red-s);border-bottom:1px solid rgba(239,68,68,.35);flex-shrink:0}
+.gbo-icon{flex-shrink:0;width:22px;height:22px;color:var(--red);display:flex;align-items:center;justify-content:center}
+.gbo-icon svg{width:19px;height:19px}
+.gbo-text{flex:1;min-width:0}
+.gbo-title{font-size:13px;font-weight:700;color:#991B1B;line-height:1.3}
+.gbo-sub{font-size:11.5px;color:#991B1B;opacity:.85;line-height:1.4;margin-top:1px}
+.gbo-action{flex-shrink:0;background:var(--red);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
+.gbo-action:hover{background:#B91C1C}
+@media (max-width:520px){
+  .global-bot-off-banner{flex-wrap:wrap}
+  .gbo-action{margin-left:32px}
 }
 .reply-disabled svg{width:15px;height:15px}
 .ai-perf-title [data-icon]{display:inline-flex;vertical-align:-3px}
@@ -987,12 +1009,33 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           </label>
         </div>
       </div>
+      <div id="botSwitchRow" class="hidden sb-bot-switch" title="Turn the AI bot off or on for every conversation, account-wide">
+        <span class="sb-bot-switch-label"><span id="botStatusDot" class="sb-bot-status-dot"></span>Bot</span>
+        <label class="perm-sw">
+          <input type="checkbox" id="globalBotToggle" checked onchange="onGlobalBotToggleClicked(this)">
+          <span class="perm-sw-slider"></span>
+        </label>
+      </div>
       <button class="sb-logout" onclick="logout()">Sign Out</button>
     </div>
   </aside>
 
   <!-- Main area -->
   <div class="main-area">
+
+  <!-- Shown to every agent, on every tab, whenever a super admin has paused
+       the bot for the whole account -- not just the current conversation.
+       Everyone needs to know this immediately, since every chat now needs a
+       human reply; only a super admin gets the button to undo it (see
+       applySuperAdminUI). -->
+  <div class="global-bot-off-banner hidden" id="globalBotOffBanner">
+    <span class="gbo-icon" data-icon="robot"></span>
+    <div class="gbo-text">
+      <div class="gbo-title">The AI bot is turned off for every conversation</div>
+      <div class="gbo-sub" id="gboSubtext">Every message needs a human reply until it's turned back on.</div>
+    </div>
+    <button class="gbo-action hidden" id="gboTurnOnBtn" onclick="setGlobalBotDisabled(false)">Turn Bot On</button>
+  </div>
 
   <!-- Conversations tab -->
   <div class="app-body" id="convTab">
@@ -2694,6 +2737,9 @@ async function showApp(){
   document.getElementById('userAv').textContent=agentName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   applyNavPermissions(agentRole);
   applyReadOnlyRole();
+  document.getElementById('botSwitchRow').classList.toggle('hidden',agentRole!=='super_admin');
+  loadGlobalBotStatus();
+  setInterval(loadGlobalBotStatus,20000);
   // Nav visibility is handled dynamically via applyNavPermissions
   requestNotificationPermission();_unlockAudio();_syncSoundToggleUI();isFirstLoad=true;
   convOffset=0;loadConversations();loadAllTags();
@@ -2792,6 +2838,62 @@ async function toggleAway(checked){
     myStatus=prev?'away':'online';
     syncPresenceUI();
     alert('Failed to update — please try again.');
+  }
+}
+
+// ── Global bot on/off switch (super admin only) ─────────────────────────
+// Separate from per-conversation "Take Over" -- this silences the AI
+// everywhere at once. Every agent sees the banner when it's active (so
+// nobody wonders why chats have gone quiet); only a super admin sees the
+// sidebar toggle or the banner's own "Turn Bot On" button.
+async function loadGlobalBotStatus(){
+  try{
+    const r=await fetch(`/admin/system/bot-status?key=${encodeURIComponent(adminKey)}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    _renderGlobalBotStatus(d);
+  }catch(e){console.error(e);}
+}
+function _renderGlobalBotStatus(d){
+  const banner=document.getElementById('globalBotOffBanner');
+  const dot=document.getElementById('botStatusDot');
+  const toggle=document.getElementById('globalBotToggle');
+  const turnOnBtn=document.getElementById('gboTurnOnBtn');
+  banner.classList.toggle('hidden',!d.disabled);
+  dot?.classList.toggle('off',d.disabled);
+  if(toggle && document.activeElement!==toggle)toggle.checked=!d.disabled;
+  if(agentRole==='super_admin')turnOnBtn.classList.remove('hidden');
+  if(d.disabled){
+    const who=d.by?` by ${esc(d.by)}`:'';
+    const when=d.since?` · ${timeAgo(d.since)}`:'';
+    document.getElementById('gboSubtext').textContent=
+      `Every message needs a human reply until it's turned back on. Turned off${who}${when}.`;
+  }
+}
+async function onGlobalBotToggleClicked(el){
+  const disabling=!el.checked;
+  if(disabling && !confirm('Turn the bot OFF for every conversation, account-wide?\n\nEvery customer message will need a human reply until you turn it back on — agents get no automatic notification, so make sure the team is ready to work chats manually.')){
+    el.checked=true; // revert the click
+    return;
+  }
+  await setGlobalBotDisabled(disabling);
+}
+async function setGlobalBotDisabled(disabled){
+  try{
+    const r=await fetch(`/admin/system/bot-status?key=${encodeURIComponent(adminKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({disabled})
+    });
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      alert(err.detail||'Failed to update — please try again.');
+      loadGlobalBotStatus(); // resync UI to the real state
+      return;
+    }
+    _renderGlobalBotStatus(await r.json());
+  }catch(e){
+    console.error(e);
+    alert('Failed to update — check your connection and try again.');
+    loadGlobalBotStatus();
   }
 }
 

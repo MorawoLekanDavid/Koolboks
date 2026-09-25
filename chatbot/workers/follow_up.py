@@ -16,6 +16,7 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Lead, Message
+from chatbot.services.bot_control import is_bot_globally_disabled
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
 from chatbot.services.whatsapp_service import send_whatsapp_message
@@ -26,6 +27,8 @@ async def run_follow_ups():
     FOLLOW_UP_HOURS that never gave their phone number."""
     if not redis_client.client or not WHATSAPP_API_TOKEN:
         return
+    if await is_bot_globally_disabled():
+        return  # a super admin paused all AI-generated outbound messages, this included
     cutoff = datetime.utcnow() - timedelta(hours=FOLLOW_UP_HOURS)
     db = get_db()
     try:

@@ -8,6 +8,7 @@ from chatbot.config import HANDOFF_AUTO_RESET_HOURS, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Message
+from chatbot.services.bot_control import is_bot_globally_disabled
 from chatbot.services.chat_service import ChatRequest, generate_chat_response
 from chatbot.workers.bot_response import deliver_reply
 
@@ -93,6 +94,8 @@ async def run_handoff_watchdog():
     answered and simply hasn't replied since is left alone."""
     if not redis_client.client:
         return
+    if await is_bot_globally_disabled():
+        return  # a super admin paused the bot everywhere -- this isn't its call to override
     handled = 0
     for phone in await _candidate_phones():
         session_id = f"wa_{phone}"

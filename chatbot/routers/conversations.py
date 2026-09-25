@@ -21,6 +21,7 @@ from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
 from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
 from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
+from chatbot.services.bot_control import is_bot_globally_disabled
 from chatbot.services.chat_service import ChatRequest, generate_chat_response
 from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
@@ -894,6 +895,9 @@ async def _resume_bot_if_pending(phone: str, session_id: str):
     conversation history either way, so if the last message is still
     unanswered, it can just pick it up now. Mirrors handoff_watchdog.py's
     per-conversation logic, minus its staleness gate."""
+    if await is_bot_globally_disabled():
+        return  # a super admin paused the bot everywhere -- an individual handback can't override that
+
     def _last_message():
         db = get_db()
         try:

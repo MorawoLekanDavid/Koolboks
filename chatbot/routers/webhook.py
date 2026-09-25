@@ -12,6 +12,7 @@ from chatbot.config import COMPLETE_SESSION_RESET_HOURS, HANDOFF_AUTO_RESET_HOUR
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import BroadcastRecipient, Message
+from chatbot.services.bot_control import is_bot_globally_disabled
 from chatbot.services.lead_service import save_lead
 from chatbot.services.routing_service import auto_assign_conversation
 from chatbot.services.whatsapp_service import mark_whatsapp_read, save_message_db
@@ -27,6 +28,30 @@ FILLER_ACK_RE = re.compile(
     r'thanks?( you)?|thank ?u|tanks?|👍+|🙏+|❤️+|😊+)\s*[!.]*\s*$',
     re.IGNORECASE,
 )
+
+
+async def _record_silent_inbound(session_id: str, wa_from: str, name: str, text: str,
+                                  background_tasks: BackgroundTasks) -> None:
+    """Appends to Redis history and still tries to capture a phone number even
+    though nothing is going to reply right now -- shared by per-conversation
+    handoff and the global bot-off switch, so a lead isn't lost just because
+    a human is (or should be) the one handling this conversation."""
+    history = await redis_client.get_history(session_id)
+    history.append({"role": "user", "content": text, "ts": datetime.now().isoformat()})
+    await redis_client.save_history(session_id, history)
+    try:
+        phone_redis = await redis_client.client.get(f"koolbuy:phone:{session_id}") if redis_client.client else None
+        already_captured = bool(phone_redis) or any(
+            "[VALID phone captured" in m.get("content", "") for m in history
+        )
+        if not already_captured:
+            phone = extract_valid_phone(text)
+            if phone:
+                background_tasks.add_task(save_lead, name, phone, history, session_id)
+                if redis_client.client:
+                    await redis_client.client.set(f"koolbuy:phone:{session_id}", phone, ex=LEAD_TTL)
+    except Exception as e:
+        log.warning(f"Silent-inbound lead-capture check failed for {session_id}: {e}")
 
 
 def _update_message_delivery(wamid: str, status: str, error_detail: str = None, event_ts: str = None):
@@ -229,15 +254,21 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     reply_to_wamid = (msg.get("context") or {}).get("id")
                     log.info(f"WhatsApp message from {wa_from} ({name}): {text}")
 
+                    # Checked once and reused below for both the typing indicator and
+                    # the reply-skip -- a single Redis GET either way.
+                    bot_globally_off = await is_bot_globally_disabled()
+
                     # Mark message as read immediately, and show the native
                     # "typing..." indicator -- the customer sees a live sign
-                    # something's happening instead of silence for however
-                    # long the debounce wait + generation takes. It clears
-                    # itself automatically, so there's no "stop typing" call
-                    # needed even for the (rare) handoff-silent case where the
-                    # bot ends up not replying at all.
+                    # something's happening instead of silence for however long
+                    # the debounce wait + generation takes. It clears itself
+                    # automatically, so there's no "stop typing" call needed even
+                    # for the (usual) handoff-silent case where the bot ends up
+                    # not replying at all. Skipped outright when the bot is
+                    # globally off -- there it would be an outright lie, not just
+                    # an early guess, since nothing is coming to type it.
                     if msg_id:
-                        background_tasks.add_task(mark_whatsapp_read, msg_id, show_typing=True)
+                        background_tasks.add_task(mark_whatsapp_read, msg_id, show_typing=not bot_globally_off)
 
                     # Save inbound message to DB
                     background_tasks.add_task(save_message_db, session_id, wa_from, name, "inbound", text,
@@ -255,6 +286,16 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
                     # Mark broadcast campaign as responded if this phone was a recipient
                     background_tasks.add_task(_mark_broadcast_responded, wa_from)
+
+                    # The global switch overrides per-conversation handoff entirely --
+                    # if a super admin has turned the bot off for everyone, that's not
+                    # a stale/abandoned handoff to auto-reset, it's a deliberate pause,
+                    # so this is checked and short-circuits before the handoff logic
+                    # below ever runs.
+                    if bot_globally_off:
+                        log.info(f"Bot is globally disabled — {session_id} message recorded, no reply")
+                        await _record_silent_inbound(session_id, wa_from, name, text, background_tasks)
+                        continue
 
                     # Check if agent has taken over this session
                     handoff_key = f"koolbuy:handoff:{session_id}"
@@ -282,30 +323,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                             log.info(f"Auto-reset stale handoff for {session_id} (no agent reply in {HANDOFF_AUTO_RESET_HOURS}h)")
                         else:
                             log.info(f"Session {session_id} is in handoff mode — bot silent")
-                            history = await redis_client.get_history(session_id)
-                            history.append({"role": "user", "content": text,
-                                            "ts": datetime.now().isoformat()})
-                            await redis_client.save_history(session_id, history)
-
-                            # Bot stays silent, but a lead is still a lead — capture
-                            # a phone number even when a human agent is doing the
-                            # asking, instead of only ever qualifying via the bot.
-                            try:
-                                phone_redis = await redis_client.client.get(
-                                    f"koolbuy:phone:{session_id}") if redis_client.client else None
-                                already_captured = bool(phone_redis) or any(
-                                    "[VALID phone captured" in m.get("content", "") for m in history
-                                )
-                                if not already_captured:
-                                    phone = extract_valid_phone(text)
-                                    if phone:
-                                        background_tasks.add_task(save_lead, name, phone, history, session_id)
-                                        if redis_client.client:
-                                            await redis_client.client.set(
-                                                f"koolbuy:phone:{session_id}", phone, ex=LEAD_TTL)
-                            except Exception as _e:
-                                log.warning(f"Handoff lead-capture check failed: {_e}")
-
+                            await _record_silent_inbound(session_id, wa_from, name, text, background_tasks)
                             continue
 
                     # Check session state and reset completed sessions — but only once
