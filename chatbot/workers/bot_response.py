@@ -203,10 +203,24 @@ def _blurb(p):
     lines = [f"🛒 *{p.name}*", f"💰 N{float(p.price):,.0f}"]
     if p.description:
         desc = p.description.strip()
-        # WhatsApp image captions cap at 1024 bytes; this leaves comfortable
-        # headroom for the name/price lines above plus multi-byte emoji.
-        if len(desc) > 600:
-            desc = desc[:600].rsplit(" ", 1)[0] + "…"
+        # WhatsApp's image caption cap is 1024 characters total, INCLUDING the
+        # name/price lines above -- 850 leaves headroom even for the longest
+        # product names in the catalogue (several run 80-90+ characters).
+        # Note: as of writing, every description actually stored is already
+        # <=500 characters (truncated further upstream, before it ever
+        # reaches this database) -- this cap is a safety net for whenever
+        # fuller descriptions get entered, not what's currently cutting
+        # anything short.
+        if len(desc) > 850:
+            cut = desc[:850]
+            # Prefer ending on a full sentence over an abrupt mid-word cut --
+            # look for the last sentence-ending punctuation in the back part
+            # of the window before falling back to a clean word break.
+            last_end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+            if last_end > 850 * 0.6:
+                desc = cut[:last_end + 1]
+            else:
+                desc = cut.rsplit(" ", 1)[0] + "…"
         lines.append(desc)
     return "\n".join(lines)
 

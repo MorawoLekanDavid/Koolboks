@@ -54,11 +54,32 @@ async def fetch_whatsapp_media(media_id: str) -> Optional[tuple]:
         return None
 
 
+# Whisper biases its spelling toward words it's given as context -- without
+# this, brand names and local place names are exactly what a general-purpose
+# model gets wrong most often (mishearing "Koolboks" as something phonetically
+# close, autocorrecting a Nigerian city to a more common English word, etc).
+# This isn't a transcript of anything, just a vocabulary hint.
+_WHISPER_DOMAIN_PROMPT = (
+    "Koolboks, Itura, solar freezer, inverter, pedestal battery, kilowatt, "
+    "Naira, down payment, monthly installment, Lagos, Abuja, Kaduna, Kano, "
+    "Port Harcourt, Ibadan, Enugu."
+)
+
+
 async def transcribe_whatsapp_audio(media_id: str) -> Optional[str]:
     """Download a voice note / audio message and transcribe it via Groq's
     Whisper. This is genuine understanding, not an acknowledgment — the
     transcript is fed into the bot's normal reasoning exactly like typed
-    text, so it can actually respond to what was said."""
+    text, so it can actually respond to what was said.
+
+    Uses the full whisper-large-v3 model rather than the turbo variant --
+    turbo trades some accuracy for roughly 8x the speed, which isn't a
+    trade worth making here: a voice note is already going through a
+    multi-second download + transcribe + Groq-chat-completion + WhatsApp-send
+    pipeline before the customer sees a reply, so a slightly slower but more
+    accurate transcription doesn't change the felt latency, while a
+    misheard word (an address, a model name, a price) can send the whole
+    reply in the wrong direction."""
     from chatbot.services.groq_service import groq_client  # deferred: avoids a
     # module-load-order cycle, since groq_service doesn't need anything here
 
@@ -70,7 +91,8 @@ async def transcribe_whatsapp_audio(media_id: str) -> Optional[str]:
     try:
         transcription = await groq_client.audio.transcriptions.create(
             file=(f"voice.{ext}", audio_bytes, content_type),
-            model="whisper-large-v3-turbo",
+            model="whisper-large-v3",
+            prompt=_WHISPER_DOMAIN_PROMPT,
         )
         text = (transcription.text or "").strip()
         return text or None
