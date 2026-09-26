@@ -1261,10 +1261,6 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
                 <option value="">Unassigned</option>
               </select>
             </div>
-            <div style="text-align:right;margin:-4px 0 8px">
-              <button onclick="toggleOwnershipHistory()" style="background:none;border:none;padding:0;font-size:11.5px;font-weight:700;color:var(--orange-d);cursor:pointer;font-family:inherit;text-decoration:underline">Ownership history</button>
-            </div>
-            <div id="ownershipHistoryBox" class="hidden" style="margin-bottom:10px"></div>
             <div class="d-row" style="align-items:center">
               <span class="lbl">Status</span>
               <select class="assign-sel" id="dStatusSel" onchange="updateLeadStatus(currentDetailPhone,this.value)" style="max-width:none;flex:1;text-align:right">
@@ -1286,7 +1282,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
             <div class="d-row"><span class="lbl">Captured</span><span class="val" id="dCaptured">-</span></div>
           </div>
           <div class="d-section">
-            <div class="d-section-title">Conversation Owner</div>
+            <div class="d-section-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span>Conversation Owner</span>
+              <button class="btn-dl" style="padding:3px 9px;font-size:10.5px;text-transform:none;letter-spacing:normal" onclick="toggleOwnershipHistory()"><span data-icon="clock"></span>History</button>
+            </div>
             <div style="display:flex;gap:6px;align-items:center">
               <select id="assignOwnerSelect" style="flex:1;padding:6px 8px;border:1px solid var(--g200);border-radius:8px;font-size:12px;font-family:inherit;color:var(--g700);outline:none">
                 <option value="">— Unassigned —</option>
@@ -1294,6 +1293,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
               <button id="saveConvOwnerBtn" onclick="saveConvOwner()" style="padding:6px 12px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Assign</button>
             </div>
             <div id="assignOwnerStatus" style="font-size:11px;color:var(--green);margin-top:4px;display:none">Saved</div>
+            <div id="ownershipHistoryBox" class="hidden" style="margin-top:10px"></div>
           </div>
         </div>
         <div class="detail-scroll hidden" id="dTabActivity">
@@ -3928,18 +3928,23 @@ async function loadReassignHistory(){
 let _ownershipHistoryOpen=false;
 async function toggleOwnershipHistory(){
   const box=document.getElementById('ownershipHistoryBox');
-  if(!box||!currentDetailPhone)return;
+  const phone=selectedPhone||currentDetailPhone;
+  if(!box||!phone)return;
   _ownershipHistoryOpen=!_ownershipHistoryOpen;
   box.classList.toggle('hidden',!_ownershipHistoryOpen);
   if(!_ownershipHistoryOpen)return;
   box.innerHTML='<p class="d-placeholder">Loading…</p>';
   try{
-    const r=await fetch(`/admin/reassignment-requests?phone=${encodeURIComponent(currentDetailPhone)}&key=${encodeURIComponent(adminKey)}`);
+    const r=await fetch(`/admin/reassignment-requests?phone=${encodeURIComponent(phone)}&key=${encodeURIComponent(adminKey)}`);
     const rows=r.ok?await r.json():[];
     box.innerHTML=rows.length?rows.map(renderReassignHistoryRow).join('')
       :emptyState(ICON.clipboard,'No history yet','This conversation has never been reassigned.');
     hydrateIcons(box);
   }catch(e){box.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
+}
+function closeOwnershipHistory(){
+  _ownershipHistoryOpen=false;
+  document.getElementById('ownershipHistoryBox')?.classList.add('hidden');
 }
 function renderReassignHistoryRow(r){
   const cls=r.status==='denied'?'denied':r.status==='pending'?'pending':'approved';
@@ -4745,6 +4750,7 @@ function restoreChatPanel(){
 
 // ── Conversation Owner (assign) ────────────────────────────────────────
 function _populateOwnerSelect(phone){
+  closeOwnershipHistory();
   const conv=allConversations.find(c=>c.phone===phone);
   const currentOwner=conv?.owner?.name||'';
   const _rl={'super_admin':'Super Admin','admin':'Admin','customer_success_agent':'CS','telesales_agent':'Telesales','bi_analyst':'BI','team_lead':'Lead'};
@@ -4794,8 +4800,7 @@ async function saveConvOwner(){
 let currentDetailPhone=null;
 async function loadLeadDetails(phone){
   currentDetailPhone=phone;
-  _ownershipHistoryOpen=false;
-  document.getElementById('ownershipHistoryBox')?.classList.add('hidden');
+  closeOwnershipHistory();
   const dc=document.getElementById('detailContent');const ed=document.getElementById('emptyDetail');
   try{
     const r=await fetch(`/admin/leads/by-phone/${encodeURIComponent(phone)}?key=${encodeURIComponent(adminKey)}`);
