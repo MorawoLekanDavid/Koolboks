@@ -143,11 +143,10 @@ async def _notify_agent(escalation_id: int, agent: Agent, phone: str, customer_n
             )
             esc.notified_at = datetime.utcnow()
             esc.notification_status = "sent" if sent else "failed"
-            if not sent:
-                esc.notification_error = (
-                    f"send_whatsapp_template returned False for template "
-                    f"'{ESCALATION_ALERT_TEMPLATE}' -- likely not yet created/approved in Meta Business Manager."
-                )
+            esc.notification_error = None if sent else (
+                f"send_whatsapp_template returned False for template "
+                f"'{ESCALATION_ALERT_TEMPLATE}' -- likely not yet created/approved in Meta Business Manager."
+            )
         except Exception as e:
             esc.notified_at = datetime.utcnow()
             esc.notification_status = "failed"
