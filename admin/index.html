@@ -2925,7 +2925,14 @@ async function showApp(){
 }
 function logout(){
   clearInterval(pollInterval);clearInterval(msgPollInterval);clearInterval(bcPollInterval);clearInterval(_presenceInterval);
-  if(myAgentId)navigator.sendBeacon(`/admin/presence/offline?key=${encodeURIComponent(adminKey)}`);
+  // A real confirmed logout — distinct from the sendBeacon in
+  // startPresenceHeartbeat()'s beforeunload handler, which only ever means
+  // "the page is going away" (refresh/close/nav/crash), not "the agent
+  // logged out". This is the one action allowed to close the login record
+  // and invalidate the session, so it's a real POST the server can process
+  // normally rather than a fire-and-forget beacon — `keepalive` still lets
+  // it complete even though we navigate to the login screen right after.
+  fetch(`/admin/presence/logout?key=${encodeURIComponent(adminKey)}`,{method:'POST',keepalive:true}).catch(()=>{});
   localStorage.removeItem('koolbot_agent');
   adminKey='';agentName='';agentRole='customer_success_agent';agentEmail='';selectedPhone=null;allConversations=[];isFirstLoad=true;
   myAgentId=null;myDepartmentId=null;myStatus='offline';_myAway=false;

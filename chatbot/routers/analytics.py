@@ -659,6 +659,43 @@ def _parse_device_os(user_agent: Optional[str]) -> str:
     return "Unknown"
 
 
+def classify_session_status(
+    logout_at: Optional[datetime],
+    last_heartbeat_status: Optional[str],
+    last_heartbeat_at: Optional[datetime],
+    now: datetime,
+) -> str:
+    """Turns one AgentLoginEvent + that agent's most recent heartbeat row into
+    the three states the Login & Device Audit table shows. Pulled out as its
+    own pure function (no DB/Redis access) specifically so this — the exact
+    logic distinguishing a confirmed logout from a dropped/expired session —
+    has direct unit test coverage instead of only being exercised inline
+    inside a query handler. See tests/test_shift_tracker.py.
+
+    - "Ended": logout_at is set. Only presence.py's POST /admin/presence/logout
+      ever sets it (a real, confirmed Sign Out) — /admin/presence/offline
+      (fired by sendBeacon on refresh/tab-close/crash/network loss) deliberately
+      never does, so this can no longer be a false positive from a page just
+      going away.
+    - "Active": no logout_at, but the last heartbeat is recent and non-offline
+      — the tab is still genuinely open.
+    - "Dropped": no logout_at, and the heartbeat has gone stale or offline —
+      presence disappeared without ever confirming a logout (crash, network
+      loss, tab closed, laptop shut, browser suspended). This is the case
+      that used to be miscounted as "Ended" before this fix.
+    """
+    if logout_at:
+        return "Ended"
+    if (
+        last_heartbeat_status
+        and last_heartbeat_status != "offline"
+        and last_heartbeat_at
+        and (now - last_heartbeat_at).total_seconds() < HEARTBEAT_TTL + 60
+    ):
+        return "Active"
+    return "Dropped"
+
+
 @router.get("/shift-tracker")
 async def shift_tracker(
     date: Optional[str] = Query(None),
@@ -767,14 +804,13 @@ async def shift_tracker(
             audit = []
             for ev in login_rows:
                 agent_obj = agents_by_id.get(ev.agent_id)
-                if ev.logout_at:
-                    session_status = "Ended"
-                else:
-                    last_hb = last_hb_by_agent.get(ev.agent_id)
-                    if last_hb and last_hb.status != "offline" and (now - last_hb.logged_at).total_seconds() < HEARTBEAT_TTL + 60:
-                        session_status = "Active"
-                    else:
-                        session_status = "Dropped"
+                last_hb = last_hb_by_agent.get(ev.agent_id)
+                session_status = classify_session_status(
+                    ev.logout_at,
+                    last_hb.status if last_hb else None,
+                    last_hb.logged_at if last_hb else None,
+                    now,
+                )
                 audit.append({
                     "agent": agent_obj.name if agent_obj else f"Agent {ev.agent_id}",
                     "login_at": ev.login_at.isoformat() if ev.login_at else None,

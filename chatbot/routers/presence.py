@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from chatbot.config import log
 from chatbot.database import get_db
-from chatbot.dependencies import get_admin_ctx
+from chatbot.dependencies import get_admin_ctx, invalidate_session
 from chatbot.models import AgentHeartbeatLog, AgentLoginEvent
 from chatbot.services import presence_service
 
@@ -44,6 +44,17 @@ async def _maybe_log_status(agent_id: int, status: str, force: bool = False) -> 
 
 
 def _close_open_login(agent_id: int) -> None:
+    """Stamps logout_at on an agent's most recent still-open login row.
+    Called from EXACTLY ONE place: the confirmed /logout endpoint below.
+    This is the whole fix for the "still working but analytics showed an
+    earlier logout" bug — logout_at used to also get closed by /offline
+    (a sendBeacon fired on ANY page-exit: refresh, tab close, crash,
+    network loss, laptop shutdown, none of which mean the agent actually
+    logged out), so a flaky wifi moment could look identical to a real
+    end-of-shift. Now only a deliberate click on Sign Out can close this
+    row — every other way a session ends leaves logout_at null, which
+    shift_tracker's classify_session_status() (analytics.py) correctly
+    reads as "Dropped" rather than "Ended"."""
     db = get_db()
     try:
         row = (
@@ -64,8 +75,11 @@ def _close_open_login(agent_id: int) -> None:
 @router.post("/heartbeat")
 async def heartbeat(ctx: dict = Depends(get_admin_ctx)):
     """Pinged every 20s while the dashboard tab is open and visible. Refreshes
-    the 45s liveness TTL — missing a couple of these (tab crash, network
-    drop) self-heals to offline without needing an explicit signal."""
+    the 90s liveness TTL — missing a couple of these (tab crash, network
+    drop) self-heals to offline without needing an explicit signal, and
+    WITHOUT ever touching AgentLoginEvent.logout_at (see _close_open_login's
+    docstring) — a heartbeat that simply stops is a dropped/expired
+    presence, not a logout, and is reported as such."""
     agent_id = ctx.get("agent_id")
     if agent_id:
         await presence_service.heartbeat(agent_id)
@@ -76,14 +90,41 @@ async def heartbeat(ctx: dict = Depends(get_admin_ctx)):
 
 @router.post("/offline")
 async def go_offline(ctx: dict = Depends(get_admin_ctx)):
-    """Fired via navigator.sendBeacon() on tab close/refresh/navigation —
-    goes offline immediately instead of waiting out the heartbeat TTL."""
+    """Best-effort "the page appears to have gone away" signal — fired via
+    navigator.sendBeacon() on tab close, refresh, or navigation. sendBeacon
+    fires for all of those indiscriminately (and sometimes not at all, on a
+    crash or a yanked network cable), so it is NOT reliable evidence that
+    the agent actually logged out; it only ever clears the live presence
+    heartbeat so the dashboard doesn't wait out the full TTL to show them
+    offline. It deliberately does NOT close the AgentLoginEvent row — that
+    is reserved for the confirmed /logout endpoint below. Also clears any
+    stale "away" flag so a fresh session next login doesn't inherit it."""
     agent_id = ctx.get("agent_id")
     if agent_id:
         await presence_service.clear_heartbeat(agent_id)
+        await presence_service.set_away(agent_id, False)
+        await _maybe_log_status(agent_id, "offline", force=True)
+    return {"ok": True}
+
+
+@router.post("/logout")
+async def logout(key: str = Query(...), ctx: dict = Depends(get_admin_ctx)):
+    """The ONLY confirmed, explicit logout — bound to the actual Sign Out
+    button, called as a real awaited request (not a sendBeacon) since it's
+    a deliberate user action, not a page-teardown race. Distinct from
+    /offline in exactly the way that endpoint's docstring describes:  this
+    is the one place allowed to close AgentLoginEvent.logout_at, and it
+    also tears down the auth session itself (nothing else in this codebase
+    ever did — a copied session token used to stay valid via get_admin_ctx's
+    sliding TTL for up to 24h after clicking Sign Out)."""
+    agent_id = ctx.get("agent_id")
+    if agent_id:
+        await presence_service.clear_heartbeat(agent_id)
+        await presence_service.set_away(agent_id, False)
         await _maybe_log_status(agent_id, "offline", force=True)
         await run_in_threadpool(_close_open_login, agent_id)
-    return {"ok": True}
+    await invalidate_session(key)
+    return {"ok": True, "session_closed": bool(agent_id)}
 
 
 class AwayIn(BaseModel):
