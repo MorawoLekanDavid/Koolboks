@@ -1,25 +1,43 @@
-"""Regression tests for chatbot.routers.analytics.classify_session_status.
+"""Regression tests for chatbot.routers.analytics's shift-tracker helpers.
 
-Written after a real incident: agents reported still being online while the
-Shift Tracker's Login & Device Audit showed an earlier logout time. Root
-cause was architectural, not in this function -- /admin/presence/offline (a
-sendBeacon fired on ANY page exit: refresh, tab close, crash, network loss)
-was closing AgentLoginEvent.logout_at, so a flaky wifi moment looked
-identical to a real end-of-shift click on Sign Out.
+Written after two real incidents on the same feature:
 
-The fix moved logout_at-closing to a new, confirmed-only endpoint
-(POST /admin/presence/logout). This function is the read side of that fix --
-it's what turns (logout_at, last heartbeat) into the "Active"/"Ended"/
-"Dropped" label the audit table shows, and it's what actually needs to get
-the distinction right, so it gets direct coverage independent of the
-DB/Redis-backed endpoint that calls it.
+1. Agents reported still being online while the Shift Tracker's Login &
+   Device Audit showed an earlier logout time. Root cause was architectural,
+   not in classify_session_status() -- /admin/presence/offline (a sendBeacon
+   fired on ANY page exit: refresh, tab close, crash, network loss) was
+   closing AgentLoginEvent.logout_at, so a flaky wifi moment looked identical
+   to a real end-of-shift click on Sign Out. Fixed by moving logout_at-
+   closing to a new, confirmed-only endpoint (POST /admin/presence/logout).
+
+2. After (1) was fixed, an agent with three same-day logins (two of them
+   hours-old and long since superseded by a newer one) showed all three as
+   "Active" simultaneously. Root cause: the audit loop used the agent's
+   single most-recent heartbeat of the WHOLE DAY for every one of their
+   login rows, instead of scoping each row to its own session window. Fixed
+   by last_heartbeat_in_session().
+
+Both functions are the read side of those fixes -- what turns raw
+login/heartbeat rows into the "Active"/"Ended"/"Dropped" label the audit
+table shows -- so both get direct coverage independent of the DB/Redis-
+backed endpoint that calls them.
 """
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from chatbot.routers.analytics import classify_session_status
+from chatbot.routers.analytics import classify_session_status, last_heartbeat_in_session
 from chatbot.services.presence_service import HEARTBEAT_TTL
 
 NOW = datetime(2026, 1, 1, 12, 0, 0)
+
+
+@dataclass
+class _Heartbeat:
+    """Minimal stand-in for an AgentHeartbeatLog row -- last_heartbeat_in_session
+    only ever reads .logged_at and (via the caller) .status, so a real ORM
+    instance and DB session aren't needed to test it."""
+    status: str
+    logged_at: datetime
 
 
 def test_explicit_logout_is_ended_even_with_a_stale_heartbeat():
@@ -73,3 +91,43 @@ def test_boundary_just_inside_and_just_outside_the_grace_window():
     just_outside = NOW - timedelta(seconds=HEARTBEAT_TTL + 61)
     assert classify_session_status(None, "online", just_inside, NOW) == "Active"
     assert classify_session_status(None, "online", just_outside, NOW) == "Dropped"
+
+
+# ── last_heartbeat_in_session — one agent, several logins the same day ──────
+
+def test_older_session_does_not_borrow_a_newer_sessions_heartbeat():
+    """The exact incident: login A at 08:00 (long abandoned), login B at
+    12:00 (genuinely active now, heartbeat at 12:01). A must NOT see B's
+    12:01 heartbeat as its own — that's what made both read "Active"."""
+    login_a = datetime(2026, 1, 1, 8, 0, 0)
+    login_b = datetime(2026, 1, 1, 12, 0, 0)
+    heartbeats = [
+        _Heartbeat("online", datetime(2026, 1, 1, 8, 1, 0)),   # belongs to A
+        _Heartbeat("online", datetime(2026, 1, 1, 12, 1, 0)),  # belongs to B
+    ]
+    hb_a = last_heartbeat_in_session(heartbeats, login_a, next_login_at=login_b)
+    hb_b = last_heartbeat_in_session(heartbeats, login_b, next_login_at=None)
+    assert hb_a is not None and hb_a.logged_at == datetime(2026, 1, 1, 8, 1, 0)
+    assert hb_b is not None and hb_b.logged_at == datetime(2026, 1, 1, 12, 1, 0)
+
+
+def test_last_login_of_the_day_has_no_upper_bound():
+    """next_login_at=None (the agent's most recent login that day) means
+    every later heartbeat can belong to it — there's nothing to cap it at."""
+    login_at = datetime(2026, 1, 1, 9, 0, 0)
+    heartbeats = [
+        _Heartbeat("online", datetime(2026, 1, 1, 9, 1, 0)),
+        _Heartbeat("online", datetime(2026, 1, 1, 17, 0, 0)),
+    ]
+    hb = last_heartbeat_in_session(heartbeats, login_at, next_login_at=None)
+    assert hb.logged_at == datetime(2026, 1, 1, 17, 0, 0)
+
+
+def test_no_heartbeats_in_window_returns_none():
+    """A session with genuinely nothing recorded in its own window (died
+    before the first heartbeat, or the only heartbeats belong to a
+    different session) must return None, not the wrong row."""
+    login_a = datetime(2026, 1, 1, 8, 0, 0)
+    login_b = datetime(2026, 1, 1, 9, 0, 0)
+    heartbeats = [_Heartbeat("online", datetime(2026, 1, 1, 9, 30, 0))]  # only belongs to B
+    assert last_heartbeat_in_session(heartbeats, login_a, next_login_at=login_b) is None

@@ -659,6 +659,26 @@ def _parse_device_os(user_agent: Optional[str]) -> str:
     return "Unknown"
 
 
+def last_heartbeat_in_session(heartbeats: list, login_at: datetime, next_login_at: Optional[datetime]):
+    """Returns the last heartbeat row (anything with a .logged_at, in
+    ascending order) whose timestamp falls strictly within ONE login
+    session's window -- after that login, before the agent's next login (or
+    unbounded if it was their last login of the day). None if nothing falls
+    in the window.
+
+    This is what scopes a heartbeat to a single session. Without it, an
+    agent's single most-recent heartbeat of the whole day gets applied to
+    EVERY one of their open logins that day — confirmed live: an agent with
+    three same-day logins (two of them hours-old and long since superseded)
+    showed all three as "Active" simultaneously, because the old code just
+    grabbed the day's last heartbeat once per agent, not once per session."""
+    window = [
+        h for h in heartbeats
+        if h.logged_at > login_at and (next_login_at is None or h.logged_at < next_login_at)
+    ]
+    return window[-1] if window else None
+
+
 def classify_session_status(
     logout_at: Optional[datetime],
     last_heartbeat_status: Optional[str],
@@ -800,11 +820,25 @@ async def shift_tracker(
                 login_q = login_q.filter(AgentLoginEvent.agent_id.in_(allowed_ids))
             login_rows = login_q.order_by(AgentLoginEvent.login_at.desc()).all()
 
-            last_hb_by_agent = {aid: rows[-1] for aid, rows in rows_by_agent.items()}
+            # Boundaries for scoping a heartbeat to ONE specific login session --
+            # an agent can have several logins the same day (multiple devices,
+            # or logging back in after a dropped session), and only a heartbeat
+            # strictly between a login and that agent's NEXT login could
+            # possibly belong to it.
+            login_rows_by_agent: dict = {}
+            for ev in login_rows:
+                login_rows_by_agent.setdefault(ev.agent_id, []).append(ev)
+            for evs in login_rows_by_agent.values():
+                evs.sort(key=lambda e: e.login_at)
+
             audit = []
             for ev in login_rows:
                 agent_obj = agents_by_id.get(ev.agent_id)
-                last_hb = last_hb_by_agent.get(ev.agent_id)
+                agent_logins = login_rows_by_agent[ev.agent_id]
+                idx = agent_logins.index(ev)
+                next_login_at = agent_logins[idx + 1].login_at if idx + 1 < len(agent_logins) else None
+
+                last_hb = last_heartbeat_in_session(rows_by_agent.get(ev.agent_id, []), ev.login_at, next_login_at)
                 session_status = classify_session_status(
                     ev.logout_at,
                     last_hb.status if last_hb else None,
