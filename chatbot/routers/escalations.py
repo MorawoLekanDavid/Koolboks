@@ -44,6 +44,8 @@ async def list_escalations(
     unassigned: Optional[bool] = Query(None, description="true = only escalations with no assigned agent"),
     date_from: Optional[str] = Query(None, description="YYYY-MM-DD, inclusive, filters on created_at"),
     date_to: Optional[str] = Query(None, description="YYYY-MM-DD, inclusive, filters on created_at"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(1000, ge=1, le=1000, description="Default of 1000 is effectively 'all' for callers (badge/stats) that don't paginate -- the list UI passes a real page_size."),
     ctx: dict = Depends(require_tab_permission("escalations")),
 ):
     """Backs the "Needs Attention" queue. Defaults to everything still
@@ -53,7 +55,11 @@ async def list_escalations(
     devolving into endless scrolling to find an older ticket. Scoped the same
     way Conversations is: a regular agent only ever sees escalations on chats
     they personally own, a team lead also sees their department's + unowned
-    ones, and admin/super_admin/bi_analyst see everything."""
+    ones, and admin/super_admin/bi_analyst see everything.
+
+    Returns {items, total, page, page_size} rather than a bare array -- the
+    envelope carries `total` so the UI can paginate without a second
+    count-only request."""
     def _fetch():
         db = get_db()
         try:
@@ -82,8 +88,19 @@ async def list_escalations(
                     q = q.filter(Escalation.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
                 except ValueError:
                     pass
-            rows = q.order_by(Escalation.priority.desc(), Escalation.created_at.asc()).all()
-            return [escalation_to_dict(r) for r in rows]
+            total = q.count()
+            rows = (
+                q.order_by(Escalation.priority.desc(), Escalation.created_at.asc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+                .all()
+            )
+            return {
+                "items": [escalation_to_dict(r) for r in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
         finally:
             db.close()
     return await run_in_threadpool(_fetch)

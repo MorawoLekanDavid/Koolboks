@@ -131,6 +131,28 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .esc-notify-fail{font-size:11px;color:var(--red);display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
 .esc-notify-fail svg{width:13px;height:13px;flex-shrink:0}
 .esc-notify-fail button{font-size:11px;font-weight:700;color:var(--red);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;font-family:inherit}
+/* Inline resolve form -- replaces a native prompt() so resolving stays in
+   the card's own context instead of yanking focus into a browser dialog. */
+.esc-resolve-form{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--g50);border:1px dashed var(--g300);border-radius:8px;animation:escFormIn .15s ease-out}
+@keyframes escFormIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.esc-resolve-form label{font-size:11.5px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.3px}
+.esc-resolve-form textarea{width:100%;min-height:64px;padding:9px 11px;border:1.5px solid var(--g200);border-radius:7px;font-family:inherit;font-size:13px;line-height:1.4;color:var(--g800);resize:vertical;background:#fff}
+.esc-resolve-form textarea:focus{outline:none;border-color:var(--orange)}
+.esc-resolve-form-actions{display:flex;justify-content:flex-end;gap:8px}
+.esc-resolve-form-actions button{font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px;cursor:pointer;font-family:inherit;transition:background .15s}
+.esc-resolve-cancel{background:#fff;border:1px solid var(--g200);color:var(--g600)}
+.esc-resolve-cancel:hover{background:var(--g100)}
+.esc-resolve-confirm{background:var(--orange);border:1px solid var(--orange);color:#fff}
+.esc-resolve-confirm:hover{background:var(--orange-d)}
+.esc-resolve-confirm:disabled{opacity:.6;cursor:default}
+/* Pagination footer */
+.esc-pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--g100)}
+.esc-pagination-info{font-size:12px;color:var(--g400)}
+.esc-pagination-btns{display:flex;align-items:center;gap:12px}
+.esc-pagination-btns button{font-size:12px;font-weight:700;padding:6px 14px;border-radius:7px;border:1px solid var(--g200);background:#fff;color:var(--g700);cursor:pointer;font-family:inherit;transition:background .15s}
+.esc-pagination-btns button:hover:not(:disabled){background:var(--g50)}
+.esc-pagination-btns button:disabled{opacity:.4;cursor:not-allowed}
+.esc-pagination-page{font-size:12px;font-weight:600;color:var(--g600);font-variant-numeric:tabular-nums}
 .sb-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
 .sb-icon svg{width:18px;height:18px}
 /* Generic small icon-only action button (delete/trash/edit-style controls
@@ -1319,20 +1341,20 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         </div>
       </div>
       <div class="esc-filter-bar">
-        <select class="assign-sel" id="escFilterAgent" onchange="loadEscalations()">
+        <select class="assign-sel" id="escFilterAgent" onchange="onEscFilterChange()">
           <option value="">All agents</option>
           <option value="unassigned">Unassigned</option>
         </select>
-        <select class="assign-sel" id="escFilterPriority" onchange="loadEscalations()">
+        <select class="assign-sel" id="escFilterPriority" onchange="onEscFilterChange()">
           <option value="">Any priority</option>
           <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
         <div class="esc-date-range">
-          <input type="date" class="date-inp" id="escDateFrom" onchange="loadEscalations()" title="From date"/>
+          <input type="date" class="date-inp" id="escDateFrom" onchange="onEscFilterChange()" title="From date"/>
           <span style="font-size:12px;color:var(--g400)">to</span>
-          <input type="date" class="date-inp" id="escDateTo" onchange="loadEscalations()" title="To date"/>
+          <input type="date" class="date-inp" id="escDateTo" onchange="onEscFilterChange()" title="To date"/>
         </div>
         <button class="btn-dl" onclick="clearEscalationFilters()">Clear filters</button>
         <span class="esc-result-count" id="escResultCount"></span>
@@ -4943,6 +4965,8 @@ async function assignLeadFromDetail(agentName){
 
 // ── Needs Attention (Escalations) ──────────────────────────────────────
 let escalationFilter='open',allEscalations=[],_escAgentFilterPopulated=false,_escRoleUIApplied=false;
+let escalationPage=1,escalationTotal=0,_escOpenResolveId=null;
+const ESC_PAGE_SIZE=20;
 const ESC_ALL_STATUSES='open,assigned,in_progress,resolved,reopened';
 const ESC_OPENISH=['open','assigned','in_progress','reopened'];
 // Same roles as backend's CONVERSATION_UNRESTRICTED_ROLES + team_lead --
@@ -4962,7 +4986,7 @@ function _applyEscalationRoleUI(){
 async function loadEscalations(){
   _applyEscalationRoleUI();
   _populateEscalationAgentFilter();
-  const p=new URLSearchParams({key:adminKey});
+  const p=new URLSearchParams({key:adminKey,page:escalationPage,page_size:ESC_PAGE_SIZE});
   if(escalationFilter==='resolved')p.append('status','resolved');
   else if(escalationFilter==='all')p.append('status',ESC_ALL_STATUSES);
   const agentVal=document.getElementById('escFilterAgent')?.value||'';
@@ -4977,10 +5001,21 @@ async function loadEscalations(){
   try{
     const r=await fetch(`/admin/escalations?${p}`);
     if(r.status===403){logout();return;}
-    allEscalations=r.ok?await r.json():[];
-  }catch(e){console.error(e);allEscalations=[];}
+    const data=r.ok?await r.json():{items:[],total:0};
+    allEscalations=data.items||[];
+    escalationTotal=data.total||0;
+  }catch(e){console.error(e);allEscalations=[];escalationTotal=0;}
   renderEscalations();
   loadEscalationBadgeCount();
+}
+function onEscFilterChange(){
+  escalationPage=1;
+  loadEscalations();
+}
+function changeEscalationPage(delta){
+  const totalPages=Math.max(1,Math.ceil(escalationTotal/ESC_PAGE_SIZE));
+  escalationPage=Math.min(Math.max(1,escalationPage+delta),totalPages);
+  loadEscalations();
 }
 function _populateEscalationAgentFilter(){
   const sel=document.getElementById('escFilterAgent');
@@ -4994,6 +5029,7 @@ function clearEscalationFilters(){
   const prioSel=document.getElementById('escFilterPriority');if(prioSel)prioSel.value='';
   const from=document.getElementById('escDateFrom');if(from)from.value='';
   const to=document.getElementById('escDateTo');if(to)to.value='';
+  escalationPage=1;
   loadEscalations();
 }
 async function loadEscalationBadgeCount(){
@@ -5001,8 +5037,9 @@ async function loadEscalationBadgeCount(){
   try{
     const r=await fetch(`/admin/escalations?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok)return;
-    const openish=await r.json();
-    updateEscalationBadge(openish.length);
+    const data=await r.json();
+    const openish=data.items||[];
+    updateEscalationBadge(data.total||0);
     updateEscalationStats(openish);
   }catch(e){}
 }
@@ -5024,6 +5061,7 @@ function updateEscalationStats(openish){
 }
 function setEscalationFilter(filter){
   escalationFilter=filter;
+  escalationPage=1;
   document.querySelectorAll('#escalationsTab .bulk-tab').forEach(b=>b.classList.toggle('active',b.dataset.escfilter===filter));
   loadEscalations();
 }
@@ -5031,7 +5069,7 @@ function renderEscalations(){
   const list=document.getElementById('escalationList');
   if(!list)return;
   const count=document.getElementById('escResultCount');
-  if(count)count.textContent=allEscalations.length?`${allEscalations.length} escalation${allEscalations.length!==1?'s':''}`:'';
+  if(count)count.textContent=escalationTotal?`${escalationTotal} escalation${escalationTotal!==1?'s':''}`:'';
   if(!allEscalations.length){
     const anyFilter=document.getElementById('escFilterAgent')?.value||document.getElementById('escFilterPriority')?.value||document.getElementById('escDateFrom')?.value||document.getElementById('escDateTo')?.value;
     list.innerHTML=anyFilter
@@ -5039,7 +5077,21 @@ function renderEscalations(){
       :emptyState(ICON.check,'Nothing needs attention','Conversations Itura flags for a human will show up here.');
     return;
   }
-  list.innerHTML=allEscalations.map(renderEscalationCard).join('');
+  list.innerHTML=allEscalations.map(renderEscalationCard).join('')+_renderEscPagination();
+}
+function _renderEscPagination(){
+  const totalPages=Math.max(1,Math.ceil(escalationTotal/ESC_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(escalationPage-1)*ESC_PAGE_SIZE+1;
+  const to=Math.min(escalationPage*ESC_PAGE_SIZE,escalationTotal);
+  return `<div class="esc-pagination">
+    <span class="esc-pagination-info">Showing ${from}–${to} of ${escalationTotal}</span>
+    <div class="esc-pagination-btns">
+      <button ${escalationPage<=1?'disabled':''} onclick="changeEscalationPage(-1)">Prev</button>
+      <span class="esc-pagination-page">Page ${escalationPage} of ${totalPages}</span>
+      <button ${escalationPage>=totalPages?'disabled':''} onclick="changeEscalationPage(1)">Next</button>
+    </div>
+  </div>`;
 }
 function renderEscalationCard(e){
   const name=e.customer_name||e.phone;
@@ -5052,8 +5104,16 @@ function renderEscalationCard(e){
   const isOpenish=ESC_OPENISH.includes(e.status);
   const canAct=!READ_ONLY_CONV_ROLES.includes(agentRole);
   const claimBtn=(isOpenish&&!e.assigned_agent_id&&myAgentId&&canAct)?`<button onclick="event.stopPropagation();claimEscalation(${e.id})">${ICON.handshake}Claim</button>`:'';
-  const resolveBtn=(isOpenish&&canAct)?`<button class="esc-btn-resolve" onclick="event.stopPropagation();resolveEscalationPrompt(${e.id})">${ICON.check}Resolve</button>`:'';
+  const resolveBtn=(isOpenish&&canAct)?`<button class="esc-btn-resolve" onclick="event.stopPropagation();toggleResolveForm(${e.id})">${ICON.check}Resolve</button>`:'';
   const resolutionBlock=(e.status==='resolved'&&e.resolution)?`<div class="esc-resolution"><b>Resolution:</b> ${esc(e.resolution)}</div>`:'';
+  const resolveForm=_escOpenResolveId===e.id?`<div class="esc-resolve-form" onclick="event.stopPropagation()">
+      <label for="escResolveText_${e.id}">Resolution note (optional)</label>
+      <textarea id="escResolveText_${e.id}" placeholder="What did you tell the customer / how was this sorted out?" autofocus></textarea>
+      <div class="esc-resolve-form-actions">
+        <button class="esc-resolve-cancel" onclick="cancelResolveForm()">Cancel</button>
+        <button class="esc-resolve-confirm" onclick="confirmResolveEscalation(${e.id})">${ICON.check}Mark resolved</button>
+      </div>
+    </div>`:'';
   const safeName=esc(name).replace(/'/g,"\\'");
   return `<div class="esc-card esc-p-${esc(e.priority)}" onclick="openEscalationConv('${e.phone}','${safeName}')">
     <div class="esc-card-head">
@@ -5075,6 +5135,7 @@ function renderEscalationCard(e){
       ${notifyFail}
       <div class="esc-actions">${claimBtn}${resolveBtn}</div>
     </div>
+    ${resolveForm}
   </div>`;
 }
 async function claimEscalation(id){
@@ -5088,17 +5149,33 @@ async function claimEscalation(id){
     await loadEscalations();
   }catch(e){alert('Failed to claim this escalation.');}
 }
-async function resolveEscalationPrompt(id){
-  const resolution=prompt('How was this resolved? (optional)');
-  if(resolution===null)return;
+// Inline resolve -- swaps the card's action row for a small form in place,
+// instead of a native prompt() dialog that yanks focus out of the page.
+function toggleResolveForm(id){
+  _escOpenResolveId=_escOpenResolveId===id?null:id;
+  renderEscalations();
+  if(_escOpenResolveId===id)document.getElementById(`escResolveText_${id}`)?.focus();
+}
+function cancelResolveForm(){
+  _escOpenResolveId=null;
+  renderEscalations();
+}
+async function confirmResolveEscalation(id){
+  const btn=document.querySelector(`#escResolveText_${id}`)?.closest('.esc-resolve-form')?.querySelector('.esc-resolve-confirm');
+  const resolution=document.getElementById(`escResolveText_${id}`)?.value.trim()||null;
+  if(btn){btn.disabled=true;btn.textContent='Resolving…';}
   try{
     const r=await fetch(`/admin/escalations/${id}?key=${encodeURIComponent(adminKey)}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({status:'resolved',resolution:resolution||null})
+      body:JSON.stringify({status:'resolved',resolution})
     });
     if(!r.ok)throw new Error();
+    _escOpenResolveId=null;
     await loadEscalations();
-  }catch(e){alert('Failed to resolve this escalation.');}
+  }catch(e){
+    alert('Failed to resolve this escalation.');
+    if(btn){btn.disabled=false;btn.innerHTML=`${ICON.check}Mark resolved`;}
+  }
 }
 async function retryEscalationNotification(id){
   try{
