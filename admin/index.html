@@ -1297,7 +1297,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
         <div class="esc-stat-n red" id="escCountHigh">-</div>
         <div class="esc-stat-l">High Priority</div>
       </div>
-      <div class="esc-stat-c">
+      <div class="esc-stat-c" id="escStatUnassignedWrap">
         <div class="esc-stat-n amber" id="escCountUnassigned">-</div>
         <div class="esc-stat-l">Unassigned</div>
       </div>
@@ -1310,7 +1310,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div>
           <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="warning"></span>Needs Attention</h3>
-          <p style="font-size:12px;color:var(--g400);margin:0">Conversations Itura has flagged for a human — sorted by priority, oldest first.</p>
+          <p style="font-size:12px;color:var(--g400);margin:0" id="escSubtitle">Conversations Itura has flagged for a human — sorted by priority, oldest first.</p>
         </div>
         <div class="bulk-tabs" style="margin:0">
           <button class="bulk-tab active" data-escfilter="open" onclick="setEscalationFilter('open')">Open</button>
@@ -4942,10 +4942,25 @@ async function assignLeadFromDetail(agentName){
 }
 
 // ── Needs Attention (Escalations) ──────────────────────────────────────
-let escalationFilter='open',allEscalations=[],_escAgentFilterPopulated=false;
+let escalationFilter='open',allEscalations=[],_escAgentFilterPopulated=false,_escRoleUIApplied=false;
 const ESC_ALL_STATUSES='open,assigned,in_progress,resolved,reopened';
 const ESC_OPENISH=['open','assigned','in_progress','reopened'];
+// Same roles as backend's CONVERSATION_UNRESTRICTED_ROLES + team_lead --
+// everyone else only ever sees their own conversations' escalations (see
+// escalations.py's _scope_filter), so an "All agents"/"Unassigned" filter
+// and an "Unassigned" stat tile would only ever show themselves or nothing.
+const ESC_UNRESTRICTED_ROLES=['admin','super_admin','bi_analyst','team_lead'];
+function _applyEscalationRoleUI(){
+  if(_escRoleUIApplied)return;
+  _escRoleUIApplied=true;
+  const scoped=!ESC_UNRESTRICTED_ROLES.includes(agentRole);
+  document.getElementById('escFilterAgent')?.classList.toggle('hidden',scoped);
+  document.getElementById('escStatUnassignedWrap')?.classList.toggle('hidden',scoped);
+  const sub=document.getElementById('escSubtitle');
+  if(sub&&scoped)sub.textContent='Your conversations that Itura has flagged for a human — sorted by priority, oldest first.';
+}
 async function loadEscalations(){
+  _applyEscalationRoleUI();
   _populateEscalationAgentFilter();
   const p=new URLSearchParams({key:adminKey});
   if(escalationFilter==='resolved')p.append('status','resolved');

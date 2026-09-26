@@ -4,13 +4,35 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+from sqlalchemy import exists, or_, select
 
 from chatbot.database import get_db
-from chatbot.models import Agent, Escalation
-from chatbot.routers.permissions import require_tab_permission
+from chatbot.models import Agent, ConversationOwner, Escalation
+from chatbot.routers.permissions import _phone_allowed, get_conversation_scope, require_tab_permission
 from chatbot.services.escalation_service import escalation_to_dict, retry_notification
 
 router = APIRouter(prefix="/admin/escalations", tags=["escalations"])
+
+
+def _scope_filter(scope: dict):
+    """Same visibility rule as Conversations (get_conversation_scope), applied
+    to Escalation.phone -- a customer_success_agent who can only ever open
+    their own assigned chats should not see (or be alerted about) an
+    escalation on a chat they can't open. Returns None for an unrestricted
+    scope (no filter needed); otherwise a SQLAlchemy filter expression."""
+    if scope["unrestricted"]:
+        return None
+    owned = exists(
+        select(ConversationOwner.id).where(
+            ConversationOwner.phone == Escalation.phone,
+            ConversationOwner.owner_email.in_(scope["dept_emails"]) if scope["team_lead"]
+            else ConversationOwner.owner_email == scope["own_email"],
+        )
+    )
+    if scope["include_unassigned"]:
+        has_any_owner = exists(select(ConversationOwner.id).where(ConversationOwner.phone == Escalation.phone))
+        return or_(owned, ~has_any_owner)
+    return owned
 
 
 @router.get("")
@@ -28,11 +50,18 @@ async def list_escalations(
     outstanding (open/assigned/in_progress/reopened) -- pass status=resolved
     explicitly to see closed ones, e.g. for a history view. The agent/date
     filters exist so a long-running queue stays searchable instead of
-    devolving into endless scrolling to find an older ticket."""
+    devolving into endless scrolling to find an older ticket. Scoped the same
+    way Conversations is: a regular agent only ever sees escalations on chats
+    they personally own, a team lead also sees their department's + unowned
+    ones, and admin/super_admin/bi_analyst see everything."""
     def _fetch():
         db = get_db()
         try:
+            scope = get_conversation_scope(db, ctx)
             q = db.query(Escalation)
+            scope_filter = _scope_filter(scope)
+            if scope_filter is not None:
+                q = q.filter(scope_filter)
             statuses = [s.strip() for s in status.split(",")] if status else ["open", "assigned", "in_progress", "reopened"]
             q = q.filter(Escalation.status.in_(statuses))
             if priority:
@@ -60,6 +89,12 @@ async def list_escalations(
     return await run_in_threadpool(_fetch)
 
 
+def _assert_visible(db, ctx: dict, phone: str) -> None:
+    scope = get_conversation_scope(db, ctx)
+    if not _phone_allowed(db, scope, phone):
+        raise HTTPException(403, "You don't have access to this conversation's escalation")
+
+
 class EscalationUpdate(BaseModel):
     status: Optional[str] = None  # assigned | in_progress | resolved | reopened
     assigned_agent_id: Optional[int] = None
@@ -77,6 +112,7 @@ async def update_escalation(
             e = db.query(Escalation).filter(Escalation.id == escalation_id).first()
             if not e:
                 raise HTTPException(404, "Escalation not found")
+            _assert_visible(db, ctx, e.phone)
 
             if body.assigned_agent_id is not None:
                 agent = db.query(Agent).filter(Agent.id == body.assigned_agent_id).first()
@@ -118,6 +154,17 @@ async def resend_escalation_notification(
     """Re-attempts the WhatsApp alert for an escalation whose notification
     was previously skipped or failed -- e.g. once an admin has fixed the
     routing fallback agent or given the assigned agent a phone number."""
+    def _check():
+        db = get_db()
+        try:
+            e = db.query(Escalation).filter(Escalation.id == escalation_id).first()
+            if not e:
+                raise HTTPException(404, "Escalation not found")
+            _assert_visible(db, ctx, e.phone)
+        finally:
+            db.close()
+    await run_in_threadpool(_check)
+
     result = await retry_notification(escalation_id)
     if result is None:
         raise HTTPException(404, "Escalation not found")

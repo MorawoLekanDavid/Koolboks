@@ -56,6 +56,14 @@ REENGAGEMENT_TEMPLATE_LANG = os.environ.get("REENGAGEMENT_TEMPLATE_LANG", "en")
 # see requirement that a failed notification must never lose the escalation).
 ESCALATION_ALERT_TEMPLATE = os.environ.get("ESCALATION_ALERT_TEMPLATE", "koolbuy_escalation_alert")
 
+# How long an escalation can sit with no agent first-response before the
+# routing fallback agent (Routing settings -> fallback_agent_id) gets pinged
+# as a backstop -- the original owner keeps the ticket, this is a second set
+# of eyes, not a reassignment. Same convention as HANDOFF_AUTO_RESET_HOURS
+# below: an env-tunable constant, no dedicated settings-UI field, since this
+# is ops tuning rather than something that needs changing per-conversation.
+ESCALATION_SLA_HOURS = int(os.environ.get("ESCALATION_SLA_HOURS", "2"))
+
 FOLLOW_UP_ENABLED = os.environ.get("FOLLOW_UP_ENABLED", "true").lower() == "true"
 FOLLOW_UP_HOURS = int(os.environ.get("FOLLOW_UP_HOURS", "24"))
 FOLLOW_UP_RECHECK_DAYS = int(os.environ.get("FOLLOW_UP_RECHECK_DAYS", "7"))

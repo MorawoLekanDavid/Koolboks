@@ -187,6 +187,14 @@ class Escalation(Base):
     resolution = Column(String(1000), nullable=True)
     reopen_count = Column(Integer, default=0)
 
+    # Set once the SLA watchdog pings the routing fallback agent because the
+    # assigned owner hasn't sent a first response in time -- a timestamp, not
+    # a boolean, so it self-documents when the backstop fired without needing
+    # a separate log lookup. Kept separate from `notified_at`/`notification_*`
+    # above: those describe the original alert to the owner, this describes a
+    # distinct, later alert to a different person (see escalation_watchdog.py).
+    sla_notified_at = Column(DateTime, nullable=True)
+
 
 class AgentLoginEvent(Base):
     """One row per login — powers the Shift & Login audit table. logout_at

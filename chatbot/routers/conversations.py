@@ -563,7 +563,7 @@ async def agent_reply(phone: str, body: AgentReply, ctx: dict = Depends(conversa
         await redis_client.save_history(session_id, history)
 
     await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
-    await mark_first_response_if_needed(phone)
+    await mark_first_response_if_needed(phone, ctx.get("agent_id"))
     return {"status": "sent"}
 
 
@@ -627,7 +627,7 @@ async def agent_send_media(
         await redis_client.save_history(session_id, history)
 
     await run_in_threadpool(_claim_owner_if_unassigned, phone, display_name, ctx.get("email", ""))
-    await mark_first_response_if_needed(phone)
+    await mark_first_response_if_needed(phone, ctx.get("agent_id"))
     return {"status": "sent", "wamid": wamid, "media_type": media_type}
 
 

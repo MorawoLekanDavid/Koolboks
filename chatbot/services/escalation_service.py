@@ -1,8 +1,8 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
-from chatbot.config import ESCALATION_ALERT_TEMPLATE, log
+from chatbot.config import ESCALATION_ALERT_TEMPLATE, ESCALATION_SLA_HOURS, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Agent, ConversationOwner, Escalation, HandoffEvent, Message
@@ -93,14 +93,19 @@ async def set_handoff(session_id: str, phone: str, label: str, ttl: int = 86400)
         db.close()
 
 
-async def _resolve_notification_target(phone: str) -> Optional[Agent]:
+async def _resolve_notification_target(phone: str) -> tuple[Optional[Agent], bool]:
     """Who gets pinged: the conversation's already-assigned owner if one
     exists, else the routing system's configured fallback agent (the same
     "who catches things when nobody's clearly responsible" concept
     routing_service.py already uses for unclaimed new conversations, reused
-    here rather than inventing a second "on-duty" idea). None if neither is
-    set -- the escalation still gets created and stays visible in-app either
-    way, it just has nobody to notify yet."""
+    here rather than inventing a second "on-duty" idea). (None, False) if
+    neither is set -- the escalation still gets created and stays visible
+    in-app either way, it just has nobody to notify yet.
+
+    Returns (agent, is_owner) -- is_owner tells the caller whether this is a
+    REAL pre-existing owner (the ticket should be auto-assigned to them, not
+    just notified) or the generic fallback catch-all (notify, but don't
+    assign -- a fallback agent hasn't actually claimed anything)."""
     from chatbot.services.routing_service import get_routing_config
 
     db = get_db()
@@ -109,18 +114,40 @@ async def _resolve_notification_target(phone: str) -> Optional[Agent]:
         if owner and owner.owner_email:
             agent = db.query(Agent).filter(Agent.email == owner.owner_email).first()
             if agent and agent.phone_number:
-                return agent
+                return agent, True
     finally:
         db.close()
 
     cfg = await get_routing_config()
     fallback_id = cfg.get("fallback_agent_id")
     if not fallback_id:
-        return None
+        return None, False
     db = get_db()
     try:
         agent = db.query(Agent).filter(Agent.id == fallback_id).first()
-        return agent if agent and agent.phone_number else None
+        return (agent, False) if agent and agent.phone_number else (None, False)
+    finally:
+        db.close()
+
+
+def _auto_assign_from_owner(escalation_id: int, agent: Agent) -> None:
+    """Links an escalation to the conversation owner that _resolve_notification_target
+    already found -- without this, an escalation on an already-owned chat sat
+    in the queue as "Unassigned" forever unless someone manually hit Claim,
+    even though exactly one person could ever see or reply to that
+    conversation in the first place. No-ops if already assigned to someone
+    (never silently steals a ticket) or already resolved."""
+    db = get_db()
+    try:
+        esc = db.query(Escalation).filter(Escalation.id == escalation_id).first()
+        if not esc or esc.status == "resolved" or esc.assigned_agent_id == agent.id:
+            return
+        if esc.assigned_agent_id is None:
+            esc.assigned_agent_id = agent.id
+            esc.assigned_at = datetime.utcnow()
+            if esc.status == "open":
+                esc.status = "assigned"
+            db.commit()
     finally:
         db.close()
 
@@ -200,8 +227,10 @@ async def retry_notification(escalation_id: int) -> Optional[dict]:
     finally:
         db.close()
 
-    agent = await _resolve_notification_target(phone)
+    agent, is_owner = await _resolve_notification_target(phone)
     if agent:
+        if is_owner:
+            _auto_assign_from_owner(escalation_id, agent)
         await _notify_agent(escalation_id, agent, phone, customer_name, category, priority, summary or "")
     else:
         db = get_db()
@@ -290,8 +319,10 @@ async def create_escalation(
     label = f"Escalation #{escalation_id} ({category})"
     await set_handoff(session_id, phone, label)
 
-    agent = await _resolve_notification_target(phone)
+    agent, is_owner = await _resolve_notification_target(phone)
     if agent:
+        if is_owner:
+            _auto_assign_from_owner(escalation_id, agent)
         await _notify_agent(escalation_id, agent, phone, customer_name, category, priority, summary or "")
     else:
         db = get_db()
@@ -309,10 +340,14 @@ async def create_escalation(
     return escalation_id
 
 
-async def mark_first_response_if_needed(phone: str) -> None:
+async def mark_first_response_if_needed(phone: str, agent_id: Optional[int] = None) -> None:
     """Called from the agent-reply/agent-send-media endpoints -- stamps the
     open escalation's first_response_at the first time an agent actually
-    sends something to this phone, not when they merely open the chat."""
+    sends something to this phone, not when they merely open the chat. If
+    nobody had claimed the ticket yet (the fallback-notified case, or one
+    created before a ConversationOwner existed), the agent who actually
+    replied IS the real first responder -- claim it for them rather than
+    leaving it "Unassigned" under someone who's now visibly handling it."""
     db = get_db()
     try:
         esc = (
@@ -324,10 +359,93 @@ async def mark_first_response_if_needed(phone: str) -> None:
         )
         if esc:
             esc.first_response_at = datetime.utcnow()
-            if esc.status == "open":
+            if agent_id and esc.assigned_agent_id is None:
+                esc.assigned_agent_id = agent_id
+                esc.assigned_at = datetime.utcnow()
+            if esc.status in ("open", "assigned"):
                 esc.status = "in_progress"
             db.commit()
     except Exception as e:
         log.warning(f"Failed to mark first response for {phone}: {e}")
     finally:
         db.close()
+
+
+async def check_sla_breaches() -> int:
+    """Backstop for an escalation whose owner has gone quiet: any escalation
+    still awaiting a first response ESCALATION_SLA_HOURS after it was opened
+    gets a second WhatsApp alert sent to the routing fallback agent -- the
+    same "who catches things nobody's handling" contact used when an
+    escalation has no owner at all, reused here rather than adding a second
+    "on-duty" concept. Fires once per escalation (sla_notified_at gates it),
+    and never touches assigned_agent_id -- the original owner keeps the
+    ticket, this is a second set of eyes, not a reassignment. Returns how
+    many alerts were sent, for the worker's log line."""
+    from chatbot.services.routing_service import get_routing_config
+
+    cutoff = datetime.utcnow() - timedelta(hours=ESCALATION_SLA_HOURS)
+    db = get_db()
+    try:
+        breaches = (
+            db.query(Escalation)
+            .filter(
+                Escalation.first_response_at.is_(None),
+                Escalation.sla_notified_at.is_(None),
+                Escalation.status != "resolved",
+                Escalation.created_at <= cutoff,
+            )
+            .all()
+        )
+        breach_data = [
+            (e.id, e.phone, e.customer_name, e.category, e.priority, e.summary)
+            for e in breaches
+        ]
+    finally:
+        db.close()
+
+    if not breach_data:
+        return 0
+
+    cfg = await get_routing_config()
+    fallback_id = cfg.get("fallback_agent_id")
+    if not fallback_id:
+        log.warning(f"{len(breach_data)} escalation(s) breached SLA but no routing "
+                    f"fallback_agent_id is configured -- nobody to notify")
+        return 0
+
+    db = get_db()
+    try:
+        fallback_agent = db.query(Agent).filter(Agent.id == fallback_id).first()
+    finally:
+        db.close()
+    if not fallback_agent or not fallback_agent.phone_number:
+        log.warning(f"{len(breach_data)} escalation(s) breached SLA but the configured "
+                    f"fallback agent (#{fallback_id}) has no phone number on file")
+        return 0
+
+    sent = 0
+    for esc_id, phone, customer_name, category, priority, summary in breach_data:
+        try:
+            await send_whatsapp_template(
+                fallback_agent.phone_number, ESCALATION_ALERT_TEMPLATE,
+                [customer_name or phone, category.replace("_", " ").title(),
+                 priority.upper(), summary or "No summary available."],
+            )
+        except Exception as e:
+            log.warning(f"SLA-breach alert failed for escalation #{esc_id}: {e}")
+        # Stamped regardless of send success -- same one-shot-attempt policy
+        # as the original notification; a stuck "keep retrying forever" loop
+        # helps nobody more than a single visible in-app warning does.
+        db = get_db()
+        try:
+            esc = db.query(Escalation).filter(Escalation.id == esc_id).first()
+            if esc:
+                esc.sla_notified_at = datetime.utcnow()
+                db.commit()
+                sent += 1
+        finally:
+            db.close()
+        log.info(f"[escalation-sla] #{esc_id} ({phone}) unanswered {ESCALATION_SLA_HOURS}h+ "
+                 f"-- alerted fallback agent {fallback_agent.name}")
+
+    return sent
