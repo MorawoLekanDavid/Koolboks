@@ -77,37 +77,60 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .sb-nav-item:hover{background:var(--sidebar-hover);color:#fff}
 .sb-nav-item.active{background:var(--sidebar-active);color:var(--orange)}
 .esc-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:10px;min-width:16px;text-align:center;line-height:1.4;flex-shrink:0}
-/* Needs Attention queue -- a left color bar by priority is the "make new
-   escalations visually obvious" requirement: scannable at a glance down a
-   long list, without needing to read the pill text on every card. */
-.esc-card{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:1px solid var(--g200);border-left:4px solid var(--g300);border-radius:10px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s;background:#fff}
-.esc-card:hover{box-shadow:var(--sh-md)}
+/* Needs Attention queue -- a left color bar AND a color-matched avatar by
+   priority is deliberate double-coding (not just decoration): scannable at
+   a glance down a long list, and still readable by anyone who can't rely on
+   color alone, since the pill text says the same thing in words. */
+.esc-stats-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.esc-stat-c{flex:1;min-width:130px;background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:var(--sh)}
+.esc-stat-n{font-size:26px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;color:var(--g900)}
+.esc-stat-n.red{color:var(--red)}
+.esc-stat-n.amber{color:var(--amber)}
+.esc-stat-l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--g400);margin-top:4px}
+.esc-filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 0 14px;margin-bottom:14px;border-bottom:1px solid var(--g100)}
+.esc-filter-bar .assign-sel{max-width:none}
+.esc-date-range{display:flex;align-items:center;gap:6px}
+.esc-result-count{margin-left:auto;font-size:12px;color:var(--g400);font-weight:600}
+.esc-card{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:1px solid var(--g200);border-left:4px solid var(--g300);border-radius:10px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s,transform .15s;background:#fff}
+.esc-card:hover{box-shadow:var(--sh-md);transform:translateY(-1px)}
 .esc-card.esc-p-high{border-left-color:var(--red)}
 .esc-card.esc-p-medium{border-left-color:var(--amber)}
 .esc-card.esc-p-low{border-left-color:var(--g300)}
+.esc-card-head{display:flex;align-items:flex-start;gap:12px}
+.esc-av{width:38px;height:38px;border-radius:50%;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.esc-av.esc-av-high{background:var(--red)}
+.esc-av.esc-av-medium{background:var(--amber)}
+.esc-av.esc-av-low{background:var(--g400)}
+.esc-head-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .esc-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.esc-pill{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;text-transform:uppercase}
+.esc-pill{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:.3px;text-transform:uppercase;flex-shrink:0}
 .esc-pill-high{background:var(--red-s);color:#991B1B}
 .esc-pill-medium{background:var(--amber-s);color:#92400E}
 .esc-pill-low{background:var(--g100);color:var(--g500)}
 .esc-pill-category{background:var(--g100);color:var(--g600);text-transform:none}
-.esc-time{margin-left:auto;font-size:11.5px;color:var(--g400);font-weight:600;white-space:nowrap}
-.esc-customer{font-size:14px;font-weight:700;color:var(--g900)}
+.esc-time{margin-left:auto;font-size:11.5px;color:var(--g400);font-weight:600;white-space:nowrap;flex-shrink:0}
+.esc-customer{font-size:14px;font-weight:700;color:var(--g900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .esc-customer .esc-phone{font-weight:500;color:var(--g400);font-size:12.5px;margin-left:6px}
 .esc-summary{font-size:13px;color:var(--g600);line-height:1.4}
+.esc-resolution{font-size:12.5px;color:var(--g600);line-height:1.4;background:var(--g50);border-radius:8px;padding:8px 10px}
+.esc-resolution b{color:var(--g700)}
 .esc-card-bottom{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.esc-status-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.esc-status-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;flex-shrink:0}
 .esc-status-open{background:var(--red-s);color:#991B1B}
 .esc-status-assigned,.esc-status-in_progress{background:var(--amber-s);color:#92400E}
 .esc-status-resolved{background:var(--green-s);color:#166534}
 .esc-status-reopened{background:var(--red-s);color:#991B1B}
-.esc-assigned-to{font-size:12px;color:var(--g500);flex:1}
-.esc-actions{display:flex;gap:8px}
-.esc-actions button{font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid var(--g200);background:#fff;color:var(--g700);cursor:pointer;transition:all .15s}
+.esc-assigned-to{font-size:12px;color:var(--g500);flex:1;display:inline-flex;align-items:center;gap:4px;min-width:0}
+.esc-assigned-to svg{width:13px;height:13px;flex-shrink:0}
+.esc-actions{display:flex;gap:8px;flex-shrink:0}
+.esc-actions button{font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid var(--g200);background:#fff;color:var(--g700);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px}
+.esc-actions button svg{width:13px;height:13px}
 .esc-actions button:hover{background:var(--g50)}
 .esc-actions .esc-btn-resolve{background:var(--orange);color:#fff;border-color:var(--orange)}
 .esc-actions .esc-btn-resolve:hover{background:var(--orange-d)}
-.esc-notify-fail{font-size:11px;color:var(--red);display:flex;align-items:center;gap:4px}
+.esc-notify-fail{font-size:11px;color:var(--red);display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.esc-notify-fail svg{width:13px;height:13px;flex-shrink:0}
+.esc-notify-fail button{font-size:11px;font-weight:700;color:var(--red);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;font-family:inherit}
 .sb-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
 .sb-icon svg{width:18px;height:18px}
 /* Generic small icon-only action button (delete/trash/edit-style controls
@@ -1265,8 +1288,26 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 
   <!-- Needs Attention (Escalations) tab -->
   <div id="escalationsTab" class="tab-full hidden">
+    <div class="esc-stats-row">
+      <div class="esc-stat-c">
+        <div class="esc-stat-n" id="escCountOpen">-</div>
+        <div class="esc-stat-l">Open</div>
+      </div>
+      <div class="esc-stat-c">
+        <div class="esc-stat-n red" id="escCountHigh">-</div>
+        <div class="esc-stat-l">High Priority</div>
+      </div>
+      <div class="esc-stat-c">
+        <div class="esc-stat-n amber" id="escCountUnassigned">-</div>
+        <div class="esc-stat-l">Unassigned</div>
+      </div>
+      <div class="esc-stat-c">
+        <div class="esc-stat-n" id="escOldestAge">—</div>
+        <div class="esc-stat-l">Longest Waiting</div>
+      </div>
+    </div>
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div>
           <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="warning"></span>Needs Attention</h3>
           <p style="font-size:12px;color:var(--g400);margin:0">Conversations Itura has flagged for a human — sorted by priority, oldest first.</p>
@@ -1276,6 +1317,25 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <button class="bulk-tab" data-escfilter="resolved" onclick="setEscalationFilter('resolved')">Resolved</button>
           <button class="bulk-tab" data-escfilter="all" onclick="setEscalationFilter('all')">All</button>
         </div>
+      </div>
+      <div class="esc-filter-bar">
+        <select class="assign-sel" id="escFilterAgent" onchange="loadEscalations()">
+          <option value="">All agents</option>
+          <option value="unassigned">Unassigned</option>
+        </select>
+        <select class="assign-sel" id="escFilterPriority" onchange="loadEscalations()">
+          <option value="">Any priority</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <div class="esc-date-range">
+          <input type="date" class="date-inp" id="escDateFrom" onchange="loadEscalations()" title="From date"/>
+          <span style="font-size:12px;color:var(--g400)">to</span>
+          <input type="date" class="date-inp" id="escDateTo" onchange="loadEscalations()" title="To date"/>
+        </div>
+        <button class="btn-dl" onclick="clearEscalationFilters()">Clear filters</button>
+        <span class="esc-result-count" id="escResultCount"></span>
       </div>
       <div id="escalationList"></div>
     </div>
@@ -4882,12 +4942,23 @@ async function assignLeadFromDetail(agentName){
 }
 
 // ── Needs Attention (Escalations) ──────────────────────────────────────
-let escalationFilter='open',allEscalations=[];
+let escalationFilter='open',allEscalations=[],_escAgentFilterPopulated=false;
 const ESC_ALL_STATUSES='open,assigned,in_progress,resolved,reopened';
+const ESC_OPENISH=['open','assigned','in_progress','reopened'];
 async function loadEscalations(){
+  _populateEscalationAgentFilter();
   const p=new URLSearchParams({key:adminKey});
   if(escalationFilter==='resolved')p.append('status','resolved');
   else if(escalationFilter==='all')p.append('status',ESC_ALL_STATUSES);
+  const agentVal=document.getElementById('escFilterAgent')?.value||'';
+  if(agentVal==='unassigned')p.append('unassigned','true');
+  else if(agentVal)p.append('assigned_agent_id',agentVal);
+  const priorityVal=document.getElementById('escFilterPriority')?.value||'';
+  if(priorityVal)p.append('priority',priorityVal);
+  const fromVal=document.getElementById('escDateFrom')?.value||'';
+  const toVal=document.getElementById('escDateTo')?.value||'';
+  if(fromVal)p.append('date_from',fromVal);
+  if(toVal)p.append('date_to',toVal);
   try{
     const r=await fetch(`/admin/escalations?${p}`);
     if(r.status===403){logout();return;}
@@ -4896,12 +4967,28 @@ async function loadEscalations(){
   renderEscalations();
   loadEscalationBadgeCount();
 }
+function _populateEscalationAgentFilter(){
+  const sel=document.getElementById('escFilterAgent');
+  if(!sel||_escAgentFilterPopulated||!allAgents.length)return;
+  _escAgentFilterPopulated=true;
+  const opts=allAgents.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  sel.insertAdjacentHTML('beforeend',opts);
+}
+function clearEscalationFilters(){
+  const agentSel=document.getElementById('escFilterAgent');if(agentSel)agentSel.value='';
+  const prioSel=document.getElementById('escFilterPriority');if(prioSel)prioSel.value='';
+  const from=document.getElementById('escDateFrom');if(from)from.value='';
+  const to=document.getElementById('escDateTo');if(to)to.value='';
+  loadEscalations();
+}
 async function loadEscalationBadgeCount(){
   if(!adminKey)return;
   try{
     const r=await fetch(`/admin/escalations?key=${encodeURIComponent(adminKey)}`);
     if(!r.ok)return;
-    updateEscalationBadge((await r.json()).length);
+    const openish=await r.json();
+    updateEscalationBadge(openish.length);
+    updateEscalationStats(openish);
   }catch(e){}
 }
 function updateEscalationBadge(count){
@@ -4909,6 +4996,16 @@ function updateEscalationBadge(count){
   if(!badge)return;
   badge.textContent=count;
   badge.classList.toggle('hidden',count===0);
+}
+function updateEscalationStats(openish){
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('escCountOpen',openish.length);
+  set('escCountHigh',openish.filter(e=>e.priority==='high').length);
+  set('escCountUnassigned',openish.filter(e=>!e.assigned_agent_id).length);
+  if(openish.length){
+    const oldest=openish.reduce((a,b)=>new Date(a.created_at)<new Date(b.created_at)?a:b);
+    set('escOldestAge',timeAgo(oldest.created_at));
+  }else set('escOldestAge','—');
 }
 function setEscalationFilter(filter){
   escalationFilter=filter;
@@ -4918,32 +5015,45 @@ function setEscalationFilter(filter){
 function renderEscalations(){
   const list=document.getElementById('escalationList');
   if(!list)return;
+  const count=document.getElementById('escResultCount');
+  if(count)count.textContent=allEscalations.length?`${allEscalations.length} escalation${allEscalations.length!==1?'s':''}`:'';
   if(!allEscalations.length){
-    list.innerHTML=emptyState(ICON.check,'Nothing needs attention','Conversations Itura flags for a human will show up here.');
+    const anyFilter=document.getElementById('escFilterAgent')?.value||document.getElementById('escFilterPriority')?.value||document.getElementById('escDateFrom')?.value||document.getElementById('escDateTo')?.value;
+    list.innerHTML=anyFilter
+      ?emptyState(ICON.search,'No escalations match these filters','Try widening the date range or clearing a filter.')
+      :emptyState(ICON.check,'Nothing needs attention','Conversations Itura flags for a human will show up here.');
     return;
   }
   list.innerHTML=allEscalations.map(renderEscalationCard).join('');
 }
 function renderEscalationCard(e){
   const name=e.customer_name||e.phone;
+  const init=(e.customer_name||'?').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase()||'?';
   const catLabel=(e.category||'other').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
   const statusLabel=(e.status||'open').replace(/_/g,' ');
-  const assignedTo=e.assigned_agent_name?`Assigned to ${esc(e.assigned_agent_name)}`:'Unassigned';
+  const assignedTo=e.assigned_agent_name?`${ICON.person}Assigned to ${esc(e.assigned_agent_name)}`:`${ICON.person}Unassigned`;
   const notifyFail=(e.notification_status==='failed'||e.notification_status==='skipped')
-    ?`<span class="esc-notify-fail">${ICON.warning}No agent notified${e.notification_error?': '+esc(e.notification_error):''}</span>`:'';
-  const isOpenish=['open','assigned','in_progress','reopened'].includes(e.status);
+    ?`<span class="esc-notify-fail">${ICON.warning}No agent notified<button onclick="event.stopPropagation();retryEscalationNotification(${e.id})">Retry</button></span>`:'';
+  const isOpenish=ESC_OPENISH.includes(e.status);
   const canAct=!READ_ONLY_CONV_ROLES.includes(agentRole);
-  const claimBtn=(isOpenish&&!e.assigned_agent_id&&myAgentId&&canAct)?`<button onclick="event.stopPropagation();claimEscalation(${e.id})">Claim</button>`:'';
-  const resolveBtn=(isOpenish&&canAct)?`<button class="esc-btn-resolve" onclick="event.stopPropagation();resolveEscalationPrompt(${e.id})">Resolve</button>`:'';
+  const claimBtn=(isOpenish&&!e.assigned_agent_id&&myAgentId&&canAct)?`<button onclick="event.stopPropagation();claimEscalation(${e.id})">${ICON.handshake}Claim</button>`:'';
+  const resolveBtn=(isOpenish&&canAct)?`<button class="esc-btn-resolve" onclick="event.stopPropagation();resolveEscalationPrompt(${e.id})">${ICON.check}Resolve</button>`:'';
+  const resolutionBlock=(e.status==='resolved'&&e.resolution)?`<div class="esc-resolution"><b>Resolution:</b> ${esc(e.resolution)}</div>`:'';
   const safeName=esc(name).replace(/'/g,"\\'");
   return `<div class="esc-card esc-p-${esc(e.priority)}" onclick="openEscalationConv('${e.phone}','${safeName}')">
-    <div class="esc-card-top">
-      <span class="esc-pill esc-pill-${esc(e.priority)}">${esc(e.priority)}</span>
-      <span class="esc-pill esc-pill-category">${esc(catLabel)}</span>
+    <div class="esc-card-head">
+      <div class="esc-av esc-av-${esc(e.priority)}">${init}</div>
+      <div class="esc-head-main">
+        <div class="esc-customer">${esc(name)}${e.customer_name?`<span class="esc-phone">${esc(e.phone)}</span>`:''}</div>
+        <div class="esc-card-top">
+          <span class="esc-pill esc-pill-${esc(e.priority)}">${esc(e.priority)}</span>
+          <span class="esc-pill esc-pill-category">${esc(catLabel)}</span>
+        </div>
+      </div>
       <span class="esc-time">${timeAgo(e.created_at)}</span>
     </div>
-    <div class="esc-customer">${esc(name)}${e.customer_name?`<span class="esc-phone">${esc(e.phone)}</span>`:''}</div>
     ${e.summary?`<div class="esc-summary">${esc(e.summary)}</div>`:''}
+    ${resolutionBlock}
     <div class="esc-card-bottom">
       <span class="esc-status-pill esc-status-${esc(e.status)}">${esc(statusLabel)}</span>
       <span class="esc-assigned-to">${assignedTo}</span>
@@ -4974,6 +5084,13 @@ async function resolveEscalationPrompt(id){
     if(!r.ok)throw new Error();
     await loadEscalations();
   }catch(e){alert('Failed to resolve this escalation.');}
+}
+async function retryEscalationNotification(id){
+  try{
+    const r=await fetch(`/admin/escalations/${id}/notify?key=${encodeURIComponent(adminKey)}`,{method:'POST'});
+    if(!r.ok)throw new Error();
+    await loadEscalations();
+  }catch(e){alert('Failed to resend the notification.');}
 }
 function openEscalationConv(phone,name){
   switchTab('conv');

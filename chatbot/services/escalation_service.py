@@ -158,6 +158,71 @@ async def _notify_agent(escalation_id: int, agent: Agent, phone: str, customer_n
         db.close()
 
 
+def escalation_to_dict(e: Escalation) -> dict:
+    """Single source of truth for the JSON shape the admin UI consumes --
+    shared by the list/update endpoints and retry_notification() below so
+    there's exactly one place that knows Escalation's serialized fields."""
+    return {
+        "id": e.id,
+        "phone": e.phone,
+        "customer_name": e.customer_name,
+        "category": e.category,
+        "priority": e.priority,
+        "trigger": e.trigger,
+        "status": e.status,
+        "summary": e.summary,
+        "assigned_agent_id": e.assigned_agent_id,
+        "assigned_agent_name": e.assigned_agent.name if e.assigned_agent else None,
+        "notified_at": e.notified_at.isoformat() if e.notified_at else None,
+        "notification_status": e.notification_status,
+        "notification_error": e.notification_error,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "assigned_at": e.assigned_at.isoformat() if e.assigned_at else None,
+        "first_response_at": e.first_response_at.isoformat() if e.first_response_at else None,
+        "resolved_at": e.resolved_at.isoformat() if e.resolved_at else None,
+        "resolution": e.resolution,
+        "reopen_count": e.reopen_count,
+    }
+
+
+async def retry_notification(escalation_id: int) -> Optional[dict]:
+    """Re-attempts the alert for an escalation that was previously skipped or
+    failed -- for when an admin fixes the underlying cause after the fact
+    (adds a routing fallback agent, gives the assigned agent a phone number,
+    etc) rather than waiting for the next unrelated escalation to prove it
+    works. Reuses the exact same resolve+send path create_escalation uses."""
+    db = get_db()
+    try:
+        esc = db.query(Escalation).filter(Escalation.id == escalation_id).first()
+        if not esc:
+            return None
+        phone, customer_name = esc.phone, esc.customer_name
+        category, priority, summary = esc.category, esc.priority, esc.summary
+    finally:
+        db.close()
+
+    agent = await _resolve_notification_target(phone)
+    if agent:
+        await _notify_agent(escalation_id, agent, phone, customer_name, category, priority, summary or "")
+    else:
+        db = get_db()
+        try:
+            esc = db.query(Escalation).filter(Escalation.id == escalation_id).first()
+            if esc:
+                esc.notification_status = "skipped"
+                esc.notification_error = "No conversation owner and no routing fallback_agent_id configured."
+                db.commit()
+        finally:
+            db.close()
+
+    db = get_db()
+    try:
+        esc = db.query(Escalation).filter(Escalation.id == escalation_id).first()
+        return escalation_to_dict(esc) if esc else None
+    finally:
+        db.close()
+
+
 async def has_open_escalation(phone: str) -> Optional[int]:
     """Returns the id of an already-open (open/assigned/in_progress)
     escalation for this phone, if one exists -- used to avoid opening a

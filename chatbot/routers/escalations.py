@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,33 +8,9 @@ from pydantic import BaseModel
 from chatbot.database import get_db
 from chatbot.models import Agent, Escalation
 from chatbot.routers.permissions import require_tab_permission
-from chatbot.services.escalation_service import CATEGORIES, PRIORITIES
+from chatbot.services.escalation_service import escalation_to_dict, retry_notification
 
 router = APIRouter(prefix="/admin/escalations", tags=["escalations"])
-
-
-def _fmt(e: Escalation) -> dict:
-    return {
-        "id": e.id,
-        "phone": e.phone,
-        "customer_name": e.customer_name,
-        "category": e.category,
-        "priority": e.priority,
-        "trigger": e.trigger,
-        "status": e.status,
-        "summary": e.summary,
-        "assigned_agent_id": e.assigned_agent_id,
-        "assigned_agent_name": e.assigned_agent.name if e.assigned_agent else None,
-        "notified_at": e.notified_at.isoformat() if e.notified_at else None,
-        "notification_status": e.notification_status,
-        "notification_error": e.notification_error,
-        "created_at": e.created_at.isoformat() if e.created_at else None,
-        "assigned_at": e.assigned_at.isoformat() if e.assigned_at else None,
-        "first_response_at": e.first_response_at.isoformat() if e.first_response_at else None,
-        "resolved_at": e.resolved_at.isoformat() if e.resolved_at else None,
-        "resolution": e.resolution,
-        "reopen_count": e.reopen_count,
-    }
 
 
 @router.get("")
@@ -42,11 +18,17 @@ async def list_escalations(
     status: Optional[str] = Query(None, description="Comma-separated: open,assigned,in_progress,resolved,reopened"),
     priority: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    assigned_agent_id: Optional[int] = Query(None),
+    unassigned: Optional[bool] = Query(None, description="true = only escalations with no assigned agent"),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD, inclusive, filters on created_at"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD, inclusive, filters on created_at"),
     ctx: dict = Depends(require_tab_permission("escalations")),
 ):
     """Backs the "Needs Attention" queue. Defaults to everything still
     outstanding (open/assigned/in_progress/reopened) -- pass status=resolved
-    explicitly to see closed ones, e.g. for a history view."""
+    explicitly to see closed ones, e.g. for a history view. The agent/date
+    filters exist so a long-running queue stays searchable instead of
+    devolving into endless scrolling to find an older ticket."""
     def _fetch():
         db = get_db()
         try:
@@ -57,8 +39,22 @@ async def list_escalations(
                 q = q.filter(Escalation.priority == priority)
             if category:
                 q = q.filter(Escalation.category == category)
+            if unassigned:
+                q = q.filter(Escalation.assigned_agent_id.is_(None))
+            elif assigned_agent_id:
+                q = q.filter(Escalation.assigned_agent_id == assigned_agent_id)
+            if date_from:
+                try:
+                    q = q.filter(Escalation.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+                except ValueError:
+                    pass
+            if date_to:
+                try:
+                    q = q.filter(Escalation.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
+                except ValueError:
+                    pass
             rows = q.order_by(Escalation.priority.desc(), Escalation.created_at.asc()).all()
-            return [_fmt(r) for r in rows]
+            return [escalation_to_dict(r) for r in rows]
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
@@ -108,7 +104,21 @@ async def update_escalation(
 
             db.commit()
             db.refresh(e)
-            return _fmt(e)
+            return escalation_to_dict(e)
         finally:
             db.close()
     return await run_in_threadpool(_update)
+
+
+@router.post("/{escalation_id}/notify")
+async def resend_escalation_notification(
+    escalation_id: int,
+    ctx: dict = Depends(require_tab_permission("escalations")),
+):
+    """Re-attempts the WhatsApp alert for an escalation whose notification
+    was previously skipped or failed -- e.g. once an admin has fixed the
+    routing fallback agent or given the assigned agent a phone number."""
+    result = await retry_notification(escalation_id)
+    if result is None:
+        raise HTTPException(404, "Escalation not found")
+    return result
