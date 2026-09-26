@@ -218,6 +218,34 @@ def bnpl_breakdown(price: float) -> str:
     return f"Payment plan: N{down:,.0f} down (20%), then N{monthly:,.0f}/month for up to 23 months at zero interest."
 
 
+# There is no payment integration anywhere in this codebase (no Paystack/
+# Flutterwave, no bank account on file in config or the knowledge base) —
+# so any bank account number, sort code, or mobile money number the model
+# produces is invented, never recalled, no matter how plausible it looks.
+# Confirmed live: a fabricated GTBank account + mobile money number, handed
+# to a real customer who was ready to pay real money — this despite the
+# prompt AND the knowledge base both already telling it not to. A wrong
+# account number is a far worse trust problem than a wrong price, so this
+# gets the same treatment as bnpl_breakdown()/the price-correction regexes
+# below: caught and replaced here rather than trusted to prompt wording
+# alone. Keyword-anchored (not a bare long-digit-run match) to stay clear
+# of a legitimate phone number or order reference in the same reply.
+_FABRICATED_PAYMENT_RE = re.compile(
+    r'\b(?:account\s*(?:number|no\.?|name)|sort\s*code|mobile\s*money)\b[^\n]{0,60}\d{5,}',
+    re.IGNORECASE,
+)
+
+FABRICATED_PAYMENT_FALLBACK = (
+    "I don't have our official payment account details to hand you directly here — let me get "
+    "someone from our payments team to send you the exact account number and instructions so "
+    "there's no mix-up. What's the best number to reach you on?"
+)
+
+
+def contains_fabricated_payment_details(text: str) -> bool:
+    return bool(_FABRICATED_PAYMENT_RE.search(text))
+
+
 def proxy_image_url(original_url: Optional[str]) -> Optional[str]:
     """Rewrite an S3 image URL to go through our /img-proxy endpoint.
     This avoids CORS / direct-access errors in the browser."""
@@ -677,6 +705,17 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     if "[SEND_FIXED_WELCOME]" in raw:
         raw = fixed_welcome_text(request.user_name)
 
+    # See contains_fabricated_payment_details() -- replaces the entire reply
+    # rather than trying to surgically edit out just the fake part; better to
+    # occasionally discard an otherwise-fine message than to ever let a made-up
+    # account number through. Runs before escalation-tag parsing below since
+    # the fallback text carries no tag of its own -- an escalation is
+    # synthesized directly instead, so this still reaches a human.
+    fabricated_payment = contains_fabricated_payment_details(raw)
+    if fabricated_payment:
+        log.warning(f"Blocked fabricated payment/bank account details in bot reply for {request.session_id}")
+        raw = FABRICATED_PAYMENT_FALLBACK
+
     # The model flags its own turn for human handoff with a single trailing
     # line (ESCALATE: trigger=... category=... priority=... summary=...)
     # rather than a separate classifier call -- same single-call, same-turn
@@ -686,6 +725,12 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     escalation = parse_escalation_tag(raw)
     if escalation:
         raw = strip_escalation_tag(raw)
+    elif fabricated_payment:
+        escalation = {
+            "trigger": "bot_unresolved", "category": "payment", "priority": "high",
+            "summary": "Customer is ready to pay; the bot attempted to invent bank/payment "
+                       "account details and was blocked -- needs real payment instructions from a human.",
+        }
 
     cards: List[ProductCard] = []
     m = re.search(r'PRODUCTS:\s*(.+)', raw, re.IGNORECASE)
