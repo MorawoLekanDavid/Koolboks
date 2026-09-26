@@ -1261,6 +1261,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
                 <option value="">Unassigned</option>
               </select>
             </div>
+            <div style="text-align:right;margin:-4px 0 8px">
+              <button onclick="toggleOwnershipHistory()" style="background:none;border:none;padding:0;font-size:11.5px;font-weight:700;color:var(--orange-d);cursor:pointer;font-family:inherit;text-decoration:underline">Ownership history</button>
+            </div>
+            <div id="ownershipHistoryBox" class="hidden" style="margin-bottom:10px"></div>
             <div class="d-row" style="align-items:center">
               <span class="lbl">Status</span>
               <select class="assign-sel" id="dStatusSel" onchange="updateLeadStatus(currentDetailPhone,this.value)" style="max-width:none;flex:1;text-align:right">
@@ -3921,6 +3925,22 @@ async function loadReassignHistory(){
     hydrateIcons(el);
   }catch(e){el.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
 }
+let _ownershipHistoryOpen=false;
+async function toggleOwnershipHistory(){
+  const box=document.getElementById('ownershipHistoryBox');
+  if(!box||!currentDetailPhone)return;
+  _ownershipHistoryOpen=!_ownershipHistoryOpen;
+  box.classList.toggle('hidden',!_ownershipHistoryOpen);
+  if(!_ownershipHistoryOpen)return;
+  box.innerHTML='<p class="d-placeholder">Loading…</p>';
+  try{
+    const r=await fetch(`/admin/reassignment-requests?phone=${encodeURIComponent(currentDetailPhone)}&key=${encodeURIComponent(adminKey)}`);
+    const rows=r.ok?await r.json():[];
+    box.innerHTML=rows.length?rows.map(renderReassignHistoryRow).join('')
+      :emptyState(ICON.clipboard,'No history yet','This conversation has never been reassigned.');
+    hydrateIcons(box);
+  }catch(e){box.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
+}
 function renderReassignHistoryRow(r){
   const cls=r.status==='denied'?'denied':r.status==='pending'?'pending':'approved';
   const label=r.status==='auto_approved'?'Approved':r.status.charAt(0).toUpperCase()+r.status.slice(1);
@@ -4774,6 +4794,8 @@ async function saveConvOwner(){
 let currentDetailPhone=null;
 async function loadLeadDetails(phone){
   currentDetailPhone=phone;
+  _ownershipHistoryOpen=false;
+  document.getElementById('ownershipHistoryBox')?.classList.add('hidden');
   const dc=document.getElementById('detailContent');const ed=document.getElementById('emptyDetail');
   try{
     const r=await fetch(`/admin/leads/by-phone/${encodeURIComponent(phone)}?key=${encodeURIComponent(adminKey)}`);

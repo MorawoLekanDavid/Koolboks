@@ -29,6 +29,20 @@ RESTART_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Customer wants to pay on delivery rather than the standard down-payment-first
+# policy. The KNOWLEDGE BASE already instructs the model to offer the in-person
+# office/partner-location alternative the FIRST time this comes up instead of
+# just repeating the down-payment explanation -- confirmed live, twice, that
+# prose instruction alone isn't reliable enough: two different customers each
+# repeated this exact objection three or four times and got the same unchanged
+# policy paragraph back every time, with the office option never mentioned,
+# until the conversation escalated purely from customer frustration. Detected
+# here and surfaced as a CAPTURED STATE line (the same deterministic-hint
+# mechanism already used for phone/delivery capture) rather than trusted to a
+# instruction sitting passively in a 30KB+ document.
+PAY_ON_DELIVERY_RE = re.compile(r'\bpay(?:ment)?\s+on\s+delivery\b', re.IGNORECASE)
+
+
 # Customer consents to using the WhatsApp number they're already texting from
 # instead of typing it out — a real, recurring pattern ("use this number",
 # "this is my number am chatting with"). Without this, extract_valid_phone()
@@ -601,6 +615,23 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
         state_summary += "✓ Delivery location CAPTURED\n"
     elif already_captured:
         state_summary += "× Delivery location: NOT YET CAPTURED\n"
+
+    pod_count = sum(1 for m in history if m.get("role") == "user" and PAY_ON_DELIVERY_RE.search(m.get("content", "")))
+    if PAY_ON_DELIVERY_RE.search(request.message):
+        pod_count += 1
+    if pod_count == 1:
+        state_summary += (
+            "⚠ Customer just asked for pay-on-delivery — do NOT just repeat the down-payment "
+            "policy. Offer the in-person office/partner-location option (KNOWLEDGE BASE section "
+            "on office locations) as the real alternative in this reply.\n"
+        )
+    elif pod_count >= 2:
+        state_summary += (
+            f"⚠ Customer has now asked for pay-on-delivery {pod_count} times. If the office/partner "
+            "option hasn't been offered yet in this conversation, offer it now. If it already was and "
+            "they're still declining the down payment, escalate (ESCALATE tag) instead of repeating "
+            "the same policy explanation again.\n"
+        )
 
     replied_product = resolve_reply_to_product(request.reply_to_wamid, df)
     state_summary += "───────────────────"

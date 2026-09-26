@@ -19,8 +19,8 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, HandoffEvent, Message, ReassignmentRequest, Tag
-from chatbot.routers.permissions import conversation_guard, get_conversation_scope, require_tab_permission
+from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, Escalation, HandoffEvent, Message, ReassignmentRequest, Tag
+from chatbot.routers.permissions import _phone_allowed, conversation_guard, get_conversation_scope, require_tab_permission
 from chatbot.services.escalation_service import mark_first_response_if_needed
 from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
@@ -690,6 +690,30 @@ def _dept_match(db, caller_agent_id: Optional[int], target_email: str) -> bool:
                 and target.department_id == caller.department_id)
 
 
+def _sync_escalation_assignment(db, phone: str, owner_email: Optional[str]) -> None:
+    """Keeps any still-open escalation's assigned_agent_id in sync whenever a
+    conversation's owner changes, by either reassignment path (the direct
+    PATCH below, or an approved reassignment-request) -- without this, Needs
+    Attention kept showing whoever owned the chat when the ticket was
+    created, even after the chat itself moved to someone else. A resolved
+    escalation is left alone -- that's a historical record of who actually
+    handled it, not a live mirror of current ownership."""
+    new_agent = db.query(Agent).filter(Agent.email == owner_email).first() if owner_email else None
+    open_escalations = (
+        db.query(Escalation)
+        .filter(Escalation.phone == phone, Escalation.status.in_(("open", "assigned", "in_progress", "reopened")))
+        .all()
+    )
+    for esc in open_escalations:
+        esc.assigned_agent_id = new_agent.id if new_agent else None
+        if new_agent:
+            esc.assigned_at = datetime.utcnow()
+            if esc.status == "open":
+                esc.status = "assigned"
+        elif esc.status == "assigned":
+            esc.status = "open"
+
+
 @router.patch("/conversations/{phone}/owner")
 async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depends(conversation_guard(write=True))):
     def _upsert():
@@ -710,6 +734,12 @@ async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depe
                 existing.owner_email = body.owner_email
             else:
                 db.add(ConversationOwner(phone=norm, owner_name=body.owner_name, owner_email=body.owner_email))
+
+            # Confirmed live: a chat reassigned away from an agent still showed
+            # their name on its open escalation until someone noticed and fixed
+            # it by hand -- this closes that gap going forward.
+            _sync_escalation_assignment(db, norm, body.owner_email)
+
             # Logged for the audit history same as everything else — no
             # reason required here, only the request-for-access flow needs one.
             db.add(ReassignmentRequest(
@@ -821,17 +851,37 @@ def _serialize_request(r: ReassignmentRequest) -> dict:
 @router.get("/reassignment-requests")
 async def list_reassignment_requests(
     status: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None, description="Ownership lineage for one conversation, oldest first"),
     ctx: dict = Depends(get_admin_ctx),
 ):
     """pending (default filter target on the frontend) for the approval queue;
     pass status=all to see the full audit history. Scope: admin/super_admin
     see everything; team_lead sees their own department's requests plus their
-    own; everyone else sees only requests they personally made."""
+    own; everyone else sees only requests they personally made.
+
+    Passing `phone` switches to a different question entirely -- not "what
+    have I done," but "who has owned this specific conversation, and when" --
+    so it's scoped by conversation access (same rule as opening the chat
+    itself) rather than by who happened to make each individual change, and
+    returned oldest-first so it reads as a timeline instead of an activity feed."""
     role = ctx.get("role")
 
     def _run():
         db = get_db()
         try:
+            if phone:
+                norm = normalize_phone(phone)
+                scope = get_conversation_scope(db, ctx)
+                if not _phone_allowed(db, scope, norm):
+                    raise HTTPException(403, "You don't have access to this conversation")
+                rows = (
+                    db.query(ReassignmentRequest)
+                    .filter(ReassignmentRequest.phone == norm)
+                    .order_by(ReassignmentRequest.created_at.asc())
+                    .all()
+                )
+                return [_serialize_request(r) for r in rows]
+
             q = db.query(ReassignmentRequest)
             if status and status != "all":
                 q = q.filter(ReassignmentRequest.status == status)
@@ -871,6 +921,7 @@ async def approve_reassignment_request(req_id: int, body: DecisionIn, ctx: dict 
                 existing_owner.owner_email = req.to_owner_email
             else:
                 db.add(ConversationOwner(phone=req.phone, owner_name=req.to_owner_name, owner_email=req.to_owner_email))
+            _sync_escalation_assignment(db, req.phone, req.to_owner_email)
             req.status = "approved"
             req.decided_by_name = ctx.get("name", "Admin")
             req.decided_by_email = ctx.get("email")
