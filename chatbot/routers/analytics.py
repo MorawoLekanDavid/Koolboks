@@ -659,6 +659,29 @@ def _parse_device_os(user_agent: Optional[str]) -> str:
     return "Unknown"
 
 
+# Nigeria (WAT) never observes daylight saving, so a fixed offset is safe
+# year-round — every agent using the Shift Tracker is on this timezone.
+LAGOS_UTC_OFFSET = timedelta(hours=1)
+
+
+def lagos_day_bounds(date_str: Optional[str], now: datetime) -> tuple:
+    """Turns a LOCAL (WAT) calendar day -- either an explicit "YYYY-MM-DD"
+    from the date picker, or "today" if none given -- into the UTC
+    [day_start, day_end] window that actually bounds it in the database,
+    since every stored timestamp is UTC. Returns (day, day_start, day_end,
+    now_lagos_date) — the last one is what the "is this segment still open
+    right now" check compares `day` against, for the same reason.
+
+    Without this, a login at 23:52 UTC (00:52 WAT the next calendar day) was
+    invisible when querying "today," because the UTC calendar day hadn't
+    turned over yet even though the agent's own local day had."""
+    now_lagos_date = (now + LAGOS_UTC_OFFSET).date()
+    day = datetime.fromisoformat(date_str).date() if date_str else now_lagos_date
+    day_start = datetime(day.year, day.month, day.day) - LAGOS_UTC_OFFSET
+    day_end = day_start + timedelta(days=1) - timedelta(microseconds=1)
+    return day, day_start, day_end, now_lagos_date
+
+
 def last_heartbeat_in_session(heartbeats: list, login_at: datetime, next_login_at: Optional[datetime]):
     """Returns the last heartbeat row (anything with a .logged_at, in
     ascending order) whose timestamp falls strictly within ONE login
@@ -726,14 +749,15 @@ async def shift_tracker(
     """Single-day view — the Gantt is inherently per-day, unlike every other
     Analytics Console tab which uses the global date-range filter. Built
     entirely from AgentHeartbeatLog/AgentLoginEvent, which only exist from
-    the point this feature shipped — earlier dates return empty, not wrong."""
+    the point this feature shipped — earlier dates return empty, not wrong.
+
+    See lagos_day_bounds() for why `date` (a browser <input type="date">
+    value) isn't treated as a UTC day."""
     def _fetch():
         db = get_db()
         try:
-            day = datetime.fromisoformat(date).date() if date else datetime.utcnow().date()
-            day_start = datetime(day.year, day.month, day.day)
-            day_end = day_start + timedelta(days=1) - timedelta(microseconds=1)
             now = datetime.utcnow()
+            day, day_start, day_end, now_lagos_date = lagos_day_bounds(date, now)
 
             scope = get_analytics_scope(db, ctx)
             agents_by_id = {a.id: a for a in db.query(Agent).all()}
@@ -775,7 +799,7 @@ async def shift_tracker(
                         # Cap the open segment at one TTL window past the last
                         # ping rather than dragging it out to "now".
                         cap = start + timedelta(seconds=HEARTBEAT_TTL)
-                        end = min(cap, now) if day == now.date() else cap
+                        end = min(cap, now) if day == now_lagos_date else cap
                     segs.append({"status": r.status, "start": start.isoformat(), "end": end.isoformat()})
                 segments_by_agent[aid] = segs
 

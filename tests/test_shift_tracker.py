@@ -23,9 +23,9 @@ table shows -- so both get direct coverage independent of the DB/Redis-
 backed endpoint that calls them.
 """
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
-from chatbot.routers.analytics import classify_session_status, last_heartbeat_in_session
+from chatbot.routers.analytics import classify_session_status, lagos_day_bounds, last_heartbeat_in_session
 from chatbot.services.presence_service import HEARTBEAT_TTL
 
 NOW = datetime(2026, 1, 1, 12, 0, 0)
@@ -131,3 +131,35 @@ def test_no_heartbeats_in_window_returns_none():
     login_b = datetime(2026, 1, 1, 9, 0, 0)
     heartbeats = [_Heartbeat("online", datetime(2026, 1, 1, 9, 30, 0))]  # only belongs to B
     assert last_heartbeat_in_session(heartbeats, login_a, next_login_at=login_b) is None
+
+
+# ── lagos_day_bounds — local calendar day vs UTC-stored timestamps ──────────
+
+def test_a_late_utc_login_falls_inside_the_next_lagos_day():
+    """The exact incident: a 23:52 UTC login (00:52 WAT the NEXT calendar
+    day) must be inside that next day's window, not the UTC day it was
+    stored under. now is mid-morning UTC the next day, well after both."""
+    utc_login = datetime(2026, 9, 26, 23, 52, 26)
+    now = datetime(2026, 9, 27, 9, 0, 0)
+    day, day_start, day_end, _ = lagos_day_bounds("2026-09-27", now)
+    assert day == date(2026, 9, 27)
+    assert day_start <= utc_login <= day_end
+    # And it must NOT also be claimed by the previous day's window.
+    _, prev_start, prev_end, _ = lagos_day_bounds("2026-09-26", now)
+    assert not (prev_start <= utc_login <= prev_end)
+
+
+def test_default_day_with_no_date_param_uses_lagos_today_not_utc_today():
+    """No `date` query param (the rare fallback path) must resolve "today"
+    against Lagos time, not UTC — otherwise the exact same bug reappears for
+    whichever caller relies on the default instead of the date picker."""
+    now = datetime(2026, 9, 26, 23, 30, 0)  # already Sep 27 in Lagos (WAT = UTC+1)
+    day, _, _, now_lagos_date = lagos_day_bounds(None, now)
+    assert day == date(2026, 9, 27)
+    assert now_lagos_date == date(2026, 9, 27)
+
+
+def test_day_start_and_end_are_exactly_one_lagos_calendar_day_apart():
+    day, day_start, day_end, _ = lagos_day_bounds("2026-09-27", datetime(2026, 9, 27, 12, 0, 0))
+    assert day_start == datetime(2026, 9, 26, 23, 0, 0)  # 00:00 WAT == 23:00 UTC the day before
+    assert day_end - day_start == timedelta(days=1) - timedelta(microseconds=1)
