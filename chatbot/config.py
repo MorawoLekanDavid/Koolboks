@@ -83,6 +83,18 @@ RATE_LIMIT = int(os.environ.get("RATE_LIMIT_MESSAGES", "50"))
 
 HANDOFF_AUTO_RESET_HOURS = int(os.environ.get("HANDOFF_AUTO_RESET_HOURS", "8"))
 
+# Shared "too old to still be relevant" threshold — one number, used by both
+# the handoff watchdog (a stale abandoned conversation older than this isn't
+# worth auto-resuming, just an archive replay) and chat_service.py's Redis
+# history reconstruction (a "Hi" from a contact this dormant should get the
+# genuinely-fresh welcome, not have their months-old conversation silently
+# resumed). Lives here, not in either of those modules, specifically so it's
+# one setting instead of two that could drift — handoff_watchdog.py imports
+# it from here rather than chat_service.py importing it from
+# handoff_watchdog.py, which would be a circular import (that module already
+# imports FROM chat_service.py).
+MAX_CONVERSATION_STALENESS_HOURS = int(os.environ.get("MAX_CONVERSATION_STALENESS_HOURS", "72"))
+
 # A "complete" session (phone + delivery both captured) only resets to a fresh
 # conversation once it's been idle this long — otherwise a customer who keeps
 # chatting right after finishing (a question, a clarification, an objection)

@@ -8,11 +8,12 @@ from pydantic import BaseModel, Field
 from chatbot.config import (
     BOT_NAME,
     LEAD_TTL,
+    MAX_CONVERSATION_STALENESS_HOURS,
     RATE_LIMIT,
     WHATSAPP_CONTACT,
     log,
 )
-from chatbot.services.ai_settings_service import get_live_content
+from chatbot.services.ai_settings_service import get_live_content, get_live_welcome_text
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Message, Product
@@ -128,20 +129,23 @@ def inventory_text(products: List[Product]) -> str:
     return "\n".join(lines)
 
 
-def fixed_welcome_text(name: str = "") -> str:
+async def fixed_welcome_text(name: str = "") -> str:
     """The one, single source of truth for the fixed brand welcome — every
     caller (the website's own sentinel path, the WhatsApp bare-greeting
     short-circuit, and the marker the model can trigger for any other
     non-request opener) must go through this, not carry its own copy of the
     literal string. That's not just tidiness: three independent copies is
     three chances for one of them to drift, which is exactly the class of
-    bug this function exists to close off for good."""
+    bug this function exists to close off for good.
+
+    The wording itself lives in the database (get_live_welcome_text(),
+    editable from AI Settings), not hardcoded here — this function's job is
+    just the {name_part} substitution, so a wording change in one place
+    (the admin UI) takes effect on all three call sites at once, without a
+    code deploy."""
+    template = await get_live_welcome_text()
     name_part = f", {name}" if name and name != "Customer" else ""
-    return (
-        f"Hi there{name_part}! 👋🏽 Welcome to Koolboks! ❄️\n\n"
-        "Let's take the heat off! ☀️ What are you looking to keep Kool today? 😊\n\n"
-        "Tell us what you need, and we'll help you find the right solution."
-    )
+    return template.replace("{name_part}", name_part)
 
 
 def resolve_reply_to_product(reply_to_wamid: Optional[str], products: List[Product]) -> Optional[str]:
@@ -486,7 +490,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     if is_welcome_sentinel:
         history = await redis_client.get_history(request.session_id)
         if not history:
-            welcome_text = fixed_welcome_text()
+            welcome_text = await fixed_welcome_text()
             # Re-anchors the question the welcome already asked, rather than leaving
             # the customer on a bare "nice to meet you" with no sense of what to do
             # next — real customers replied "okay but that's not why i'm here" to the
@@ -518,18 +522,40 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     # -- a returning customer whose next message happens to be "Hi" would
     # otherwise get the brand-new-contact welcome text instead of their real
     # context, which is exactly what happened live during that incident.
+    #
+    # Bounded by MAX_CONVERSATION_STALENESS_HOURS: confirmed live, a contact
+    # silent for two months said a bare "Hi" and got reconstructed straight
+    # into their months-old conversation -- which skipped the deterministic
+    # bare-greeting fast path below (history was no longer empty) and left
+    # the model to freelance its own greeting instead of the real one,
+    # since nothing in the prompt says "months-old history doesn't count as
+    # a continuation." The original incident this reconstruction exists for
+    # is a customer mid-conversation losing context to an infra bug minutes
+    # or hours earlier -- not a dormant contact resurfacing after months.
     if not history and request.session_id.startswith("wa_"):
         phone = request.session_id[3:]
         reconstructed = _reconstruct_history_from_db(phone)
         if reconstructed:
-            log.warning(
-                f"Session {request.session_id} had empty Redis history but {phone} has "
-                f"{len(reconstructed)} prior message(s) in Postgres — reconstructing "
-                f"history from there instead of treating this as a new conversation."
-            )
-            history = reconstructed
-            if redis_client.client:
-                await redis_client.save_history(request.session_id, history)
+            try:
+                last_ts = datetime.fromisoformat(reconstructed[-1]["ts"])
+                stale = (datetime.now() - last_ts).total_seconds() > MAX_CONVERSATION_STALENESS_HOURS * 3600
+            except (KeyError, ValueError):
+                stale = False  # malformed/missing timestamp -- don't let that silently block a real recovery
+            if stale:
+                log.info(
+                    f"Session {request.session_id} has {len(reconstructed)} Postgres message(s) "
+                    f"but the most recent is over {MAX_CONVERSATION_STALENESS_HOURS}h old -- "
+                    f"treating this as a fresh contact instead of resuming a dormant conversation."
+                )
+            else:
+                log.warning(
+                    f"Session {request.session_id} had empty Redis history but {phone} has "
+                    f"{len(reconstructed)} prior message(s) in Postgres — reconstructing "
+                    f"history from there instead of treating this as a new conversation."
+                )
+                history = reconstructed
+                if redis_client.client:
+                    await redis_client.save_history(request.session_id, history)
 
     # A bare greeting as the very first message needs no LLM call at all — it's
     # always the same fixed welcome, so send it directly. Confirmed live: even
@@ -538,7 +564,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     # "corrected" the intentional Koolboks pun "Kool" to "cool". A message this
     # fixed doesn't need to go through the model at all.
     if not history and BARE_GREETING_RE.match(request.message.strip()):
-        welcome_text = fixed_welcome_text(request.user_name)
+        welcome_text = await fixed_welcome_text(request.user_name)
 
         async def _persist_bare_greeting():
             now = datetime.now().isoformat()
@@ -734,7 +760,7 @@ async def generate_chat_response(request: ChatRequest, background_tasks: Backgro
     # where an LLM asked to reproduce fixed text verbatim occasionally doesn't
     # (confirmed live, twice, on this exact text before this fix existed).
     if "[SEND_FIXED_WELCOME]" in raw:
-        raw = fixed_welcome_text(request.user_name)
+        raw = await fixed_welcome_text(request.user_name)
 
     # See contains_fabricated_payment_details() -- replaces the entire reply
     # rather than trying to surgically edit out just the fake part; better to

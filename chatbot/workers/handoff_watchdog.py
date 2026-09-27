@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from fastapi import BackgroundTasks
 from sqlalchemy import and_, func, select
 
-from chatbot.config import HANDOFF_AUTO_RESET_HOURS, log
+from chatbot.config import HANDOFF_AUTO_RESET_HOURS, MAX_CONVERSATION_STALENESS_HOURS, log
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.models import Message
@@ -18,8 +18,10 @@ from chatbot.workers.bot_response import deliver_reply
 # "candidate" forever, and a phone whose last message happened to be inbound
 # ("ok thanks 🙏") would get an unprompted bot reply out of nowhere, on a
 # conversation the business has long moved on from. This is for recently
-# abandoned conversations, not an archive replay.
-MAX_STALENESS_HOURS = 72
+# abandoned conversations, not an archive replay. Shared with chat_service.py's
+# history-reconstruction staleness check — see MAX_CONVERSATION_STALENESS_HOURS
+# in config.py for why it lives there instead of here.
+MAX_STALENESS_HOURS = MAX_CONVERSATION_STALENESS_HOURS
 
 
 async def _candidate_phones() -> list:

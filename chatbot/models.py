@@ -226,6 +226,24 @@ class AgentHeartbeatLog(Base):
     logged_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class BotSetting(Base):
+    """Small key-value store for standalone bot content that must stay fixed
+    and deterministic (sent as-is, never passed through the LLM) but should
+    still be editable by an admin without a code deploy -- the fixed welcome
+    message (chatbot/services/chat_service.py's fixed_welcome_text(), which
+    every caller -- the WhatsApp bare-greeting fast path, the website
+    widget's __welcome__ sentinel, and the marker the model itself can
+    trigger -- goes through) is the first use of this. Deliberately NOT
+    folded into AIInstruction: that table's content is a prompt template the
+    model reads every turn; this is content the model never sees."""
+    __tablename__ = "bot_settings"
+
+    key = Column(String(50), primary_key=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String(255), nullable=True)
+
+
 class AIInstruction(Base):
     """Versioned system prompt / AI instruction set"""
     __tablename__ = "ai_instructions"

@@ -295,6 +295,20 @@ def init_database():
     except Exception as _e:
         log.warning(f"escalations.sla_notified_at migration: {_e}")
 
+    try:
+        with db_engine.connect() as _c:
+            _c.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS bot_settings (
+                    key VARCHAR(50) PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    updated_by VARCHAR(255)
+                )
+            """))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"bot_settings migration: {_e}")
+
     log.info("Database initialized successfully")
 
 

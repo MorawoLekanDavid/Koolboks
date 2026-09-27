@@ -9,13 +9,44 @@ from chatbot.database import get_db
 from chatbot.dependencies import require_super_admin
 from chatbot.models import AIInstruction, KBDocument
 from chatbot.routers.permissions import require_tab_permission
-from chatbot.services.ai_settings_service import get_draft_content, invalidate_cache
+from chatbot.services.ai_settings_service import (
+    DEFAULT_WELCOME_TEXT,
+    get_draft_content,
+    get_live_welcome_text,
+    invalidate_cache,
+    set_welcome_text,
+)
 from chatbot.services.groq_service import groq_client
 from chatbot.services.usage_tracking import log_groq_usage
 from chatbot.services.website_ingest import crawl_site, ingest_url
 from chatbot.utils.file_parser import extract_text
 
 router = APIRouter(prefix="/admin/ai-settings", tags=["ai-settings"])
+
+
+# ── Fixed Welcome Text ──────────────────────────────────────────────────────
+# Separate from the instruction/KB draft-live machinery below: this text never
+# reaches the model (chat_service.py sends it directly), so there's no
+# draft+test-chat cycle to run it through — it saves straight to live, same
+# as editing any other piece of fixed site copy.
+
+class WelcomeTextIn(BaseModel):
+    content: str
+
+
+@router.get("/welcome-text")
+async def get_welcome_text(ctx: dict = Depends(require_tab_permission("aiSettings"))):
+    return {"content": await get_live_welcome_text(), "default": DEFAULT_WELCOME_TEXT}
+
+
+@router.put("/welcome-text")
+async def update_welcome_text(body: WelcomeTextIn, ctx: dict = Depends(require_tab_permission("aiSettings"))):
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(400, "Welcome text cannot be empty")
+    await set_welcome_text(content, ctx.get("name") or ctx.get("email", "admin"))
+    log.info(f"Welcome text updated by {ctx.get('name')}")
+    return {"content": content}
 
 
 # ── AI Instructions ───────────────────────────────────────────────────────────
