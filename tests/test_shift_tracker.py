@@ -25,7 +25,12 @@ backed endpoint that calls them.
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from chatbot.routers.analytics import classify_session_status, lagos_day_bounds, last_heartbeat_in_session
+from chatbot.routers.analytics import (
+    classify_session_status,
+    lagos_day_bounds,
+    last_heartbeat_in_session,
+    session_belongs_to_report_day,
+)
 from chatbot.services.presence_service import HEARTBEAT_TTL
 
 NOW = datetime(2026, 1, 1, 12, 0, 0)
@@ -163,3 +168,32 @@ def test_day_start_and_end_are_exactly_one_lagos_calendar_day_apart():
     day, day_start, day_end, _ = lagos_day_bounds("2026-09-27", datetime(2026, 9, 27, 12, 0, 0))
     assert day_start == datetime(2026, 9, 26, 23, 0, 0)  # 00:00 WAT == 23:00 UTC the day before
     assert day_end - day_start == timedelta(days=1) - timedelta(microseconds=1)
+
+
+# ── session_belongs_to_report_day — cross-midnight sessions ─────────────────
+
+DAY_START = datetime(2026, 9, 26, 23, 0, 0)  # 00:00 WAT Sep 27
+DAY_END = datetime(2026, 9, 27, 22, 59, 59, 999999)
+
+
+def test_a_login_that_started_that_day_always_belongs_regardless_of_activity():
+    """Matches pre-existing behaviour: a login that crashed before its first
+    heartbeat must still show (as Dropped), not vanish from its own day."""
+    login_at = datetime(2026, 9, 27, 10, 0, 0)
+    assert session_belongs_to_report_day(login_at, DAY_START, DAY_END, has_activity_that_day=False) is True
+
+
+def test_a_prior_day_login_with_activity_today_belongs_the_exact_incident():
+    """The bug: an agent logged in yesterday, still going (or ended) today --
+    must appear in today's report if there's heartbeat proof of that."""
+    login_at = datetime(2026, 9, 26, 8, 0, 0)  # started the day before
+    assert session_belongs_to_report_day(login_at, DAY_START, DAY_END, has_activity_that_day=True) is True
+
+
+def test_a_prior_day_login_with_no_activity_today_does_not_belong():
+    """An old, already-abandoned session (no heartbeats today at all) must
+    NOT show up in today's report just because it was never formally closed
+    -- otherwise every never-closed row in the lookback window would appear
+    on every single day's audit forever."""
+    login_at = datetime(2026, 9, 20, 8, 0, 0)  # a week-old, long-dead login
+    assert session_belongs_to_report_day(login_at, DAY_START, DAY_END, has_activity_that_day=False) is False

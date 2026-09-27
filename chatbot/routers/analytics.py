@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import and_, case, func, select, text
+from sqlalchemy import and_, case, func, or_, select, text
 
 from chatbot.config import BOT_SENDER_NAMES
 from chatbot.database import get_db
@@ -682,6 +682,27 @@ def lagos_day_bounds(date_str: Optional[str], now: datetime) -> tuple:
     return day, day_start, day_end, now_lagos_date
 
 
+def session_belongs_to_report_day(login_at: datetime, day_start: datetime, day_end: datetime, has_activity_that_day: bool) -> bool:
+    """A login session belongs in a given day's audit if it started that
+    day, OR — for a session that started earlier — if there's heartbeat
+    evidence it was still active at some point during that day.
+
+    Without the second clause, a session spanning midnight (logged in
+    yesterday, never logged out, still open or closed sometime today) shows
+    up in the Presence Timeline (built straight from today's heartbeats) but
+    never in the audit table (which only ever looked at login_at) — same
+    session, inconsistent report. Confirmed live: an agent's ongoing session
+    appeared in the Gantt chart's agent list but the audit table below it
+    said "No logins recorded for this day".
+
+    Without the FIRST clause (i.e. requiring activity for every login
+    regardless of when it started), a login that crashed before its first
+    heartbeat would vanish from its own day's report instead of correctly
+    showing as Dropped."""
+    started_that_day = day_start <= login_at <= day_end
+    return started_that_day or has_activity_that_day
+
+
 def last_heartbeat_in_session(heartbeats: list, login_at: datetime, next_login_at: Optional[datetime]):
     """Returns the last heartbeat row (anything with a .logged_at, in
     ascending order) whose timestamp falls strictly within ONE login
@@ -744,6 +765,8 @@ async def shift_tracker(
     date: Optional[str] = Query(None),
     agent_id: Optional[int] = Query(None),
     department_id: Optional[int] = Query(None),
+    audit_page: int = Query(1, ge=1),
+    audit_page_size: int = Query(20, ge=1, le=200),
     ctx: dict = Depends(require_tab_permission("analytics")),
 ):
     """Single-day view — the Gantt is inherently per-day, unlike every other
@@ -752,7 +775,10 @@ async def shift_tracker(
     the point this feature shipped — earlier dates return empty, not wrong.
 
     See lagos_day_bounds() for why `date` (a browser <input type="date">
-    value) isn't treated as a UTC day."""
+    value) isn't treated as a UTC day. The Login & Device Audit list is
+    paginated (`audit_page`/`audit_page_size`) since it only grows as agents
+    log in and out — the Gantt/KPIs above it are unaffected, they're
+    day-scoped aggregates, not a list."""
     def _fetch():
         db = get_db()
         try:
@@ -837,32 +863,52 @@ async def shift_tracker(
             ]
             timeline.sort(key=lambda t: t["agent"])
 
+            # A session doesn't reset just because the calendar does — an agent
+            # who logged in yesterday and never logged out (still working past
+            # midnight, or dropped without a clean close) has heartbeats today
+            # that need a login row to attach to. Confirmed live: "customer
+            # success" showed up in the Presence Timeline (built from today's
+            # heartbeats) but not in the audit table below (which only looked
+            # at login_at falling inside today) — same agent, same session,
+            # inconsistent report. So the query is widened to any login that
+            # could plausibly still be running today (started at or before
+            # day_end, and not already closed before today began); which of
+            # those are ACTUALLY relevant to today gets decided below by
+            # whether real activity happened today, not by this query alone.
+            # CROSS_DAY_LOOKBACK just keeps that widened query from scanning
+            # the entire table's history for how far back to check.
+            CROSS_DAY_LOOKBACK = timedelta(days=7)
             login_q = db.query(AgentLoginEvent).filter(
-                AgentLoginEvent.login_at >= day_start, AgentLoginEvent.login_at <= day_end
+                AgentLoginEvent.login_at <= day_end,
+                AgentLoginEvent.login_at >= day_start - CROSS_DAY_LOOKBACK,
+                or_(AgentLoginEvent.logout_at.is_(None), AgentLoginEvent.logout_at >= day_start),
             )
             if allowed_ids is not None:
                 login_q = login_q.filter(AgentLoginEvent.agent_id.in_(allowed_ids))
-            login_rows = login_q.order_by(AgentLoginEvent.login_at.desc()).all()
+            candidate_logins = login_q.order_by(AgentLoginEvent.login_at.desc()).all()
 
             # Boundaries for scoping a heartbeat to ONE specific login session --
-            # an agent can have several logins the same day (multiple devices,
-            # or logging back in after a dropped session), and only a heartbeat
-            # strictly between a login and that agent's NEXT login could
-            # possibly belong to it.
+            # an agent can have several logins in this window (multiple
+            # devices, logging back in after a dropped session, or a session
+            # spanning midnight), and only a heartbeat strictly between a
+            # login and that agent's NEXT login could possibly belong to it.
             login_rows_by_agent: dict = {}
-            for ev in login_rows:
+            for ev in candidate_logins:
                 login_rows_by_agent.setdefault(ev.agent_id, []).append(ev)
             for evs in login_rows_by_agent.values():
                 evs.sort(key=lambda e: e.login_at)
 
             audit = []
-            for ev in login_rows:
+            for ev in candidate_logins:
                 agent_obj = agents_by_id.get(ev.agent_id)
                 agent_logins = login_rows_by_agent[ev.agent_id]
                 idx = agent_logins.index(ev)
                 next_login_at = agent_logins[idx + 1].login_at if idx + 1 < len(agent_logins) else None
 
                 last_hb = last_heartbeat_in_session(rows_by_agent.get(ev.agent_id, []), ev.login_at, next_login_at)
+                if not session_belongs_to_report_day(ev.login_at, day_start, day_end, has_activity_that_day=last_hb is not None):
+                    continue
+
                 session_status = classify_session_status(
                     ev.logout_at,
                     last_hb.status if last_hb else None,
@@ -878,6 +924,10 @@ async def shift_tracker(
                     "session_status": session_status,
                 })
 
+            audit_total = len(audit)
+            audit_start = (audit_page - 1) * audit_page_size
+            audit_page_items = audit[audit_start:audit_start + audit_page_size]
+
             return {
                 "date": day.isoformat(),
                 "kpis": {
@@ -886,7 +936,12 @@ async def shift_tracker(
                     "avg_idle_rate_pct": round(sum(idle_rates) / len(idle_rates), 1) if idle_rates else None,
                 },
                 "timeline": timeline,
-                "audit": audit,
+                "audit": {
+                    "items": audit_page_items,
+                    "total": audit_total,
+                    "page": audit_page,
+                    "page_size": audit_page_size,
+                },
             }
         finally:
             db.close()

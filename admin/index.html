@@ -145,14 +145,16 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .esc-resolve-confirm{background:var(--orange);border:1px solid var(--orange);color:#fff}
 .esc-resolve-confirm:hover{background:var(--orange-d)}
 .esc-resolve-confirm:disabled{opacity:.6;cursor:default}
-/* Pagination footer */
-.esc-pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--g100)}
-.esc-pagination-info{font-size:12px;color:var(--g400)}
-.esc-pagination-btns{display:flex;align-items:center;gap:12px}
-.esc-pagination-btns button{font-size:12px;font-weight:700;padding:6px 14px;border-radius:7px;border:1px solid var(--g200);background:#fff;color:var(--g700);cursor:pointer;font-family:inherit;transition:background .15s}
-.esc-pagination-btns button:hover:not(:disabled){background:var(--g50)}
-.esc-pagination-btns button:disabled{opacity:.4;cursor:not-allowed}
-.esc-pagination-page{font-size:12px;font-weight:600;color:var(--g600);font-variant-numeric:tabular-nums}
+/* Pagination footer -- shared by any paginated list (Needs Attention,
+   Shift Tracker's Login & Device Audit, and whatever else grows a list
+   worth paging later) rather than a copy per feature. */
+.pager{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--g100)}
+.pager-info{font-size:12px;color:var(--g400)}
+.pager-btns{display:flex;align-items:center;gap:12px}
+.pager-btns button{font-size:12px;font-weight:700;padding:6px 14px;border-radius:7px;border:1px solid var(--g200);background:#fff;color:var(--g700);cursor:pointer;font-family:inherit;transition:background .15s}
+.pager-btns button:hover:not(:disabled){background:var(--g50)}
+.pager-btns button:disabled{opacity:.4;cursor:not-allowed}
+.pager-page{font-size:12px;font-weight:600;color:var(--g600);font-variant-numeric:tabular-nums}
 .sb-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
 .sb-icon svg{width:18px;height:18px}
 /* Generic small icon-only action button (delete/trash/edit-style controls
@@ -5118,11 +5120,11 @@ function _renderEscPagination(){
   if(totalPages<=1)return'';
   const from=(escalationPage-1)*ESC_PAGE_SIZE+1;
   const to=Math.min(escalationPage*ESC_PAGE_SIZE,escalationTotal);
-  return `<div class="esc-pagination">
-    <span class="esc-pagination-info">Showing ${from}–${to} of ${escalationTotal}</span>
-    <div class="esc-pagination-btns">
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${escalationTotal}</span>
+    <div class="pager-btns">
       <button ${escalationPage<=1?'disabled':''} onclick="changeEscalationPage(-1)">Prev</button>
-      <span class="esc-pagination-page">Page ${escalationPage} of ${totalPages}</span>
+      <span class="pager-page">Page ${escalationPage} of ${totalPages}</span>
       <button ${escalationPage>=totalPages?'disabled':''} onclick="changeEscalationPage(1)">Next</button>
     </div>
   </div>`;
@@ -7821,7 +7823,11 @@ function _renderGanttRow(agentName,segments){
   </div>`;
 }
 
-async function loadShiftTrackerTab(){
+let shiftAuditPage=1,shiftAuditTotal=0;
+const SHIFT_AUDIT_PAGE_SIZE=20;
+
+async function loadShiftTrackerTab(preservePage){
+  if(!preservePage)shiftAuditPage=1;
   const kpiEl=document.getElementById('shiftKpiCards');
   const ganttEl=document.getElementById('shiftGanttChart');
   const auditEl=document.getElementById('shiftAuditTable');
@@ -7829,7 +7835,7 @@ async function loadShiftTrackerTab(){
   kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
   try{
     const date=document.getElementById('shiftDatePicker')?.value||new Date().toISOString().slice(0,10);
-    const qs=new URLSearchParams({key:adminKey,date});
+    const qs=new URLSearchParams({key:adminKey,date,audit_page:shiftAuditPage,audit_page_size:SHIFT_AUDIT_PAGE_SIZE});
     const agentId=document.getElementById('anAgentFilter')?.value;
     const deptId=document.getElementById('anDeptFilter')?.value;
     if(agentId)qs.set('agent_id',agentId);
@@ -7851,7 +7857,9 @@ async function loadShiftTrackerTab(){
       ganttEl.innerHTML=d.timeline.map(t=>_renderGanttRow(t.agent,t.segments)).join('');
     }
 
-    if(!d.audit||!d.audit.length){
+    const audit=d.audit||{items:[],total:0,page:1,page_size:SHIFT_AUDIT_PAGE_SIZE};
+    shiftAuditTotal=audit.total||0;
+    if(!audit.items||!audit.items.length){
       auditEl.innerHTML='<p style="color:var(--g400);font-size:13px">No logins recorded for this day</p>';
     } else {
       const statusBadge=s=>{
@@ -7860,7 +7868,7 @@ async function loadShiftTrackerTab(){
       };
       auditEl.innerHTML=`<table class="agt-table">
         <thead><tr><th>Agent</th><th>Login Time</th><th>Logout Time</th><th>Device OS</th><th>IP</th><th>Session Status</th></tr></thead>
-        <tbody>${d.audit.map(row=>`<tr>
+        <tbody>${audit.items.map(row=>`<tr>
           <td style="font-weight:600">${esc(row.agent)}</td>
           <td style="font-size:12px">${_anFmtDateTime(row.login_at)}</td>
           <td style="font-size:12px">${row.logout_at?_anFmtDateTime(row.logout_at):'—'}</td>
@@ -7868,9 +7876,28 @@ async function loadShiftTrackerTab(){
           <td style="font-size:12px;color:var(--g500)">${esc(row.ip_address||'—')}</td>
           <td>${statusBadge(row.session_status)}</td>
         </tr>`).join('')}</tbody>
-      </table>`;
+      </table>${_renderShiftAuditPagination()}`;
     }
   }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+function _renderShiftAuditPagination(){
+  const totalPages=Math.max(1,Math.ceil(shiftAuditTotal/SHIFT_AUDIT_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(shiftAuditPage-1)*SHIFT_AUDIT_PAGE_SIZE+1;
+  const to=Math.min(shiftAuditPage*SHIFT_AUDIT_PAGE_SIZE,shiftAuditTotal);
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${shiftAuditTotal}</span>
+    <div class="pager-btns">
+      <button ${shiftAuditPage<=1?'disabled':''} onclick="changeShiftAuditPage(-1)">Prev</button>
+      <span class="pager-page">Page ${shiftAuditPage} of ${totalPages}</span>
+      <button ${shiftAuditPage>=totalPages?'disabled':''} onclick="changeShiftAuditPage(1)">Next</button>
+    </div>
+  </div>`;
+}
+function changeShiftAuditPage(delta){
+  const totalPages=Math.max(1,Math.ceil(shiftAuditTotal/SHIFT_AUDIT_PAGE_SIZE));
+  shiftAuditPage=Math.min(Math.max(1,shiftAuditPage+delta),totalPages);
+  loadShiftTrackerTab(true);
 }
 // ── End Shift & Login Tracker ──────────────────────────────────────────────────
 
