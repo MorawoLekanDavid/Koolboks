@@ -8,7 +8,7 @@ from sqlalchemy import and_, case, func, or_, select, text
 from chatbot.config import BOT_SENDER_NAMES
 from chatbot.database import get_db
 from chatbot.routers.permissions import get_analytics_scope, require_org_wide_analytics, require_tab_permission
-from chatbot.models import Agent, AgentHeartbeatLog, AgentLoginEvent, ConversationScore, Department, HandoffEvent, Lead, Message
+from chatbot.models import Agent, AgentHeartbeatLog, AgentLoginEvent, ConversationScore, Department, Escalation, HandoffEvent, Lead, Message
 from chatbot.services.presence_service import HEARTBEAT_TTL
 from chatbot.utils.phone import normalize_phone
 
@@ -81,23 +81,41 @@ async def agent_handoffs(
 
 
 @router.get("/product-recommendations")
-async def product_recommendations(ctx: dict = Depends(require_org_wide_analytics)):
+async def product_recommendations(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    ctx: dict = Depends(require_org_wide_analytics),
+):
+    """Was hard-capped at the top 10 products ever recommended — fine while
+    the catalogue was small, but it silently hid the long tail as more
+    products (and product-name variants) accumulated. Now paginated instead,
+    same {items, total, page, page_size} envelope as everywhere else; `pct`
+    is still computed against the TRUE grand total across every product, not
+    just whichever page is showing, so the percentages stay meaningful no
+    matter which page you're looking at."""
     def _fetch():
         db = get_db()
         try:
-            rows = db.execute(
+            base = (
                 select(Lead.product_interest, func.count(Lead.id).label("count"))
                 .where(Lead.product_interest != None, Lead.product_interest != "")
                 .group_by(Lead.product_interest)
-                .order_by(func.count(Lead.id).desc())
-                .limit(10)
+            )
+            all_rows = db.execute(base).all()
+            grand_total = sum(r.count for r in all_rows)
+            total_products = len(all_rows)
+
+            rows = db.execute(
+                base.order_by(func.count(Lead.id).desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             ).all()
-            total = sum(r.count for r in rows)
-            return [
+            items = [
                 {"product": r.product_interest, "count": r.count,
-                 "pct": round(r.count / total * 100) if total else 0}
+                 "pct": round(r.count / grand_total * 100) if grand_total else 0}
                 for r in rows
             ]
+            return {"items": items, "total": total_products, "page": page, "page_size": page_size}
         finally:
             db.close()
     return await run_in_threadpool(_fetch)
@@ -299,6 +317,8 @@ async def lead_funnel(ctx: dict = Depends(require_org_wide_analytics)):
 async def conversation_quality(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    flagged_page: int = Query(1, ge=1),
+    flagged_page_size: int = Query(20, ge=1, le=200),
     ctx: dict = Depends(require_org_wide_analytics),
 ):
     def _fetch():
@@ -317,7 +337,9 @@ async def conversation_quality(
 
             if not rows:
                 return {"avg_score": None, "total_scored": 0, "lost_count": 0,
-                        "issue_counts": {}, "flagged": [], "trend": [],
+                        "issue_counts": {},
+                        "flagged": {"items": [], "total": 0, "page": flagged_page, "page_size": flagged_page_size},
+                        "trend": [],
                         "auto_resolution_rate": None, "handoff_rate": None,
                         "trend_bot": [], "trend_human": []}
 
@@ -359,7 +381,16 @@ async def conversation_quality(
                 for d, v in sorted(human_trend_map.items())
             ]
 
-            flagged_rows = [r for r in rows if r.likely_lost_customer][:50]
+            # Was hard-capped at the 50 most recent flagged conversations --
+            # fine as a stopgap, but it silently hid anything older than that
+            # with no way to see the rest. Paginated instead, same envelope
+            # as everywhere else; avg_score/trend/issue_counts above are
+            # unaffected since they're computed from the full `rows`, not
+            # this list.
+            all_flagged_rows = [r for r in rows if r.likely_lost_customer]
+            flagged_total = len(all_flagged_rows)
+            fp_start = (flagged_page - 1) * flagged_page_size
+            flagged_rows = all_flagged_rows[fp_start:fp_start + flagged_page_size]
             flagged_phones = [r.phone for r in flagged_rows]
             name_map: dict = {}
             if flagged_phones:
@@ -371,7 +402,7 @@ async def conversation_quality(
                 ).all()
                 name_map = {nr.phone: nr.name for nr in name_rows}
 
-            flagged = [
+            flagged_items = [
                 {
                     "phone": r.phone,
                     "name": name_map.get(r.phone),
@@ -389,7 +420,12 @@ async def conversation_quality(
                 "total_scored": len(rows),
                 "lost_count": lost_count,
                 "issue_counts": issue_counts,
-                "flagged": flagged,
+                "flagged": {
+                    "items": flagged_items,
+                    "total": flagged_total,
+                    "page": flagged_page,
+                    "page_size": flagged_page_size,
+                },
                 "trend": trend,
                 "auto_resolution_rate": auto_resolution_rate,
                 "handoff_rate": handoff_rate,
@@ -477,6 +513,8 @@ async def agent_performance(
     date_to: Optional[str] = Query(None),
     agent_id: Optional[int] = Query(None),
     department_id: Optional[int] = Query(None),
+    leaderboard_page: int = Query(1, ge=1),
+    leaderboard_page_size: int = Query(20, ge=1, le=200),
     ctx: dict = Depends(require_tab_permission("analytics")),
 ):
     """AHT and resolution rate are real, computed directly from HandoffEvent
@@ -508,6 +546,23 @@ async def agent_performance(
             if date_to:
                 hq = hq.filter(HandoffEvent.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
             events = hq.order_by(HandoffEvent.phone, HandoffEvent.created_at).all()
+
+            # HandoffEvent.agent_name is really "whatever label silenced the
+            # bot" — a real agent's name when a human takes over, but also a
+            # system-generated placeholder for a non-agent handoff: the
+            # escalation engine stamps a unique "Escalation #N (category)"
+            # label per ticket (see escalation_service.set_handoff), and an
+            # older media-handoff path used a fixed "Awaiting agent (media)"
+            # label. None of those are a real agent, so left unfiltered they
+            # show up as one bogus "agent" row apiece — confirmed live, a
+            # leaderboard with a dozen "Escalation #N" rows — and their
+            # durations skew the org-wide AHT/SLA averages since those
+            # tickets can legitimately sit open for hours before a human
+            # actually engages, which has nothing to do with any agent's
+            # handling speed. A deleted agent's historical events are an
+            # accepted, minor loss from this same filter — preferable to
+            # counting fictitious ones.
+            events = [e for e in events if e.agent_name in agents_by_name]
             if allowed_names is not None:
                 events = [e for e in events if e.agent_name in allowed_names]
 
@@ -600,7 +655,11 @@ async def agent_performance(
 
             dept_names = {d.id: d.name for d in db.query(Department).all()}
 
-            all_names = set(agent_stats.keys()) | set(conv_by_agent.keys())
+            # Same non-agent-label guard as the HandoffEvent filter above --
+            # conv_by_agent is sourced independently from Message.name, so it
+            # needs its own real-agent check rather than trusting it just
+            # because agent_stats (already filtered) happens to agree.
+            all_names = (set(agent_stats.keys()) | set(conv_by_agent.keys())) & set(agents_by_name.keys())
             if allowed_names is not None:
                 all_names &= allowed_names
 
@@ -617,7 +676,14 @@ async def agent_performance(
                     "open_chats": stats["open_chats"],
                     "aht_minutes": round(sum(durations) / len(durations) / 60, 1) if durations else None,
                     "sla_seconds": round(sum(slas) / len(slas), 1) if slas else None,
-                    "resolution_rate": round(stats["handbacks"] / stats["takeovers"] * 100, 1) if stats["takeovers"] else None,
+                    # Paired takeover->handback count, not the raw handback
+                    # count -- a handback whose takeover happened before
+                    # date_from still increments "handbacks" with no matching
+                    # takeover in this window, which could push the old
+                    # handbacks/takeovers formula over 100%. len(durations) is
+                    # bounded by takeovers by construction (one pair consumes
+                    # exactly one in-window takeover), so this can't happen.
+                    "resolution_rate": round(len(durations) / stats["takeovers"] * 100, 1) if stats["takeovers"] else None,
                     "conversion_rate": conversion_by_agent.get(name),
                     "total_conversations": conv_by_agent.get(name, 0),
                 })
@@ -627,17 +693,167 @@ async def agent_performance(
             all_slas = [s for lst in sla_by_agent.values() for s in lst]
             total_closures = sum(s["handbacks"] for name, s in agent_stats.items() if name in all_names)
 
+            # Chart reflects every real agent regardless of page — it's a
+            # different view of the same data, not a continuation of the list.
+            chart = [
+                {"agent": r["agent"], "total_conversations": r["total_conversations"], "avg_aht_minutes": r["aht_minutes"]}
+                for r in leaderboard
+            ]
+            leaderboard_total = len(leaderboard)
+            lb_start = (leaderboard_page - 1) * leaderboard_page_size
+            leaderboard_page_items = leaderboard[lb_start:lb_start + leaderboard_page_size]
+
             return {
                 "kpis": {
                     "avg_aht_minutes": round(sum(all_durations) / len(all_durations) / 60, 1) if all_durations else None,
                     "avg_sla_seconds": round(sum(all_slas) / len(all_slas), 1) if all_slas else None,
                     "total_closures": total_closures,
                 },
-                "leaderboard": leaderboard,
-                "chart": [
-                    {"agent": r["agent"], "total_conversations": r["total_conversations"], "avg_aht_minutes": r["aht_minutes"]}
-                    for r in leaderboard
-                ],
+                "leaderboard": {
+                    "items": leaderboard_page_items,
+                    "total": leaderboard_total,
+                    "page": leaderboard_page,
+                    "page_size": leaderboard_page_size,
+                },
+                "chart": chart,
+            }
+        finally:
+            db.close()
+    return await run_in_threadpool(_fetch)
+
+
+@router.get("/escalations")
+async def escalation_analytics(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    agent_id: Optional[int] = Query(None),
+    department_id: Optional[int] = Query(None),
+    leaderboard_page: int = Query(1, ge=1),
+    leaderboard_page_size: int = Query(20, ge=1, le=200),
+    ctx: dict = Depends(require_tab_permission("analytics")),
+):
+    """Business/data-analyst view of the Human Escalation Engine (see
+    chatbot/services/escalation_service.py): volume trend, response and
+    resolution speed, category/priority/status mix, and a per-agent
+    resolution leaderboard. Filtered by created_at (when the ticket was
+    opened) — same date-range convention as every other Analytics Console
+    tab. Scoped the same way Agent Performance is: a restricted role only
+    sees escalations assigned to agents within their own scope."""
+    def _fetch():
+        db = get_db()
+        try:
+            scope = get_analytics_scope(db, ctx)
+            agents_by_id = {a.id: a for a in db.query(Agent).all()}
+            allowed_ids = None
+            if agent_id:
+                allowed_ids = {agent_id}
+            elif department_id:
+                allowed_ids = {a.id for a in agents_by_id.values() if a.department_id == department_id}
+            if not scope["unrestricted"]:
+                allowed_ids = scope["agent_ids"] if allowed_ids is None else (allowed_ids & scope["agent_ids"])
+
+            q = db.query(Escalation)
+            if date_from:
+                q = q.filter(Escalation.created_at >= datetime.fromisoformat(date_from))
+            if date_to:
+                q = q.filter(Escalation.created_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+            if allowed_ids is not None:
+                q = q.filter(Escalation.assigned_agent_id.in_(allowed_ids))
+            rows = q.order_by(Escalation.created_at.desc()).all()
+
+            empty_leaderboard = {"items": [], "total": 0, "page": leaderboard_page, "page_size": leaderboard_page_size}
+            if not rows:
+                return {
+                    "kpis": {"total": 0, "open_count": 0, "avg_first_response_minutes": None,
+                             "avg_resolution_minutes": None, "resolution_rate_pct": None,
+                             "sla_breach_rate_pct": None},
+                    "trend": [], "by_category": [], "by_priority": [], "by_status": [],
+                    "leaderboard": empty_leaderboard,
+                }
+
+            total = len(rows)
+            OPEN_STATUSES = ("open", "assigned", "in_progress", "reopened")
+            open_count = sum(1 for r in rows if r.status in OPEN_STATUSES)
+            resolved_rows = [r for r in rows if r.status == "resolved"]
+
+            first_response_minutes = [
+                (r.first_response_at - r.created_at).total_seconds() / 60
+                for r in rows if r.first_response_at
+            ]
+            resolution_minutes = [
+                (r.resolved_at - r.created_at).total_seconds() / 60
+                for r in resolved_rows if r.resolved_at
+            ]
+            # SLA breach = the watchdog had to page the routing fallback agent
+            # because nobody responded in time (see check_sla_breaches() in
+            # escalation_service.py) — a real, already-computed signal, not a
+            # newly-invented threshold.
+            sla_breaches = sum(1 for r in rows if r.sla_notified_at is not None)
+
+            # Volume by the calendar day the ticket was opened, in Lagos time
+            # (same convention as Shift Tracker — every agent reading this is
+            # in Nigeria).
+            trend_map: dict = {}
+            for r in rows:
+                day = (r.created_at + LAGOS_UTC_OFFSET).date().isoformat()
+                trend_map[day] = trend_map.get(day, 0) + 1
+            trend = [{"date": d, "count": c} for d, c in sorted(trend_map.items())]
+
+            def _bucket(field):
+                counts: dict = {}
+                for r in rows:
+                    val = getattr(r, field) or "other"
+                    counts[val] = counts.get(val, 0) + 1
+                return [{"key": k, "count": v} for k, v in sorted(counts.items(), key=lambda kv: -kv[1])]
+
+            # Per-agent resolution leaderboard — who's actually closing these
+            # out and how fast. Unassigned tickets have nothing to attribute
+            # this to, so they're excluded from this specific breakdown (they
+            # still count fully in every KPI/chart above).
+            agent_stats: dict = {}
+            for r in rows:
+                if not r.assigned_agent_id:
+                    continue
+                s = agent_stats.setdefault(r.assigned_agent_id, {"assigned": 0, "resolved": 0, "resolution_minutes": [], "reopens": 0})
+                s["assigned"] += 1
+                if r.status == "resolved":
+                    s["resolved"] += 1
+                    if r.resolved_at:
+                        s["resolution_minutes"].append((r.resolved_at - r.created_at).total_seconds() / 60)
+                s["reopens"] += r.reopen_count or 0
+
+            leaderboard_full = []
+            for aid, s in agent_stats.items():
+                agent_obj = agents_by_id.get(aid)
+                leaderboard_full.append({
+                    "agent": agent_obj.name if agent_obj else f"Agent {aid}",
+                    "assigned": s["assigned"],
+                    "resolved": s["resolved"],
+                    "avg_resolution_minutes": round(sum(s["resolution_minutes"]) / len(s["resolution_minutes"]), 1) if s["resolution_minutes"] else None,
+                    "reopen_count": s["reopens"],
+                })
+            leaderboard_full.sort(key=lambda r: -r["assigned"])
+            lb_start = (leaderboard_page - 1) * leaderboard_page_size
+
+            return {
+                "kpis": {
+                    "total": total,
+                    "open_count": open_count,
+                    "avg_first_response_minutes": round(sum(first_response_minutes) / len(first_response_minutes), 1) if first_response_minutes else None,
+                    "avg_resolution_minutes": round(sum(resolution_minutes) / len(resolution_minutes), 1) if resolution_minutes else None,
+                    "resolution_rate_pct": round(len(resolved_rows) / total * 100, 1),
+                    "sla_breach_rate_pct": round(sla_breaches / total * 100, 1),
+                },
+                "trend": trend,
+                "by_category": _bucket("category"),
+                "by_priority": _bucket("priority"),
+                "by_status": _bucket("status"),
+                "leaderboard": {
+                    "items": leaderboard_full[lb_start:lb_start + leaderboard_page_size],
+                    "total": len(leaderboard_full),
+                    "page": leaderboard_page,
+                    "page_size": leaderboard_page_size,
+                },
             }
         finally:
             db.close()

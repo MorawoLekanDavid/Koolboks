@@ -138,8 +138,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
 .esc-resolve-form label{font-size:11.5px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.3px}
 .esc-resolve-form textarea{width:100%;min-height:64px;padding:9px 11px;border:1.5px solid var(--g200);border-radius:7px;font-family:inherit;font-size:13px;line-height:1.4;color:var(--g800);resize:vertical;background:#fff}
 .esc-resolve-form textarea:focus{outline:none;border-color:var(--orange)}
-.esc-resolve-form-actions{display:flex;justify-content:flex-end;gap:8px}
-.esc-resolve-form-actions button{font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px;cursor:pointer;font-family:inherit;transition:background .15s}
+.esc-resolve-form-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px}
+.esc-resolve-form-actions button{font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px;cursor:pointer;font-family:inherit;transition:background .15s;display:inline-flex;align-items:center;gap:5px;line-height:1.2}
+.esc-resolve-form-actions button svg{width:13px;height:13px;flex-shrink:0}
 .esc-resolve-cancel{background:#fff;border:1px solid var(--g200);color:var(--g600)}
 .esc-resolve-cancel:hover{background:var(--g100)}
 .esc-resolve-confirm{background:var(--orange);border:1px solid var(--orange);color:#fff}
@@ -1580,20 +1581,21 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <button class="bulk-tab active" data-subtab="overview" onclick="switchAnalyticsSubTab('overview')">Overview</button>
       <button class="bulk-tab" data-subtab="shift" onclick="switchAnalyticsSubTab('shift')">Shift &amp; Login</button>
       <button class="bulk-tab" data-subtab="agentPerf" onclick="switchAnalyticsSubTab('agentPerf')">Agent Performance</button>
+      <button class="bulk-tab" data-subtab="escalations" onclick="switchAnalyticsSubTab('escalations')">Escalations</button>
       <button class="bulk-tab" data-subtab="aiPerf" onclick="switchAnalyticsSubTab('aiPerf')">AI Performance</button>
       <button class="bulk-tab" data-subtab="traffic" onclick="switchAnalyticsSubTab('traffic')">Traffic</button>
       <button class="bulk-tab" data-subtab="campaigns" onclick="switchAnalyticsSubTab('campaigns')">Campaigns</button>
       <button class="bulk-tab" data-subtab="retention" onclick="switchAnalyticsSubTab('retention')">Retention</button>
     </div>
 
-    <!-- Overview panel: Lead Funnel + Product Recommendations -->
+    <!-- Overview panel: Lead Funnel + Product Recommendations, side by side -->
     <div id="anPanel-overview">
       <div class="cards-grid">
-        <div class="card"><h3>Lead Funnel</h3><div class="stat-cards-row" id="funnelCards"></div><div id="funnelBars"></div></div>
-      </div>
-      <div class="card" style="margin-top:20px">
-        <h3>Product Recommendations <span style="font-size:11px;font-weight:500;color:var(--g400)">— what the bot recommends most</span></h3>
-        <div id="productRecContent"><p style="color:var(--g400);font-size:13px">Loading...</p></div>
+        <div class="card" style="flex:1;min-width:340px"><h3>Lead Funnel</h3><div class="stat-cards-row" id="funnelCards"></div><div id="funnelBars"></div></div>
+        <div class="card" style="flex:1;min-width:340px">
+          <h3>Product Recommendations <span style="font-size:11px;font-weight:500;color:var(--g400)">— what the bot recommends most</span></h3>
+          <div id="productRecContent"><p style="color:var(--g400);font-size:13px">Loading...</p></div>
+        </div>
       </div>
     </div>
 
@@ -1648,6 +1650,49 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       </div>
     </div>
 
+    <!-- Escalations (Human Escalation Engine analytics) -->
+    <div id="anPanel-escalations" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h3 style="margin:0 0 2px;display:flex;align-items:center;gap:8px"><span class="icon-sm" data-icon="warning"></span>Escalations</h3>
+          <p style="font-size:12px;color:var(--g400);margin:0">Volume, response speed, and resolution outcomes for conversations Itura flagged for a human — see the Needs Attention tab for the live queue this data comes from.</p>
+        </div>
+
+        <div class="stat-cards-row" id="escAnKpiCards"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          <div style="flex:1;min-width:340px">
+            <p class="an-section-lbl">Escalations Opened Per Day</p>
+            <div id="escAnTrendChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+          <div style="flex:1;min-width:340px">
+            <p class="an-section-lbl">By Category</p>
+            <div id="escAnCategoryChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px">
+            <p class="an-section-lbl">By Priority</p>
+            <div id="escAnPriorityChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+          <div style="flex:1;min-width:280px">
+            <p class="an-section-lbl">By Status</p>
+            <div id="escAnStatusChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
+
+        <p class="an-section-lbl">Resolution by Agent</p>
+        <div id="escAnLeaderboard" style="overflow-x:auto"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+      </div>
+    </div>
+
     <!-- AI Performance & Conversational Quality -->
     <div id="anPanel-aiPerf" class="hidden">
       <div class="card">
@@ -1691,13 +1736,16 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 
         <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
 
-        <p class="an-section-lbl">Hourly Message Volume</p>
-        <div id="trafficVolumeChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
-
-        <div style="border-top:1px solid var(--g100);margin:22px 0 20px"></div>
-
-        <p class="an-section-lbl">Delivery Pipeline</p>
-        <div id="trafficFunnel" style="max-width:480px"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          <div style="flex:1;min-width:340px">
+            <p class="an-section-lbl">Hourly Message Volume</p>
+            <div id="trafficVolumeChart"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+          <div style="flex:1;min-width:280px">
+            <p class="an-section-lbl">Delivery Pipeline</p>
+            <div id="trafficFunnel"><p style="color:var(--g400);font-size:13px">Loading…</p></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3884,18 +3932,25 @@ function loadReassignmentRequests(){
   if(isApprover)loadReassignPending();
   loadReassignHistory();
 }
-async function loadReassignPending(){
+let reassignPendingPage=1,reassignPendingTotal=0;
+const REASSIGN_PAGE_SIZE=20;
+
+async function loadReassignPending(preservePage){
+  if(!preservePage)reassignPendingPage=1;
   const el=document.getElementById('reassignPendingList');
   const badge=document.getElementById('reassignPendingCount');
   el.innerHTML='<p class="d-placeholder">Loading…</p>';
   try{
-    const r=await fetch(`/admin/reassignment-requests?status=pending&key=${encodeURIComponent(adminKey)}`);
-    const rows=r.ok?await r.json():[];
+    const r=await fetch(`/admin/reassignment-requests?status=pending&page=${reassignPendingPage}&page_size=${REASSIGN_PAGE_SIZE}&key=${encodeURIComponent(adminKey)}`);
+    const data=r.ok?await r.json():{items:[],total:0};
+    reassignPendingTotal=data.total||0;
     if(badge){
-      if(rows.length){badge.style.display='inline-block';badge.textContent=rows.length;}
+      if(reassignPendingTotal){badge.style.display='inline-block';badge.textContent=reassignPendingTotal;}
       else badge.style.display='none';
     }
-    el.innerHTML=rows.length?rows.map(renderReassignPendingRow).join('')
+    const rows=data.items||[];
+    el.innerHTML=rows.length
+      ?rows.map(renderReassignPendingRow).join('')+_renderReassignPager('pending')
       :emptyState(ICON.check,'All caught up','No pending reassignment requests.');
     hydrateIcons(el);
   }catch(e){el.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
@@ -3923,16 +3978,49 @@ async function decideReassignRequest(id,action){
     loadReassignmentRequests();
   }catch(e){alert(e.message||'Failed to update request');}
 }
-async function loadReassignHistory(){
+let reassignHistoryPage=1,reassignHistoryTotal=0;
+
+async function loadReassignHistory(preservePage){
+  if(!preservePage)reassignHistoryPage=1;
   const el=document.getElementById('reassignHistoryList');
   el.innerHTML='<p class="d-placeholder">Loading…</p>';
   try{
-    const r=await fetch(`/admin/reassignment-requests?status=all&key=${encodeURIComponent(adminKey)}`);
-    const rows=r.ok?await r.json():[];
-    el.innerHTML=rows.length?rows.map(renderReassignHistoryRow).join('')
+    const r=await fetch(`/admin/reassignment-requests?status=all&page=${reassignHistoryPage}&page_size=${REASSIGN_PAGE_SIZE}&key=${encodeURIComponent(adminKey)}`);
+    const data=r.ok?await r.json():{items:[],total:0};
+    reassignHistoryTotal=data.total||0;
+    const rows=data.items||[];
+    el.innerHTML=rows.length
+      ?rows.map(renderReassignHistoryRow).join('')+_renderReassignPager('history')
       :emptyState(ICON.clipboard,'Nothing yet','No reassignment activity to show.');
     hydrateIcons(el);
   }catch(e){el.innerHTML='<p class="d-placeholder">Failed to load.</p>';}
+}
+function _renderReassignPager(which){
+  const page=which==='pending'?reassignPendingPage:reassignHistoryPage;
+  const total=which==='pending'?reassignPendingTotal:reassignHistoryTotal;
+  const totalPages=Math.max(1,Math.ceil(total/REASSIGN_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(page-1)*REASSIGN_PAGE_SIZE+1;
+  const to=Math.min(page*REASSIGN_PAGE_SIZE,total);
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${total}</span>
+    <div class="pager-btns">
+      <button ${page<=1?'disabled':''} onclick="changeReassignPage('${which}',-1)">Prev</button>
+      <span class="pager-page">Page ${page} of ${totalPages}</span>
+      <button ${page>=totalPages?'disabled':''} onclick="changeReassignPage('${which}',1)">Next</button>
+    </div>
+  </div>`;
+}
+function changeReassignPage(which,delta){
+  if(which==='pending'){
+    const totalPages=Math.max(1,Math.ceil(reassignPendingTotal/REASSIGN_PAGE_SIZE));
+    reassignPendingPage=Math.min(Math.max(1,reassignPendingPage+delta),totalPages);
+    loadReassignPending(true);
+  }else{
+    const totalPages=Math.max(1,Math.ceil(reassignHistoryTotal/REASSIGN_PAGE_SIZE));
+    reassignHistoryPage=Math.min(Math.max(1,reassignHistoryPage+delta),totalPages);
+    loadReassignHistory(true);
+  }
 }
 let _ownershipHistoryOpen=false;
 async function toggleOwnershipHistory(){
@@ -5328,11 +5416,11 @@ async function runAutoAssign(){
 let _anActiveSubtab='overview';
 let allDepartments=[];
 let _anCharts={};
-const AN_SUBTABS=['overview','shift','agentPerf','aiPerf','traffic','campaigns','retention'];
+const AN_SUBTABS=['overview','shift','agentPerf','escalations','aiPerf','traffic','campaigns','retention'];
 // Tabs whose Agent/Department dropdowns are real filters — the rest (AI
 // Performance, Traffic, Campaigns, Retention) run on tables with no agent/
 // department dimension, so those filters are greyed out there rather than faked.
-const AN_DIMENSIONAL_SUBTABS=['shift','agentPerf'];
+const AN_DIMENSIONAL_SUBTABS=['shift','agentPerf','escalations'];
 // Tabs with no per-agent breakdown — hidden entirely for regular agents
 // (server-enforced too, via require_org_wide_analytics), since there's no
 // way to scope a company-wide number down to "my own".
@@ -5471,6 +5559,7 @@ function switchAnalyticsSubTab(name){
     loadShiftTrackerTab();
   }
   if(name==='agentPerf')loadAgentPerformanceTab();
+  if(name==='escalations')loadEscalationAnalyticsTab();
   if(name==='aiPerf')loadAiPerformanceTab();
   if(name==='traffic')loadTrafficTab();
   if(name==='campaigns'){
@@ -5491,17 +5580,22 @@ async function loadFunnel(){
   }catch(e){console.error(e);}
 }
 
-async function loadProductRecs(){
+let productRecPage=1,productRecTotal=0;
+const PRODUCT_REC_PAGE_SIZE=10;
+
+async function loadProductRecs(preservePage){
+  if(!preservePage)productRecPage=1;
   const el=document.getElementById('productRecContent');
   try{
-    const r=await fetch(`/admin/analytics/product-recommendations?key=${encodeURIComponent(adminKey)}`);
+    const r=await fetch(`/admin/analytics/product-recommendations?page=${productRecPage}&page_size=${PRODUCT_REC_PAGE_SIZE}&key=${encodeURIComponent(adminKey)}`);
     if(!r.ok){el.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';return;}
-    const data=await r.json();
+    const resp=await r.json();
+    const data=resp.items||[];
+    productRecTotal=resp.total||0;
     if(!data.length){el.innerHTML='<p style="color:var(--g400);font-size:13px">No product recommendations recorded yet</p>';return;}
-    const total=data.reduce((s,d)=>s+d.count,0);
     const COLORS=['var(--orange)','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#84cc16'];
     el.innerHTML=`
-      <p style="font-size:12px;color:var(--g400);margin-bottom:14px">Based on ${total} lead${total!==1?'s':''} with product interest recorded</p>
+      <p style="font-size:12px;color:var(--g400);margin-bottom:14px">${productRecTotal} product${productRecTotal!==1?'s':''} with recorded interest</p>
       <div style="display:flex;flex-direction:column;gap:10px">
         ${data.map((d,i)=>`
           <div>
@@ -5513,8 +5607,27 @@ async function loadProductRecs(){
               <div style="height:100%;width:${d.pct}%;background:${COLORS[i%COLORS.length]};border-radius:99px;transition:width .4s ease"></div>
             </div>
           </div>`).join('')}
-      </div>`;
+      </div>${_renderProductRecPager()}`;
   }catch(e){el.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+function _renderProductRecPager(){
+  const totalPages=Math.max(1,Math.ceil(productRecTotal/PRODUCT_REC_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(productRecPage-1)*PRODUCT_REC_PAGE_SIZE+1;
+  const to=Math.min(productRecPage*PRODUCT_REC_PAGE_SIZE,productRecTotal);
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${productRecTotal}</span>
+    <div class="pager-btns">
+      <button ${productRecPage<=1?'disabled':''} onclick="changeProductRecPage(-1)">Prev</button>
+      <span class="pager-page">Page ${productRecPage} of ${totalPages}</span>
+      <button ${productRecPage>=totalPages?'disabled':''} onclick="changeProductRecPage(1)">Next</button>
+    </div>
+  </div>`;
+}
+function changeProductRecPage(delta){
+  const totalPages=Math.max(1,Math.ceil(productRecTotal/PRODUCT_REC_PAGE_SIZE));
+  productRecPage=Math.min(Math.max(1,productRecPage+delta),totalPages);
+  loadProductRecs(true);
 }
 
 // ── Team ───────────────────────────────────────────────────────────────
@@ -7902,7 +8015,8 @@ function changeShiftAuditPage(delta){
 // ── End Shift & Login Tracker ──────────────────────────────────────────────────
 
 // ── Agent Performance (Analytics Console Tab 2) ───────────────────────────────
-let _agentPerfLeaderboard=[];
+let agentPerfPage=1,agentPerfTotal=0;
+const AGENT_PERF_PAGE_SIZE=20;
 
 function _anFmtDuration(seconds){
   if(seconds<60)return Math.round(seconds)+'s';
@@ -7910,19 +8024,25 @@ function _anFmtDuration(seconds){
   return m+'m '+s+'s';
 }
 
-async function loadAgentPerformanceTab(){
+async function loadAgentPerformanceTab(preservePage){
+  if(!preservePage)agentPerfPage=1;
   const kpiEl=document.getElementById('agentPerfKpiCards');
   const chartEl=document.getElementById('agentPerfComboChart');
   const tableEl=document.getElementById('agentPerfLeaderboard');
   if(!kpiEl)return;
   kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
   try{
-    const r=await fetch(`/admin/analytics/agent-performance?${_anQS()}`);
+    const qs=_anQS();
+    qs.set('leaderboard_page',agentPerfPage);
+    qs.set('leaderboard_page_size',AGENT_PERF_PAGE_SIZE);
+    const r=await fetch(`/admin/analytics/agent-performance?${qs}`);
     if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';chartEl.innerHTML='';tableEl.innerHTML='';return;}
     const d=await r.json();
-    _agentPerfLeaderboard=d.leaderboard||[];
+    const chart=d.chart||[];
+    const lb=d.leaderboard||{items:[],total:0};
+    agentPerfTotal=lb.total||0;
 
-    if(!_agentPerfLeaderboard.length){
+    if(!chart.length){
       kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">No agent handoff activity in this period</p>';
       chartEl.innerHTML='';tableEl.innerHTML='';
       return;
@@ -7935,14 +8055,17 @@ async function loadAgentPerformanceTab(){
       <div class="stat-c"><div class="stat-n">${(k.total_closures||0).toLocaleString()}</div><div class="stat-l">Total Agent Closures</div></div>
     `;
 
+    // The chart always reflects every real agent for the period — it's not
+    // paginated, since a bar chart missing agents past page 1 would be
+    // actively misleading, unlike a list which is fine to page through.
     chartEl.innerHTML='<canvas id="agentPerfComboCanvas" height="240"></canvas>';
     _anDrawChart('agentPerfComboCanvas',{
       type:'bar',
       data:{
-        labels:_agentPerfLeaderboard.map(row=>row.agent),
+        labels:chart.map(row=>row.agent),
         datasets:[
-          {type:'bar',label:'Conversations',data:_agentPerfLeaderboard.map(row=>row.total_conversations),backgroundColor:'#FF6B00',order:2,yAxisID:'y'},
-          {type:'line',label:'Avg AHT (min)',data:_agentPerfLeaderboard.map(row=>row.aht_minutes),borderColor:'#1D4ED8',backgroundColor:'#1D4ED8',order:1,yAxisID:'y1',spanGaps:true},
+          {type:'bar',label:'Conversations',data:chart.map(row=>row.total_conversations),backgroundColor:'#FF6B00',order:2,yAxisID:'y'},
+          {type:'line',label:'Avg AHT (min)',data:chart.map(row=>row.avg_aht_minutes),borderColor:'#1D4ED8',backgroundColor:'#1D4ED8',order:1,yAxisID:'y1',spanGaps:true},
         ],
       },
       options:{
@@ -7964,7 +8087,7 @@ async function loadAgentPerformanceTab(){
         <th style="text-align:right">Conversion</th>
         <th style="text-align:right">Conversations</th>
       </tr></thead>
-      <tbody>${_agentPerfLeaderboard.map(row=>`<tr>
+      <tbody>${lb.items.map(row=>`<tr>
         <td style="font-weight:600">${esc(row.agent)}</td>
         <td style="color:var(--g500)">${esc(row.department||'—')}</td>
         <td style="text-align:right">${row.open_chats}</td>
@@ -7974,14 +8097,42 @@ async function loadAgentPerformanceTab(){
         <td style="text-align:right">${row.conversion_rate!=null?row.conversion_rate+'%':'—'}</td>
         <td style="text-align:right;font-weight:700">${row.total_conversations}</td>
       </tr>`).join('')}</tbody>
-    </table>`;
+    </table>${_renderAgentPerfPagination()}`;
   }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
 }
+function _renderAgentPerfPagination(){
+  const totalPages=Math.max(1,Math.ceil(agentPerfTotal/AGENT_PERF_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(agentPerfPage-1)*AGENT_PERF_PAGE_SIZE+1;
+  const to=Math.min(agentPerfPage*AGENT_PERF_PAGE_SIZE,agentPerfTotal);
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${agentPerfTotal}</span>
+    <div class="pager-btns">
+      <button ${agentPerfPage<=1?'disabled':''} onclick="changeAgentPerfPage(-1)">Prev</button>
+      <span class="pager-page">Page ${agentPerfPage} of ${totalPages}</span>
+      <button ${agentPerfPage>=totalPages?'disabled':''} onclick="changeAgentPerfPage(1)">Next</button>
+    </div>
+  </div>`;
+}
+function changeAgentPerfPage(delta){
+  const totalPages=Math.max(1,Math.ceil(agentPerfTotal/AGENT_PERF_PAGE_SIZE));
+  agentPerfPage=Math.min(Math.max(1,agentPerfPage+delta),totalPages);
+  loadAgentPerformanceTab(true);
+}
 
-function downloadAgentPerformance(){
-  if(!_agentPerfLeaderboard.length){alert('No data to download — load the Agent Performance tab first.');return;}
+async function downloadAgentPerformance(){
+  const qs=_anQS();
+  qs.set('leaderboard_page','1');
+  qs.set('leaderboard_page_size','1000');
+  let items;
+  try{
+    const r=await fetch(`/admin/analytics/agent-performance?${qs}`);
+    if(!r.ok)throw new Error();
+    items=(await r.json()).leaderboard?.items||[];
+  }catch(e){alert('Failed to prepare the CSV — please try again.');return;}
+  if(!items.length){alert('No data to download for this period.');return;}
   const header='Agent,Department,Open Chats (period),AHT (min),SLA (sec),Resolution Rate %,Conversion Rate %,Conversations';
-  const rows=_agentPerfLeaderboard.map(row=>[
+  const rows=items.map(row=>[
     row.agent,row.department||'',row.open_chats,
     row.aht_minutes??'',row.sla_seconds??'',row.resolution_rate??'',row.conversion_rate??'',row.total_conversations,
   ].join(','));
@@ -7994,6 +8145,145 @@ function downloadAgentPerformance(){
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
 // ── End Agent Performance ─────────────────────────────────────────────────────
+
+// ── Escalations (Analytics Console — Human Escalation Engine) ─────────────────
+const ESC_AN_PRIORITY_COLORS={high:'#EF4444',medium:'#D97706',low:'#94A3B8'};
+const ESC_AN_STATUS_COLORS={open:'#EF4444',assigned:'#D97706',in_progress:'#D97706',resolved:'#10B981',reopened:'#EF4444'};
+let escAnLeaderboardPage=1,escAnLeaderboardTotal=0;
+const ESC_AN_LEADERBOARD_PAGE_SIZE=20;
+
+function _escAnLabel(key){
+  return key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+
+async function loadEscalationAnalyticsTab(preservePage){
+  if(!preservePage)escAnLeaderboardPage=1;
+  const kpiEl=document.getElementById('escAnKpiCards');
+  const trendEl=document.getElementById('escAnTrendChart');
+  const catEl=document.getElementById('escAnCategoryChart');
+  const prioEl=document.getElementById('escAnPriorityChart');
+  const statusEl=document.getElementById('escAnStatusChart');
+  const lbEl=document.getElementById('escAnLeaderboard');
+  if(!kpiEl)return;
+  kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
+  try{
+    const qs=_anQS();
+    qs.set('leaderboard_page',escAnLeaderboardPage);
+    qs.set('leaderboard_page_size',ESC_AN_LEADERBOARD_PAGE_SIZE);
+    const r=await fetch(`/admin/analytics/escalations?${qs}`);
+    if(!r.ok){kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';trendEl.innerHTML='';catEl.innerHTML='';prioEl.innerHTML='';statusEl.innerHTML='';lbEl.innerHTML='';return;}
+    const d=await r.json();
+    const k=d.kpis||{};
+
+    if(!k.total){
+      kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">No escalations in this period</p>';
+      trendEl.innerHTML='';catEl.innerHTML='';prioEl.innerHTML='';statusEl.innerHTML='';lbEl.innerHTML='';
+      return;
+    }
+
+    kpiEl.innerHTML=`
+      <div class="stat-c"><div class="stat-n">${k.total.toLocaleString()}</div><div class="stat-l">Total Escalations</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:${k.open_count?'var(--orange)':'inherit'}">${k.open_count}</div><div class="stat-l">Open Now</div></div>
+      <div class="stat-c"><div class="stat-n">${k.avg_first_response_minutes!=null?_anFmtHoursMinutes(k.avg_first_response_minutes):'—'}</div><div class="stat-l">Avg First Response</div></div>
+      <div class="stat-c"><div class="stat-n">${k.avg_resolution_minutes!=null?_anFmtHoursMinutes(k.avg_resolution_minutes):'—'}</div><div class="stat-l">Avg Resolution Time</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:var(--green)">${k.resolution_rate_pct}%</div><div class="stat-l">Resolution Rate</div></div>
+      <div class="stat-c"><div class="stat-n" style="color:${k.sla_breach_rate_pct>0?'#ef4444':'inherit'}">${k.sla_breach_rate_pct}%</div><div class="stat-l">SLA Breach Rate</div></div>
+    `;
+
+    const trend=d.trend||[];
+    if(!trend.length){
+      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
+    }else{
+      trendEl.innerHTML='<canvas id="escAnTrendCanvas" height="220"></canvas>';
+      _anDrawChart('escAnTrendCanvas',{
+        type:'line',
+        data:{labels:trend.map(t=>t.date.slice(5)),datasets:[
+          {label:'Escalations',data:trend.map(t=>t.count),borderColor:'#FF6B00',backgroundColor:'rgba(255,107,0,.2)',fill:true,tension:.25},
+        ]},
+        options:{scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{ticks:{maxTicksLimit:12}}},plugins:{legend:{display:false}}},
+      });
+    }
+
+    const byCategory=d.by_category||[];
+    if(!byCategory.length){
+      catEl.innerHTML='<p style="color:var(--g400);font-size:13px">No data</p>';
+    }else{
+      catEl.innerHTML='<canvas id="escAnCategoryCanvas" height="220"></canvas>';
+      _anDrawChart('escAnCategoryCanvas',{
+        type:'bar',
+        data:{labels:byCategory.map(c=>_escAnLabel(c.key)),datasets:[
+          {label:'Escalations',data:byCategory.map(c=>c.count),backgroundColor:'#FF6B00',borderRadius:4},
+        ]},
+        options:{indexAxis:'y',scales:{x:{beginAtZero:true,ticks:{precision:0}}},plugins:{legend:{display:false}}},
+      });
+    }
+
+    const byPriority=d.by_priority||[];
+    if(!byPriority.length){
+      prioEl.innerHTML='<p style="color:var(--g400);font-size:13px">No data</p>';
+    }else{
+      prioEl.innerHTML='<canvas id="escAnPriorityCanvas" height="200"></canvas>';
+      _anDrawChart('escAnPriorityCanvas',{
+        type:'doughnut',
+        data:{labels:byPriority.map(p=>_escAnLabel(p.key)),datasets:[
+          {data:byPriority.map(p=>p.count),backgroundColor:byPriority.map(p=>ESC_AN_PRIORITY_COLORS[p.key]||'#94A3B8'),borderWidth:0},
+        ]},
+        options:{plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}}},
+      });
+    }
+
+    const byStatus=d.by_status||[];
+    if(!byStatus.length){
+      statusEl.innerHTML='<p style="color:var(--g400);font-size:13px">No data</p>';
+    }else{
+      statusEl.innerHTML='<canvas id="escAnStatusCanvas" height="200"></canvas>';
+      _anDrawChart('escAnStatusCanvas',{
+        type:'doughnut',
+        data:{labels:byStatus.map(s=>_escAnLabel(s.key)),datasets:[
+          {data:byStatus.map(s=>s.count),backgroundColor:byStatus.map(s=>ESC_AN_STATUS_COLORS[s.key]||'#94A3B8'),borderWidth:0},
+        ]},
+        options:{plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}}},
+      });
+    }
+
+    const lb=d.leaderboard||{items:[],total:0};
+    escAnLeaderboardTotal=lb.total||0;
+    if(!lb.items.length){
+      lbEl.innerHTML='<p style="color:var(--g400);font-size:13px">No assigned escalations in this period</p>';
+    }else{
+      lbEl.innerHTML=`<table class="agt-table">
+        <thead><tr><th>Agent</th><th style="text-align:right">Assigned</th><th style="text-align:right">Resolved</th><th style="text-align:right">Avg Resolution</th><th style="text-align:right">Reopened</th></tr></thead>
+        <tbody>${lb.items.map(row=>`<tr>
+          <td style="font-weight:600">${esc(row.agent)}</td>
+          <td style="text-align:right">${row.assigned}</td>
+          <td style="text-align:right">${row.resolved}</td>
+          <td style="text-align:right">${row.avg_resolution_minutes!=null?_anFmtHoursMinutes(row.avg_resolution_minutes):'—'}</td>
+          <td style="text-align:right;color:${row.reopen_count>0?'#ef4444':'var(--g500)'}">${row.reopen_count}</td>
+        </tr>`).join('')}</tbody>
+      </table>${_renderEscAnPager()}`;
+    }
+  }catch(e){console.error(e);kpiEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+function _renderEscAnPager(){
+  const totalPages=Math.max(1,Math.ceil(escAnLeaderboardTotal/ESC_AN_LEADERBOARD_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(escAnLeaderboardPage-1)*ESC_AN_LEADERBOARD_PAGE_SIZE+1;
+  const to=Math.min(escAnLeaderboardPage*ESC_AN_LEADERBOARD_PAGE_SIZE,escAnLeaderboardTotal);
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${escAnLeaderboardTotal}</span>
+    <div class="pager-btns">
+      <button ${escAnLeaderboardPage<=1?'disabled':''} onclick="changeEscAnLeaderboardPage(-1)">Prev</button>
+      <span class="pager-page">Page ${escAnLeaderboardPage} of ${totalPages}</span>
+      <button ${escAnLeaderboardPage>=totalPages?'disabled':''} onclick="changeEscAnLeaderboardPage(1)">Next</button>
+    </div>
+  </div>`;
+}
+function changeEscAnLeaderboardPage(delta){
+  const totalPages=Math.max(1,Math.ceil(escAnLeaderboardTotal/ESC_AN_LEADERBOARD_PAGE_SIZE));
+  escAnLeaderboardPage=Math.min(Math.max(1,escAnLeaderboardPage+delta),totalPages);
+  loadEscalationAnalyticsTab(true);
+}
+// ── End Escalations ─────────────────────────────────────────────────────────
 
 // ── Campaigns & Templates (Analytics Console Tab 5) ───────────────────────────
 async function loadCampaignsTab(){
@@ -8217,7 +8507,11 @@ const CQ_ISSUE_LABELS={
   no_response_at_all:'Never replied',
 };
 
-async function loadAiPerformanceTab(){
+let aiPerfFlaggedPage=1,aiPerfFlaggedTotal=0;
+const AI_PERF_FLAGGED_PAGE_SIZE=20;
+
+async function loadAiPerformanceTab(preservePage){
+  if(!preservePage)aiPerfFlaggedPage=1;
   const statsEl=document.getElementById('aiPerfStatCards');
   const donutEl=document.getElementById('aiPerfDonutWrap');
   const trendEl=document.getElementById('aiPerfTrendWrap');
@@ -8225,7 +8519,10 @@ async function loadAiPerformanceTab(){
   if(!statsEl)return;
   statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Loading…</p>';
   try{
-    const r=await fetch(`/admin/analytics/conversation-quality?${_anQS()}`);
+    const qs=_anQS();
+    qs.set('flagged_page',aiPerfFlaggedPage);
+    qs.set('flagged_page_size',AI_PERF_FLAGGED_PAGE_SIZE);
+    const r=await fetch(`/admin/analytics/conversation-quality?${qs}`);
     if(!r.ok){
       statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';
       donutEl.innerHTML='';trendEl.innerHTML='';flaggedEl.innerHTML='';
@@ -8281,12 +8578,14 @@ async function loadAiPerformanceTab(){
       });
     }
 
-    if(!d.flagged||!d.flagged.length){
+    const flagged=d.flagged||{items:[],total:0};
+    aiPerfFlaggedTotal=flagged.total||0;
+    if(!flagged.items||!flagged.items.length){
       flaggedEl.innerHTML=`<p style="color:var(--g400);font-size:13px">${iconText('check','No conversations flagged as at-risk')}</p>`;
     } else {
       flaggedEl.innerHTML=`<table class="agt-table" style="width:100%">
         <thead><tr><th>Customer</th><th>Score</th><th>Issues</th><th>Reasoning</th><th>Handled by</th><th></th></tr></thead>
-        <tbody>${d.flagged.map(f=>{
+        <tbody>${flagged.items.map(f=>{
           const ph=JSON.stringify(f.phone);
           const nm=JSON.stringify(f.name||f.phone);
           const respIcon=f.responder_type==='bot'?ICON.robot+' Bot':f.responder_type==='agent'?ICON.person+' Agent':f.responder_type==='mixed'?ICON.robot+ICON.person+' Both':'—';
@@ -8299,9 +8598,28 @@ async function loadAiPerformanceTab(){
             <td><button class="btn-dl" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick='switchTab("conv");setTimeout(()=>selectConv(${ph},${nm},"bot",""),50)'>Open Chat</button></td>
           </tr>`;
         }).join('')}</tbody>
-      </table>`;
+      </table>${_renderAiPerfFlaggedPager()}`;
     }
   }catch(e){console.error(e);statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Could not load data</p>';}
+}
+function _renderAiPerfFlaggedPager(){
+  const totalPages=Math.max(1,Math.ceil(aiPerfFlaggedTotal/AI_PERF_FLAGGED_PAGE_SIZE));
+  if(totalPages<=1)return'';
+  const from=(aiPerfFlaggedPage-1)*AI_PERF_FLAGGED_PAGE_SIZE+1;
+  const to=Math.min(aiPerfFlaggedPage*AI_PERF_FLAGGED_PAGE_SIZE,aiPerfFlaggedTotal);
+  return `<div class="pager">
+    <span class="pager-info">Showing ${from}–${to} of ${aiPerfFlaggedTotal}</span>
+    <div class="pager-btns">
+      <button ${aiPerfFlaggedPage<=1?'disabled':''} onclick="changeAiPerfFlaggedPage(-1)">Prev</button>
+      <span class="pager-page">Page ${aiPerfFlaggedPage} of ${totalPages}</span>
+      <button ${aiPerfFlaggedPage>=totalPages?'disabled':''} onclick="changeAiPerfFlaggedPage(1)">Next</button>
+    </div>
+  </div>`;
+}
+function changeAiPerfFlaggedPage(delta){
+  const totalPages=Math.max(1,Math.ceil(aiPerfFlaggedTotal/AI_PERF_FLAGGED_PAGE_SIZE));
+  aiPerfFlaggedPage=Math.min(Math.max(1,aiPerfFlaggedPage+delta),totalPages);
+  loadAiPerformanceTab(true);
 }
 // ── End AI Performance & Conversational Quality ───────────────────────────────
 

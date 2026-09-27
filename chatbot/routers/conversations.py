@@ -852,6 +852,8 @@ def _serialize_request(r: ReassignmentRequest) -> dict:
 async def list_reassignment_requests(
     status: Optional[str] = Query(None),
     phone: Optional[str] = Query(None, description="Ownership lineage for one conversation, oldest first"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     ctx: dict = Depends(get_admin_ctx),
 ):
     """pending (default filter target on the frontend) for the approval queue;
@@ -892,8 +894,19 @@ async def list_reassignment_requests(
                     q = q.filter(ReassignmentRequest.requested_by_email.in_(dept_emails))
                 else:
                     q = q.filter(ReassignmentRequest.requested_by_email == ctx.get("email"))
-            rows = q.order_by(ReassignmentRequest.created_at.desc()).limit(200).all()
-            return [_serialize_request(r) for r in rows]
+            total = q.count()
+            rows = (
+                q.order_by(ReassignmentRequest.created_at.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+                .all()
+            )
+            return {
+                "items": [_serialize_request(r) for r in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
         finally:
             db.close()
     return await run_in_threadpool(_run)
