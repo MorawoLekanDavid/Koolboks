@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import time
@@ -208,7 +209,21 @@ def create_app(config: Config):
                 db.execute(text("SELECT 1"))
                 db.query(Workspace).limit(1).all()
             return {"status": "ready"}
-        except Exception:
+        except Exception as error:
+            original = getattr(error, "orig", error)
+            message = str(original).lower()
+            category = next((label for needle, label in [
+                ("password authentication", "authentication"),
+                ("tenant or user not found", "pooler_role"),
+                ("unsupported startup parameter", "startup_parameter"),
+                ("permission denied", "permissions"),
+                ("does not exist", "schema"),
+                ("timeout", "timeout"),
+                ("translate host", "dns"),
+                ("connection refused", "connection_refused"),
+                ("ssl", "tls")
+            ] if needle in message), "other")
+            logging.getLogger(__name__).warning("Database readiness failed: category=%s type=%s sqlstate=%s", category, type(original).__name__, getattr(original, "pgcode", None))
             return JSONResponse({"status": "unavailable"}, status_code=503)
 
     @app.post("/api/auth/login")
