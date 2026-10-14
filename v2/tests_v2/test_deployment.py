@@ -47,6 +47,22 @@ def test_initial_admin_is_created_once_without_reset(tmp_path, monkeypatch):
         assert not db.query(Workspace).one().automation_enabled
     engine.dispose()
 
+def test_cloud_startup_provisions_a_working_login(tmp_path, monkeypatch):
+    url = "sqlite:///" + str(tmp_path / "cloud.db")
+    engine, _ = factory(Config(url, "http://localhost", False))
+    Base.metadata.create_all(engine)
+    engine.dispose()
+    monkeypatch.setenv("ITURA_DATABASE_URL", url)
+    monkeypatch.setenv("ITURA_ORIGIN", "http://localhost")
+    monkeypatch.setenv("ITURA_LOCAL_DEVELOPMENT", "1")
+    monkeypatch.setenv("ITURA_INITIAL_ADMIN_EMAIL", "admin@example.com")
+    monkeypatch.setenv("ITURA_INITIAL_ADMIN_PASSWORD", "synthetic-password-only")
+    with TestClient(deployment.build_app(), base_url="http://localhost") as client:
+        response = client.post("/api/auth/login", json={"email":"admin@example.com", "password":"synthetic-password-only"}, headers={"origin":"http://localhost"})
+        assert response.status_code == 200
+        assert client.get("/api/auth/me").status_code == 200
+        assert "HttpOnly" in response.headers["set-cookie"]
+
 def test_queue_wakeup_respects_due_time_and_empty_state(tmp_path, monkeypatch):
     engine, sessions = factory(Config("sqlite:///" + str(tmp_path / "queue.db"), "http://localhost", False))
     Base.metadata.create_all(engine)
