@@ -49,8 +49,8 @@ def factory(config):
     if config.database_url.startswith("sqlite"):
         options["connect_args"] = {"check_same_thread": False}
     elif config.database_schema:
-        # Exclude public: an absent chatbot table must never fall through to KPI data.
-        options["connect_args"] = {"options": f"-csearch_path={config.database_schema},pg_catalog"}
+        # Qualify ORM tables explicitly: poolers may ignore startup search_path options.
+        options["execution_options"] = {"schema_translate_map": {None: config.database_schema}}
         options["pool_size"] = 2
         options["max_overflow"] = 2
     engine = create_engine(config.database_url, **options)
@@ -58,4 +58,14 @@ def factory(config):
         @event.listens_for(engine, "connect")
         def foreign_keys(connection, _):
             connection.execute("PRAGMA foreign_keys=ON")
+    elif config.database_schema:
+        @event.listens_for(engine, "connect")
+        def private_search_path(connection, _):
+            previous = connection.autocommit
+            connection.autocommit = True
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(f"SET SESSION search_path TO {config.database_schema}, pg_catalog")
+            finally:
+                connection.autocommit = previous
     return engine, sessionmaker(engine, expire_on_commit=False)
