@@ -16,7 +16,7 @@
 
 ## Verification
 
-Fresh checks: **46 backend/integration/provider-contract/configuration tests pass**, **17 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
+Fresh checks: **47 backend/integration/provider-contract/configuration tests pass**, **17 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
 
 ## Run locally
 
