@@ -16,7 +16,7 @@
 
 ## Verification
 
-Fresh checks: **41 backend/integration/provider-contract/configuration tests pass**, **14 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
+Fresh checks: **42 backend/integration/provider-contract/configuration tests pass**, **14 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
 
 ## Run locally
 
@@ -48,8 +48,8 @@ This is the first implementation tranche of the authorized full rewrite. A clean
 | Gate | Current state |
 |---|---|
 | Supabase database | 14 tables deployed to private `itura` schema in koolbot. Restricted NOLOGIN runtime role and policies created. Login credentials and live API connection remain pending. |
-| GitHub source synchronization | Blocked: repository reads succeeded, but both source-tree write attempts returned HTTP 403 Resource not accessible by integration. Remote branch `rebuild/itura-v2` was created through the browser; source upload is in progress. Source is supplied as a sanitized archive. |
-| API/worker host and Vercel staging | Not provisioned. No live backend origin or deployment credentials have been used. Do not reuse the KPI Vercel project for the chatbot. |
+| GitHub source synchronization | Blocked: repository reads succeeded, but both source-tree write attempts returned HTTP 403 Resource not accessible by integration. Remote branch `rebuild/itura-v2` was created through the browser; reviewed source is synchronized through the browser. Source is supplied as a sanitized archive. |
+| API/worker host and Vercel staging | Blocked: Vercel preview deployment returned HTTP 403 for team scope. No live API connection credentials have been provisioned. Restricted `itura_runtime` role has NOLOGIN until a credential is created through the deployment secret manager. Do not reuse the KPI Vercel project for the chatbot. |
 | PostgreSQL locking/concurrent-worker verification | Not tested against live PostgreSQL. Required before scaling workers. |
 | Provider end-to-end | Stub contracts tested; real Meta verification/send/media/status and model evaluation not run. |
 | Browser/accessibility/responsive verification | Component checks and responsive CSS implemented; live browser checks not performed in this environment. |
