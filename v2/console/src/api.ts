@@ -6,8 +6,16 @@ export async function api<T>(path: string, method = "GET", body?: unknown, signa
   const response = await fetch(path, { method, credentials: "same-origin", signal,
     headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-  const data = await response.json();
-  if (!response.ok) throw new ApiError(response.status, typeof data.detail === "string" ? data.detail : "Please check the supplied values");
+  if (response.status === 204) return undefined as T;
+  let data: unknown;
+  try {
+    data = JSON.parse(await response.text());
+  } catch {
+    throw new ApiError(response.ok ? 502 : response.status,
+      "The application service is unavailable. Please try again later or contact your administrator.");
+  }
+  const detail = data && typeof data === "object" && "detail" in data ? data.detail : undefined;
+  if (!response.ok) throw new ApiError(response.status, typeof detail === "string" ? detail : "Please check the supplied values");
   return data as T;
 }
 export const requestId = () => crypto.randomUUID();

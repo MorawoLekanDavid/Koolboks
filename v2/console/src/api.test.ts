@@ -3,6 +3,18 @@ import { api, ApiError } from "./api";
 
 afterEach(() => { vi.unstubAllGlobals(); document.cookie = "itura_csrf=; Max-Age=0"; });
 describe("secure API boundary", () => {
+  it("replaces a hosting 404 page with a safe service error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("The page could not be found", { status: 404 })));
+    await expect(api("/api/auth/login", "POST", {})).rejects.toMatchObject({ status: 404, message: "The application service is unavailable. Please try again later or contact your administrator." });
+  });
+  it("rejects an HTML response even when hosting returns 200", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>Sign in</html>", { status: 200 })));
+    await expect(api("/api/auth/me")).rejects.toMatchObject({ status: 502 });
+  });
+  it("handles successful empty responses", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    await expect(api("/api/auth/logout", "POST")).resolves.toBeUndefined();
+  });
   it("sends CSRF in a header and never puts session material in URLs", async () => {
     document.cookie = "itura_csrf=synthetic-csrf";
     const fetch = vi.fn(async (_path: string, _init?: RequestInit) => new Response("{}", { status: 200 })); vi.stubGlobal("fetch", fetch);
