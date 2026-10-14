@@ -7,7 +7,7 @@
 - Individual Argon2id accounts, hashed/revocable database sessions, HttpOnly cookies, same-origin/CSRF protection and live membership checks. No URL authentication keys or browser-local auth secrets.
 - Workspaces; independent WhatsApp/web connections; channel-specific contact identities; stable conversation IDs; scoped agent/admin/analyst access; optimistic ownership/control updates.
 - Signed WhatsApp POST events, exact destination validation, durable intake and replay deduplication before acknowledgement. Web visitors receive server-issued sessions and cannot choose another customer's conversation ID.
-- A database inbox/outbox and separately launched worker. AI jobs recover from expired processing leases. Sends with ambiguous provider acceptance are quarantined rather than automatically duplicated. Known provider rate limits retry with bounded backoff.
+- A database inbox/outbox and bounded Vercel Queue subscriber (or standalone worker for container deployments). AI jobs recover from expired processing leases. Sends with ambiguous provider acceptance are quarantined rather than automatically duplicated. Known provider rate limits retry with bounded backoff.
 - Rechecks for global automation pause, human takeover, newer inbound messages, account disablement, conversation version, opt-out, disabled channels and the WhatsApp free-text window.
 - Grounded product IDs and Decimal prices; validated structured AI responses; deterministic configured greeting; payment-detail guard; human attention for unsupported media and exhausted AI retries.
 - React console: recorded overview counts, automatically refreshed inbox/transcript, agent heartbeat/away state, safe text rendering, customer records, product editing, account connection metadata, team account suspension, approved AI settings and audit history.
@@ -16,7 +16,7 @@
 
 ## Verification
 
-Fresh checks: **42 backend/integration/provider-contract/configuration tests pass**, **14 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
+Fresh checks: **46 backend/integration/provider-contract/configuration tests pass**, **17 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
 
 ## Run locally
 
@@ -33,13 +33,19 @@ All cloud credentials are optional for synthetic tests. Real AI and WhatsApp req
 ## Staging deployment target
 
 - Shared Supabase project **koolbot**, organization **Koolboks**, region **eu-central-1**. Set `ITURA_DATABASE_SCHEMA=itura`; the application excludes `public` from its search path.
-- Isolated PostgreSQL database, HTTPS API and separate worker service using `Dockerfile.v2`.
-- Vercel project with root directory `v2/console` if this source is hosted under `v2/` in GitHub.
+- Vercel Services (Beta) deploys the React frontend and Python API together. Project root is `v2`; `vercel.json` owns each service's build settings and routes API/webhook/health requests to the backend.
+- `pyproject.toml` registers the bounded `platform_v2.queue_worker:drain` subscriber. Durable jobs remain in PostgreSQL; Vercel Queue messages wake the worker. The standalone worker is still available for container deployments using `Dockerfile.v2`.
 - Set `ITURA_DATABASE_URL` with SSL and the correct session/direct pooler for persistent services. A dedicated least-privileged backend role needs explicitly verified grants; browser clients never connect with a privileged key.
 - Migration enables RLS and removes anon/authenticated grants from all v2 application tables when those Supabase roles exist. The backend must still enforce every workspace/conversation boundary. Test advisors and direct Data API denial before enabling access.
-- Set the exact staging console URL as `ITURA_ORIGIN`; configure API proxies by running `ITURA_API_ORIGIN=https://YOUR-API node ../scripts/configure-console.mjs` from `console/`. This creates actual Vercel routing only after a verified API origin exists.
+- Vercel deployment and branch hostnames are accepted automatically from platform-provided environment variables. Set `ITURA_ORIGIN` explicitly for an approved custom domain. The React frontend uses same-origin API routes.
 - Apply schema migration explicitly before starting the API. Provision a staging administrator, add disabled connections, verify provider credentials and both webhook methods, then enable synthetic-test connections.
 - Run Meta verification using `/webhooks/whatsapp/CONNECTION_ID`. No old webhook or DNS is switched by this source change.
+
+### First staging administrator
+
+The database connection, schema and administrator email are configured for Preview on `rebuild/itura-v2` only. In the Vercel project's Environment Variables settings, add `ITURA_INITIAL_ADMIN_PASSWORD` as a **Sensitive** Preview variable scoped to `rebuild/itura-v2`. Choose a unique password of at least 12 characters; never paste it into chat or commit it. Redeploy that branch. Startup creates the first workspace and administrator only if both tables are empty, under a PostgreSQL transaction lock. It never changes existing accounts. The configured email is `morawolekan@gmail.com`.
+
+After first successful login, remove the initial-password environment variable and redeploy. Automation starts disabled. Live login, widget delivery and the cloud queue require end-to-end verification before production promotion.
 
 ## Outstanding release gates and feature parity
 
@@ -47,9 +53,9 @@ This is the first implementation tranche of the authorized full rewrite. A clean
 
 | Gate | Current state |
 |---|---|
-| Supabase database | 14 tables deployed to private `itura` schema in koolbot. Restricted NOLOGIN runtime role and policies created. Login credentials and live API connection remain pending. |
-| GitHub source synchronization | Blocked: repository reads succeeded, but both source-tree write attempts returned HTTP 403 Resource not accessible by integration. Remote branch `rebuild/itura-v2` was created through the browser; reviewed source is synchronized through the browser. Source is supplied as a sanitized archive. |
-| API/worker host and Vercel staging | Blocked: Vercel preview deployment returned HTTP 403 for team scope. No live API connection credentials have been provisioned. Restricted `itura_runtime` role has NOLOGIN until a credential is created through the deployment secret manager. Do not reuse the KPI Vercel project for the chatbot. |
+| Supabase database | Private `itura` schema, restricted runtime LOGIN role, backend-only RLS policies and credential stored as a Sensitive Vercel Preview variable. Live API readiness passes. Existing KPI tables remain inaccessible to the runtime role. |
+| GitHub source synchronization | Reviewed source synchronized to `rebuild/itura-v2` through the browser; draft PR #1 remains unmerged. Connector source writes still return HTTP 403. |
+| API/worker host and Vercel staging | Combined frontend/Python API deployed and readiness verified. Bounded queue subscriber implemented; live delivery remains unverified. First admin awaits a user-entered password in the deployment secret manager. |
 | PostgreSQL locking/concurrent-worker verification | Not tested against live PostgreSQL. Required before scaling workers. |
 | Provider end-to-end | Stub contracts tested; real Meta verification/send/media/status and model evaluation not run. |
 | Browser/accessibility/responsive verification | Component checks and responsive CSS implemented; live browser checks not performed in this environment. |
