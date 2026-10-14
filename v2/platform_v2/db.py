@@ -30,6 +30,8 @@ class Config:
         if secure and (not url.startswith("postgresql") or not origin.startswith("https://")):
             raise RuntimeError("Production requires PostgreSQL and an HTTPS origin")
         schema = os.environ.get("ITURA_DATABASE_SCHEMA", "itura" if secure else "") or None
+        if secure and not schema:
+            raise RuntimeError("Production requires a dedicated database schema")
         return cls(url, origin.rstrip("/"), secure, database_schema=schema)
 
 def factory(config):
