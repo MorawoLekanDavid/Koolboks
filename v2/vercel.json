@@ -1,0 +1,20 @@
+{
+  "services": {
+    "frontend": {
+      "root": "console",
+      "framework": "vite",
+      "installCommand": "npm ci --ignore-scripts",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
+      "rewrites": [{"source": "/((?!assets/|widget-v2.js|favicon.ico).*)", "destination": "/index.html"}]
+    },
+    "backend": {"root": ".", "framework": "fastapi", "entrypoint": "app:app"}
+  },
+  "rewrites": [
+    {"source": "/api/:path*", "destination": {"service": "backend"}},
+    {"source": "/web/:path*", "destination": {"service": "backend"}},
+    {"source": "/webhooks/:path*", "destination": {"service": "backend"}},
+    {"source": "/health/:path*", "destination": {"service": "backend"}},
+    {"source": "/:path*", "destination": {"service": "frontend"}}
+  ]
+}
