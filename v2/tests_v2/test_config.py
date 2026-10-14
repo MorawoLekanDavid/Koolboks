@@ -12,3 +12,11 @@ def test_production_defaults_to_private_schema(monkeypatch):
 def test_shared_or_unsafe_schema_rejected(schema):
     with pytest.raises(ValueError):
         Config("postgresql://localhost/db", "https://example.com", database_schema=schema)
+
+def test_production_rejects_empty_schema(monkeypatch):
+    monkeypatch.setenv("ITURA_DATABASE_URL", "postgresql://localhost/db")
+    monkeypatch.setenv("ITURA_ORIGIN", "https://example.com")
+    monkeypatch.setenv("ITURA_DATABASE_SCHEMA", "")
+    monkeypatch.delenv("ITURA_LOCAL_DEVELOPMENT", raising=False)
+    with pytest.raises(RuntimeError, match="dedicated database schema"):
+        Config.from_env()
