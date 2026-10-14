@@ -1,8 +1,32 @@
 """One-time local provisioning. No HTTP bootstrap/password-reset bypass."""
 import getpass
+import os
+from sqlalchemy import text
 from .db import Config, factory
 from .models import User, Workspace
 from .security import passwords
+
+def provision_initial_admin(config):
+    """Seed once from deployment secrets. Never reset or replace an existing account."""
+    secret = os.environ.get("ITURA_INITIAL_ADMIN_PASSWORD", "")
+    email = os.environ.get("ITURA_INITIAL_ADMIN_EMAIL", "").strip().lower()
+    if not secret:
+        return
+    if len(secret) < 12 or "@" not in email:
+        raise RuntimeError("Initial administrator configuration is invalid")
+    engine, sessions = factory(config)
+    try:
+        with sessions() as db:
+            if db.bind.dialect.name == "postgresql":
+                db.execute(text("SELECT pg_advisory_xact_lock(73320, 1)"))
+            if db.query(User).first() or db.query(Workspace).first():
+                return
+            workspace = Workspace(name="ITURA", settings={"welcome":"", "instruction":"", "knowledge":"", "model":"", "ai_secret_ref":""})
+            db.add(workspace); db.flush()
+            db.add(User(workspace_id=workspace.id, email=email, name="Administrator", role="admin", password_hash=passwords.hash(secret)))
+            db.commit()
+    finally:
+        engine.dispose()
 
 def run():
     _, sessions = factory(Config.from_env())

@@ -139,7 +139,7 @@ def create_app(config: Config):
         if length > config.max_body_bytes:
             return JSONResponse({"detail": "Request too large"}, status_code=413)
         if request.url.path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
-            if request.headers.get("origin") != config.origin:
+            if request.headers.get("origin") not in {config.origin, *config.additional_origins}:
                 return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
         web_origin = None
         if request.url.path.startswith("/web/"):

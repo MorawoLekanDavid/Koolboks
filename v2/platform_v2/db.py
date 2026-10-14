@@ -13,6 +13,7 @@ class Config:
     session_hours: int = 12
     max_body_bytes: int = 1048576
     database_schema: str | None = None
+    additional_origins: tuple[str, ...] = ()
 
     def __post_init__(self):
         if self.database_schema and not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", self.database_schema):
@@ -24,6 +25,14 @@ class Config:
     def from_env(cls):
         url = os.environ.get("ITURA_DATABASE_URL", "")
         origin = os.environ.get("ITURA_ORIGIN", "")
+        deployment_hosts = []
+        if os.environ.get("VERCEL") == "1":
+            for key in ("VERCEL_URL", "VERCEL_BRANCH_URL"):
+                host = os.environ.get(key, "")
+                if re.fullmatch(r"[a-z0-9-]+\.vercel\.app", host):
+                    deployment_hosts.append("https://" + host)
+            if not origin and deployment_hosts:
+                origin = deployment_hosts[0]
         if not url or not origin:
             raise RuntimeError("ITURA_DATABASE_URL and ITURA_ORIGIN are required")
         secure = os.environ.get("ITURA_LOCAL_DEVELOPMENT") != "1"
@@ -32,7 +41,8 @@ class Config:
         schema = os.environ.get("ITURA_DATABASE_SCHEMA", "itura" if secure else "") or None
         if secure and not schema:
             raise RuntimeError("Production requires a dedicated database schema")
-        return cls(url, origin.rstrip("/"), secure, database_schema=schema)
+        return cls(url, origin.rstrip("/"), secure, database_schema=schema,
+                   additional_origins=tuple(deployment_hosts))
 
 def factory(config):
     options = {"pool_pre_ping": True}
