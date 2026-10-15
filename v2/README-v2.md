@@ -16,7 +16,7 @@
 
 ## Verification
 
-Fresh checks: **47 backend/integration/provider-contract/configuration tests pass**, **17 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
+Fresh checks: **48 backend/integration/provider-contract/configuration tests pass**, **19 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
 
 ## Run locally
 
@@ -46,6 +46,10 @@ All cloud credentials are optional for synthetic tests. Real AI and WhatsApp req
 The database connection, schema and administrator email are configured for Preview on `rebuild/itura-v2` only. In the Vercel project's Environment Variables settings, add `ITURA_INITIAL_ADMIN_PASSWORD` as a **Sensitive** Preview variable scoped to `rebuild/itura-v2`. Choose a unique password of at least 12 characters; never paste it into chat or commit it. Redeploy that branch. Startup creates the first workspace and administrator only if both tables are empty, under a PostgreSQL transaction lock. It never changes existing accounts. The configured email is `morawolekan@gmail.com`.
 
 After first successful login, remove the initial-password environment variable and redeploy. Automation starts disabled. Live login, widget delivery and the cloud queue require end-to-end verification before production promotion.
+
+### Isolated website chat test
+
+Open `/widget-test.html` on the `rebuild/itura-v2` branch preview alias. The page uses the separate **Staging widget test** channel, restricted to that preview origin. Sign in to the team console in another tab, send a fictional visitor message, take ownership in the inbox, send a reply, and check it appears in the widget. AI remains disabled. The **Koolbuy Store website** connection is prepared for `https://koolbuystore.com` but remains disabled; no live website code or DNS has been changed.
 
 ## Outstanding release gates and feature parity
 

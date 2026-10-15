@@ -8,7 +8,7 @@
       "outputDirectory": "dist",
       "rewrites": [
         {"source": "/", "destination": "/index.html"},
-        {"source": "/((?!assets/|widget-v2.js|favicon.ico).*)", "destination": "/index.html"}
+        {"source": "/((?!assets/|widget-v2.js|widget-test.html|favicon.ico).*)", "destination": "/index.html"}
       ]
     },
     "backend": {"root": ".", "framework": "fastapi", "entrypoint": "app:app"}
