@@ -240,6 +240,16 @@ def test_web_sessions_do_not_accept_chosen_conversation_ids(system):
     client.headers["authorization"]="Bearer "+other["token"]
     assert client.get("/web/messages").json()==[]
 
+def test_same_origin_widget_poll_requires_bearer_and_browser_metadata(system):
+    app, sessions, client, ids = system
+    start = client.post("/web/"+ids["web"]+"/sessions", json={"name":"Synthetic visitor"}).json()
+    client.headers.pop("origin")
+    assert client.get("/web/messages", headers={"sec-fetch-site":"same-origin"}).status_code == 401
+    client.headers["authorization"] = "Bearer " + start["token"]
+    assert client.get("/web/messages").status_code == 403
+    assert client.get("/web/messages", headers={"sec-fetch-site":"cross-site"}).status_code == 403
+    assert client.get("/web/messages", headers={"sec-fetch-site":"same-origin"}).status_code == 200
+
 def test_web_agent_reply_reaches_widget(system):
     app,sessions,client,ids=system
     start=client.post("/web/"+ids["web"]+"/sessions",json={"name":"Web visitor"}).json()
