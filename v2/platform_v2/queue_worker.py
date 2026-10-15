@@ -22,9 +22,11 @@ async def wake_if_needed(sessions, minimum_delay=0):
     due = next_due(sessions)
     if due is not None:
         await send(TOPIC, {"action": "drain"}, delay=timedelta(seconds=max(minimum_delay, min(900, int(due - time.time()) + 1))), retention=timedelta(hours=24))
+        return True
+    return False
 
 @subscribe(topic=TOPIC, retry_after=60, max_concurrency=2, max_attempts=20)
-async def drain(message):
+async def drain(message: dict[str, str]):
     if message != {"action": "drain"}:
         raise ValueError("Invalid job wakeup")
     engine, sessions = factory(Config.from_env())
