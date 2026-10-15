@@ -36,6 +36,28 @@ def build_app():
     app = create_app(config)
     app.router.on_startup.append(lambda: provision_initial_admin(config))
 
+    async def wake_jobs():
+        from .queue_worker import wake_if_needed
+        try:
+            published = await wake_if_needed(app.state.sessions)
+        except Exception as error:
+            logging.getLogger(__name__).warning("Queue wake failed; committed jobs remain in the durable database")
+            try:
+                queue_health(app.state.sessions, "queue.wake.failed", type(error).__name__[:80])
+            except SQLAlchemyError:
+                logging.getLogger(__name__).warning("Queue health status could not be persisted")
+            return False
+        if published:
+            try:
+                queue_health(app.state.sessions, "queue.wake.accepted", "itura-jobs")
+            except SQLAlchemyError:
+                logging.getLogger(__name__).warning("Queue health status could not be persisted")
+        return True
+
+    # A deployment restart must recover retained database jobs without waiting
+    # for another customer message or an authenticated inbox polling request.
+    app.router.on_startup.append(wake_jobs)
+
     @app.middleware("http")
     async def cloud_boundary(request, call_next):
         try:
@@ -45,17 +67,7 @@ def build_app():
         writes = request.method in {"POST", "PATCH"} and request.url.path.startswith(("/api/", "/web/", "/webhooks/"))
         recovery_poll = request.method == "GET" and request.url.path in {"/api/conversations", "/web/messages"}
         if response.status_code < 400 and (writes or recovery_poll):
-            from .queue_worker import wake_if_needed
-            try:
-                if await wake_if_needed(app.state.sessions):
-                    queue_health(app.state.sessions, "queue.wake.accepted", "itura-jobs")
-            except Exception as error:
-                logging.getLogger(__name__).warning("Queue wake failed; committed jobs remain in the durable database")
-                try:
-                    queue_health(app.state.sessions, "queue.wake.failed", type(error).__name__[:80])
-                except SQLAlchemyError:
-                    logging.getLogger(__name__).warning("Queue health status could not be persisted")
-                if request.url.path.startswith("/webhooks/"):
-                    return JSONResponse({"detail": "Message retained; retry delivery."}, status_code=503)
+            if not await wake_jobs() and request.url.path.startswith("/webhooks/"):
+                return JSONResponse({"detail": "Message retained; retry delivery."}, status_code=503)
         return response
     return app
