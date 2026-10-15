@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from platform_v2 import deployment, queue_worker
 from platform_v2.bootstrap import provision_initial_admin
 from platform_v2.db import Config, factory
-from platform_v2.models import Base, Channel, Event, User, Workspace
+from platform_v2.models import Audit, Base, Channel, Event, User, Workspace
 from platform_v2.security import passwords
 
 def test_unconfigured_backend_returns_json(monkeypatch):
@@ -81,4 +81,18 @@ def test_queue_wakeup_respects_due_time_and_empty_state(tmp_path, monkeypatch):
     assert send.await_count == 1
     assert 40 <= send.call_args.kwargs["delay"].total_seconds() <= 46
     assert send.call_args.kwargs["retention"].total_seconds() == 86400
+    engine.dispose()
+
+def test_queue_diagnostics_are_bounded_and_exclude_error_messages(tmp_path):
+    engine, sessions = factory(Config("sqlite:///" + str(tmp_path / "health.db"), "http://localhost", False))
+    Base.metadata.create_all(engine)
+    with sessions() as db:
+        db.add(Workspace(name="Synthetic")); db.commit()
+    for _ in range(3):
+        deployment.queue_health(sessions, "queue.wake.failed", "TokenResolutionError")
+    with sessions() as db:
+        rows = db.query(Audit).all()
+        assert len(rows) == 1
+        assert rows[0].actor_id == "system"
+        assert rows[0].entity_id == "TokenResolutionError"
     engine.dispose()
