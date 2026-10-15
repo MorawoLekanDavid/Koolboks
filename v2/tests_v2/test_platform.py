@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from platform_v2.api import create_app, enqueue
 from platform_v2.db import Config
-from platform_v2.models import Base, Channel, Contact, Conversation, Event, Message, Outbox, Session, User, Workspace
+from platform_v2.models import Base, Channel, Contact, Conversation, Event, Message, Outbox, Product, Session, User, Workspace
 from platform_v2.security import passwords
 from platform_v2.worker import ProviderResult, Worker
 
@@ -267,11 +267,140 @@ def test_cross_workspace_record_access_is_denied(system):
         db.add(channel);db.commit();entity_id=channel.id
     assert client.patch("/api/channels/"+entity_id,json={"name":"changed", "provider":"web", "enabled":True,"config":{"origins":[ORIGIN]}}).status_code==404
 
+def test_foreign_conversation_cannot_be_read_changed_or_replied_to(system):
+    app, sessions, client, ids = system
+    login(client)
+    with sessions() as db:
+        channel = Channel(workspace_id=ids["other"], name="Foreign", provider="web", config={})
+        db.add(channel); db.flush()
+        contact = Contact(workspace_id=ids["other"], channel_id=channel.id, external_id="foreign")
+        db.add(contact); db.flush()
+        conversation = Conversation(workspace_id=ids["other"], channel_id=channel.id, contact_id=contact.id)
+        db.add(conversation); db.commit(); cid = conversation.id
+    prefix = "/api/conversations/" + cid
+    for suffix in ("/messages", "/notes"):
+        assert client.get(prefix + suffix).status_code == 404
+    for suffix in ("/reply", "/notes"):
+        assert client.post(prefix + suffix, json={"body": "Unauthorized write", "request_id": "security-test"}).status_code == 404
+    assert client.patch(prefix, json={"version": 1, "mode": "human", "state": "open", "attention": False}).status_code == 404
+    with sessions() as db:
+        assert db.query(Message).filter_by(conversation_id=cid).count() == 0
+        assert db.query(Outbox).count() == 0
+
+def test_expired_admin_session_is_rejected(system):
+    app, sessions, client, ids = system
+    login(client)
+    with sessions() as db:
+        db.query(Session).update({Session.expires_at: time.time() - 1}); db.commit()
+    assert client.get("/api/auth/me").status_code == 401
+    assert client.get("/api/conversations").status_code == 401
+
+def test_image_fetch_requires_login_and_returns_safe_headers(system):
+    from unittest.mock import patch
+    app, sessions, client, ids = system
+    with patch("platform_v2.api.fetch_image", return_value=(b"synthetic image", "image/png")) as fetch:
+        assert client.get("/api/media/image", params={"url": "https://images.example/a.png"}).status_code == 401
+        fetch.assert_not_called()
+        login(client)
+        result = client.get("/api/media/image", params={"url": "https://images.example/a.png"})
+        assert result.status_code == 200
+        assert result.headers["content-type"] == "image/png"
+        assert result.headers["x-content-type-options"] == "nosniff"
+        assert "sandbox" in result.headers["content-security-policy"]
+        assert result.headers["cache-control"] == "no-store"
+
+def test_image_fetch_failure_does_not_disclose_remote_destination(system):
+    from unittest.mock import patch
+    from platform_v2.media import ImageError
+    app, sessions, client, ids = system
+    login(client)
+    with patch("platform_v2.api.fetch_image", side_effect=ImageError("private_image_destination")):
+        result = client.get("/api/media/image", params={"url": "https://internal.example/secret"})
+        assert result.status_code == 422
+        assert "internal.example" not in result.text
+
+def test_widget_token_cannot_read_another_visitors_messages(system):
+    app, sessions, client, ids = system
+    first = client.post("/web/" + ids["web"] + "/sessions", json={"name": "First visitor"}).json()
+    second = client.post("/web/" + ids["web"] + "/sessions", json={"name": "Second visitor"}).json()
+    assert client.post("/web/messages", headers={"authorization": "Bearer " + first["token"]},
+        json={"body": "Private synthetic message", "request_id": "visitor-test"}).status_code == 202
+    response = client.get("/web/messages", headers={"authorization": "Bearer " + second["token"]})
+    assert response.status_code == 200 and response.json() == []
+
+@pytest.mark.parametrize("role", ["agent", "analyst"])
+def test_non_admin_cannot_change_products_or_ai_configuration(system, role):
+    app, sessions, client, ids = system
+    login(client, role)
+    assert client.post("/api/products", json={"name": "Unauthorized", "price": "1.00"}).status_code == 403
+    assert client.get("/api/settings").status_code == 403
+
 def test_prices_are_decimal_and_negative_rejected(system):
     app,sessions,client,ids=system;login(client)
     assert client.post("/api/products",json={"name":"Product", "price":"-1.00"}).status_code==422
     r=client.post("/api/products",json={"name":"Product", "price":"12345.67"})
     assert r.status_code==201 and r.json()["price"]=="12345.67"
+
+def test_catalog_links_roundtrip_and_private_links_rejected(system):
+    from unittest.mock import patch
+    app, sessions, client, ids = system; login(client)
+    with patch("platform_v2.media.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]):
+        result = client.post("/api/products", json={"name": "Approved freezer", "price": "100.00", "image_url": "https://arbitrary.example/freezer.png", "product_url": "https://shop.example/freezer"})
+    assert result.status_code == 201 and result.json()["image_url"].endswith("freezer.png")
+    assert client.get("/api/products").json()[0]["product_url"] == "https://shop.example/freezer"
+    assert client.post("/api/products", json={"name": "Unsafe", "price": "1", "image_url": "https://127.0.0.1/image"}).status_code == 422
+
+def test_product_photo_has_own_durable_message_and_receipt(system):
+    app, sessions, client, ids = system
+    cid = inbound(system); enable_ai(system, cid)
+    with sessions() as db:
+        product = Product(workspace_id=ids["workspace"], name="Approved freezer", price=100,
+            image_url="https://images.example/freezer.png", product_url="https://shop.example/freezer")
+        db.add(product); db.commit(); pid = product.id
+    async def recommend(*args): return {"reply": "Here is the approved option.", "escalate": False, "product_ids": [pid]}
+    worker = Worker(sessions, sender=accepted, generator=recommend)
+    assert asyncio.run(worker.ai_once())
+    with sessions() as db:
+        photos = db.query(Message).filter_by(conversation_id=cid, kind="image").all()
+        assert len(photos) == 1 and photos[0].media["product_id"] == pid
+        assert "NGN 100.00" in photos[0].body
+        assert db.query(Outbox).count() == 2
+    asyncio.run(worker.send_once()); asyncio.run(worker.send_once())
+    with sessions() as db:
+        assert db.query(Message).filter_by(kind="image").one().delivery == "accepted"
+        assert db.query(Message).filter_by(kind="image").one().provider_id == "wamid.outbound"
+
+def test_visitor_photo_endpoint_is_bound_to_own_conversation(system):
+    from unittest.mock import patch
+    app, sessions, client, ids = system
+    first = client.post("/web/" + ids["web"] + "/sessions", json={}).json()
+    second = client.post("/web/" + ids["web"] + "/sessions", json={}).json()
+    with sessions() as db:
+        photo = Message(conversation_id=first["conversation_id"], direction="outbound", sender="Itura", body="Approved photo", kind="image", media={"url": "https://images.example/a.png"})
+        db.add(photo); db.commit(); mid = photo.id
+    with patch("platform_v2.api.fetch_image", return_value=(b"photo", "image/png")) as fetch:
+        url = "/web/messages/" + mid + "/image"
+        assert client.get(url, headers={"authorization": "Bearer " + second["token"]}).status_code == 404
+        fetch.assert_not_called()
+        assert client.get(url, headers={"authorization": "Bearer " + first["token"]}).status_code == 200
+
+def test_quoted_photo_context_reaches_ai_and_foreign_quote_is_rejected(system):
+    app, sessions, client, ids = system
+    first = client.post("/web/" + ids["web"] + "/sessions", json={}).json()
+    second = client.post("/web/" + ids["web"] + "/sessions", json={}).json()
+    with sessions() as db:
+        photo = Message(conversation_id=first["conversation_id"], direction="outbound", sender="Itura", body="Photo", kind="image", delivery="delivered", media={"product_id": "approved-product"})
+        db.add(photo); db.get(Workspace, ids["workspace"]).automation_enabled = True
+        db.get(Conversation, first["conversation_id"]).mode = "ai"
+        db.commit(); mid = photo.id
+    message = {"body": "Tell me about this one", "request_id": "quote-test", "reply_to_id": mid}
+    assert client.post("/web/messages", headers={"authorization": "Bearer " + second["token"]}, json=message).status_code == 404
+    assert client.post("/web/messages", headers={"authorization": "Bearer " + first["token"]}, json=message).status_code == 202
+    seen = []
+    async def capture(workspace, conversation, history, products):
+        seen.extend(history); return {"reply": "Approved response", "escalate": False}
+    assert asyncio.run(Worker(sessions, generator=capture).ai_once())
+    assert "product ID: approved-product" in seen[-1]["content"]
 
 def test_status_callbacks_are_monotonic(system):
     app,sessions,client,ids=system

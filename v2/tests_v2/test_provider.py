@@ -68,3 +68,26 @@ def test_payment_details_are_replaced_and_escalated(monkeypatch):
         result=asyncio.run(generate(workspace,None,[],[]))
         assert result["escalate"] is True
         assert "1234567890" not in result["reply"]
+
+def test_whatsapp_photo_upload_then_send_uses_media_id(monkeypatch):
+    monkeypatch.setenv("ITURA_SECRET_TEST", "synthetic-token")
+    channel = SimpleNamespace(provider="whatsapp", external_id="123", config={"api_version": "v99.0", "token_ref": "ITURA_SECRET_TEST"})
+    message = SimpleNamespace(body="Approved caption", kind="image", media={"url": "https://images.example/a.png"})
+    def reply(body): return httpx.Response(200, json=body, request=httpx.Request("POST", "https://example.test"))
+    with patch("platform_v2.worker.fetch_image", return_value=(b"synthetic", "image/png")), patch("platform_v2.worker.httpx.AsyncClient") as factory:
+        post = AsyncMock(side_effect=[reply({"id": "uploaded-media"}), reply({"messages": [{"id": "image-receipt"}]})])
+        factory.return_value.__aenter__.return_value.post = post
+        result = asyncio.run(send(channel, SimpleNamespace(external_id="2348000000000"), message))
+        assert result.state == "accepted" and result.provider_id == "image-receipt"
+        assert post.call_args_list[0].args[0].endswith("/media")
+        assert post.call_args_list[1].kwargs["json"]["image"] == {"id": "uploaded-media", "caption": "Approved caption"}
+
+def test_unavailable_photo_never_reaches_provider(monkeypatch):
+    from platform_v2.media import ImageError
+    monkeypatch.setenv("ITURA_SECRET_TEST", "synthetic-token")
+    channel = SimpleNamespace(provider="whatsapp", external_id="123", config={"api_version": "v99.0", "token_ref": "ITURA_SECRET_TEST"})
+    with patch("platform_v2.worker.fetch_image", side_effect=ImageError("blocked")), patch("platform_v2.worker.httpx.AsyncClient") as factory:
+        post = AsyncMock(); factory.return_value.__aenter__.return_value.post = post
+        result = asyncio.run(send(channel, SimpleNamespace(external_id="123"), SimpleNamespace(kind="image", body="caption", media={"url": "https://internal.example/a"})))
+        assert result.state == "failed"
+        post.assert_not_called()
