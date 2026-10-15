@@ -33,6 +33,25 @@ def ai_response(value):
     import json
     return httpx.Response(200,json={"choices":[{"message":{"content":json.dumps(value)}}]},request=httpx.Request("POST","https://example.test"))
 
+@pytest.mark.parametrize("question", ["Can I see a picture?", "an i see the piture?", "Send photos", "200L", "Do you have a 300 litre freezer?"])
+def test_unsupported_media_and_unlisted_capacity_handoff_without_provider(question):
+    with patch("platform_v2.worker.httpx.AsyncClient") as factory:
+        result = asyncio.run(generate(SimpleNamespace(settings={}), None,
+            [{"role": "user", "content": question}], []))
+        assert result["escalate"] is True
+        assert "teammate" in result["reply"]
+        factory.assert_not_called()
+
+def test_general_question_still_uses_provider(monkeypatch):
+    monkeypatch.setenv("ITURA_SECRET_AI", "synthetic-token")
+    workspace = SimpleNamespace(settings={"model": "test", "ai_secret_ref": "ITURA_SECRET_AI"})
+    with patch("platform_v2.worker.httpx.AsyncClient") as factory:
+        post = AsyncMock(return_value=ai_response({"reply": "Solar panels provide electricity.", "escalate": False, "product_ids": []}))
+        factory.return_value.__aenter__.return_value.post = post
+        result = asyncio.run(generate(workspace, None, [{"role": "user", "content": "How do solar freezers work?"}], []))
+        assert result["escalate"] is False
+        post.assert_awaited_once()
+
 def test_hallucinated_product_id_is_rejected(monkeypatch):
     monkeypatch.setenv("ITURA_SECRET_AI", "synthetic-token")
     workspace=SimpleNamespace(settings={"model":"test","instruction":"test","ai_secret_ref":"ITURA_SECRET_AI"})
