@@ -16,7 +16,7 @@ def test_invalid_destinations_never_resolve(url):
         resolve.assert_not_called()
 
 
-@pytest.mark.parametrize("address", ["127.0.0.1", "10.0.0.2", "169.254.169.254", "::1", "fc00::1", "::ffff:8.8.8.8", "0.0.0.0"])
+@pytest.mark.parametrize("address", ["127.0.0.1", "10.0.0.2", "169.254.169.254", "::1", "fc00::1", "::ffff:8.8.8.8", "0.0.0.0", "224.0.0.1", "ff02::1", "fec0::1"])
 def test_private_or_transitional_destinations_rejected(address):
     with patch("platform_v2.media.socket.getaddrinfo", return_value=records(address)):
         with pytest.raises(ImageError): destination("https://any.example/photo")
