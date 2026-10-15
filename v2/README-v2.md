@@ -16,7 +16,7 @@
 
 ## Verification
 
-Fresh checks: **50 backend/integration/provider-contract/configuration tests pass**, **19 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
+Fresh checks: **51 backend/integration/provider-contract/configuration tests pass**, **19 console tests pass**, and TypeScript plus production build pass. Tests use synthetic data and provider/model stubs. The deployed Python API's `/health/ready` returned HTTP 200 against the restricted Supabase role on 14 October 2026. Migration creation/repetition and column parity were checked on SQLite. These checks do not replace PostgreSQL concurrency tests, real Meta/Groq calls, live browser/accessibility QA, load tests or a backup restore drill.
 
 ## Run locally
 
@@ -59,7 +59,7 @@ This is the first implementation tranche of the authorized full rewrite. A clean
 |---|---|
 | Supabase database | Private `itura` schema, restricted runtime LOGIN role, backend-only RLS policies and credential stored as a Sensitive Vercel Preview variable. Live API readiness passes. Existing KPI tables remain inaccessible to the runtime role. |
 | GitHub source synchronization | Reviewed source synchronized to `rebuild/itura-v2` through the browser; draft PR #1 remains unmerged. Connector source writes still return HTTP 403. |
-| API/worker host and Vercel staging | Combined frontend/Python API deployed and readiness verified. Administrator created and user confirmed successful login; one-time setup secret cleared. Live widget intake verified in PostgreSQL. Queue publishes are accepted, but deployed consumer execution and agent reply delivery remain under investigation. Bounded worker behavior passes synthetic integration tests. |
+| API/worker host and Vercel staging | Combined frontend/Python API deployed and readiness verified. Administrator created and user confirmed successful login; one-time setup secret cleared. Live widget intake and deployed queue worker execution verified in PostgreSQL: the test inbound event was processed to done. Agent reply delivery to the widget remains the next live check. Bounded worker behavior passes synthetic integration tests. The backend service builds from pyproject.toml so Vercel includes subscriber functions, and Vercel uses NullPool to release session-pooler connections. |
 | PostgreSQL locking/concurrent-worker verification | Not tested against live PostgreSQL. Required before scaling workers. |
 | Provider end-to-end | Stub contracts tested; real Meta verification/send/media/status and model evaluation not run. |
 | Browser/accessibility/responsive verification | Component checks and responsive CSS implemented; live browser checks not performed in this environment. |
