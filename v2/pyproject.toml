@@ -4,5 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = ["fastapi==0.143.0", "uvicorn==0.54.0", "pydantic==2.14.1", "sqlalchemy==2.0.54", "psycopg2-binary==2.9.9", "httpx==0.28.1", "argon2-cffi==25.1.0", "vercel-queue==0.9.1"]
 
+[tool.vercel]
+entrypoint = "app:app"
+
 [[tool.vercel.subscribers]]
 entrypoint = "platform_v2.queue_worker"

@@ -11,7 +11,7 @@
         {"source": "/((?!assets/|widget-v2.js|widget-test.html|favicon.ico).*)", "destination": "/index.html"}
       ]
     },
-    "backend": {"root": ".", "framework": "fastapi", "entrypoint": "app:app"}
+    "backend": {"root": ".", "framework": "fastapi", "entrypoint": "pyproject.toml"}
   },
   "rewrites": [
     {"source": "/", "destination": {"service": "frontend", "path": "/index.html"}},
