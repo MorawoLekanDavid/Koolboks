@@ -1,5 +1,13 @@
 import pytest
 from platform_v2.db import Config
+from platform_v2.db import factory
+from sqlalchemy.pool import NullPool
+
+def test_vercel_does_not_retain_postgres_session_connections(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    engine, _ = factory(Config("postgresql://unused:unused@localhost/db", "https://example.com", database_schema="itura"))
+    assert isinstance(engine.pool, NullPool)
+    engine.dispose()
 
 def test_production_defaults_to_private_schema(monkeypatch):
     monkeypatch.setenv("ITURA_DATABASE_URL", "postgresql://user:password@localhost/db")
