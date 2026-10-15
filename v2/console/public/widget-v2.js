@@ -13,7 +13,7 @@
   const bubble = root.querySelector('.bubble'), panel = root.querySelector('.panel'), messages = root.querySelector('.messages');
   const form = root.querySelector('form'), input = root.querySelector('input'), send = form.querySelector('button'), error = root.querySelector('.error');
   const storageKey = 'itura-visitor:' + origin + ':' + channel;
-  let session = null, timer = null, request = null, inFlight = false;
+  let session = null, timer = null, request = null, inFlight = false, replyTo = null;
   try { session = sessionStorage.getItem(storageKey); } catch { /* Private browsing still works in memory. */ }
   async function call(path, method = 'GET', body) {
     const response = await fetch(origin + path, { method, credentials: origin === window.location.origin ? 'same-origin' : 'omit', headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: 'Bearer ' + session } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -41,7 +41,20 @@
       if (last !== data.at(-1)?.id) {
         messages.replaceChildren(...data.map(item => {
           const element = document.createElement('div'); element.className = 'message ' + item.direction; element.dataset.id = item.id;
-          element.textContent = item.body; return element;
+          element.textContent = item.body;
+          if (item.kind === 'image') {
+            const quote = document.createElement('button'); quote.type = 'button'; quote.textContent = 'Reply to this photo'; quote.addEventListener('click', () => { replyTo = item.id; request = null; input.placeholder = 'Replying to ' + (item.media?.name || 'photo') + '…'; input.focus(); }); element.append(quote);
+            const status = document.createElement('small'); status.textContent = 'Loading photo…'; element.append(status);
+            const photo = document.createElement('img'); photo.alt = item.media?.name || 'Product photo'; photo.style.cssText = 'display:block;width:100%;height:auto;border-radius:8px;margin-top:8px';
+            fetch(origin + '/web/messages/' + encodeURIComponent(item.id) + '/image', { credentials: origin === window.location.origin ? 'same-origin' : 'omit', headers: { Authorization: 'Bearer ' + session } })
+              .then(response => { if (!response.ok) throw new Error(); return response.blob(); })
+              .then(blob => { const url = URL.createObjectURL(blob); photo.onload = () => { URL.revokeObjectURL(url); status.remove(); }; photo.onerror = () => { URL.revokeObjectURL(url); photo.remove(); status.textContent = 'Photo unavailable. Please ask our team for help.'; }; photo.src = url; element.append(photo); })
+              .catch(() => { status.textContent = 'Photo unavailable. Please ask our team for help.'; });
+            if (item.media?.product_url) {
+              try { const link = new URL(item.media.product_url); if (link.protocol === 'https:' && !link.username && !link.password) { const a = document.createElement('a'); a.href = link.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'View product'; element.append(a); } } catch {}
+            }
+          }
+          return element;
         }));
         messages.scrollTop = messages.scrollHeight;
       }
@@ -61,7 +74,7 @@
   form.addEventListener('submit', async e => {
     e.preventDefault(); if (!input.value.trim() || send.disabled) return;
     send.disabled = true; request = request || crypto.randomUUID();
-    try { await ensureSession(); await call('/web/messages', 'POST', { body: input.value.trim(), request_id: request }); input.value = ''; request = null; await refresh(); }
+    try { await ensureSession(); await call('/web/messages', 'POST', { body: input.value.trim(), request_id: request, reply_to_id: replyTo }); input.value = ''; request = null; replyTo = null; input.placeholder = 'Write a message…'; await refresh(); }
     catch (e) { error.textContent = e.message; }
     finally { send.disabled = false; input.focus(); }
   });
