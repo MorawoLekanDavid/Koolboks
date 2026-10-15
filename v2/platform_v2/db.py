@@ -4,6 +4,7 @@ import re
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 @dataclass(frozen=True)
 class Config:
@@ -51,8 +52,12 @@ def factory(config):
     elif config.database_schema:
         # Qualify ORM tables explicitly: poolers may ignore startup search_path options.
         options["execution_options"] = {"schema_translate_map": {None: config.database_schema}}
-        options["pool_size"] = 2
-        options["max_overflow"] = 2
+        if os.environ.get("VERCEL") == "1":
+            # Warm functions and old previews must not retain scarce session-pooler slots.
+            options["poolclass"] = NullPool
+        else:
+            options["pool_size"] = 2
+            options["max_overflow"] = 2
     engine = create_engine(config.database_url, **options)
     if engine.dialect.name == "sqlite":
         @event.listens_for(engine, "connect")
