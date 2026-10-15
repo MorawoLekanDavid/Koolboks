@@ -16,8 +16,10 @@
   let session = null, timer = null, request = null, inFlight = false;
   try { session = sessionStorage.getItem(storageKey); } catch { /* Private browsing still works in memory. */ }
   async function call(path, method = 'GET', body) {
-    const response = await fetch(origin + path, { method, credentials: 'omit', headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: 'Bearer ' + session } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
-    const data = await response.json();
+    const response = await fetch(origin + path, { method, credentials: origin === window.location.origin ? 'same-origin' : 'omit', headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: 'Bearer ' + session } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    let data;
+    try { data = await response.json(); }
+    catch { throw new Error('Chat is temporarily unavailable. Please try again later.'); }
     if (!response.ok) {
       if (response.status === 401) { session = null; try { sessionStorage.removeItem(storageKey); } catch {} }
       throw new Error(typeof data.detail === 'string' ? data.detail : 'Please try again.');
