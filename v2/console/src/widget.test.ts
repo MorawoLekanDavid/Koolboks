@@ -34,3 +34,28 @@ test('external website embeds omit cookies and show a clear error for an HTML re
   await vi.waitFor(() => expect(root.querySelector('.error')?.textContent).toContain('Chat is temporarily unavailable'));
   expect(fetch.mock.calls[0][1].credentials).toBe('omit');
 });
+
+test('product photo uses the visitor token and a protected message URL', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({token:'synthetic-visitor'})})
+    .mockResolvedValueOnce({ok:true,json:async()=>[{id:'photo-one',direction:'outbound',body:'Approved product',kind:'image',media:{name:'Solar freezer',product_url:'javascript:alert(1)'}}]})
+    .mockResolvedValueOnce({ok:true,blob:async()=>new Blob(['synthetic'],{type:'image/png'})});
+  vi.stubGlobal('fetch',fetch);
+  vi.stubGlobal('URL', class extends URL { static createObjectURL(){return 'blob:synthetic';} static revokeObjectURL(){} });
+  const root=launch(); (root.querySelector('.bubble') as HTMLButtonElement).click();
+  await vi.waitFor(()=>expect(root.querySelector('img')?.getAttribute('alt')).toBe('Solar freezer'));
+  expect(fetch.mock.calls[2][0]).toContain('/web/messages/photo-one/image');
+  expect(fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer synthetic-visitor');
+  expect(root.querySelector('a')).toBeNull();
+  (root.querySelector('.close') as HTMLButtonElement).click();
+});
+
+test('photo failure preserves the product caption and shows recovery text', async () => {
+  const fetch=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({token:'synthetic-visitor'})})
+    .mockResolvedValueOnce({ok:true,json:async()=>[{id:'photo-two',direction:'outbound',body:'Approved caption',kind:'image'}]})
+    .mockResolvedValueOnce({ok:false,status:422});
+  vi.stubGlobal('fetch',fetch);
+  const root=launch(); (root.querySelector('.bubble') as HTMLButtonElement).click();
+  await vi.waitFor(()=>expect(root.querySelector('.message')?.textContent).toContain('Photo unavailable'));
+  expect(root.querySelector('.message')?.textContent).toContain('Approved caption');
+  (root.querySelector('.close') as HTMLButtonElement).click();
+});

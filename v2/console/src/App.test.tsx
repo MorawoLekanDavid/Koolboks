@@ -64,7 +64,7 @@ describe("operator workflows", () => {
     mount(<Catalog user={user} />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Save product" }));
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/products/p1", "PATCH", { name: "Freezer", price: "123.45", currency: "NGN", description: "Approved description", active: true }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/products/p1", "PATCH", { name: "Freezer", price: "123.45", currency: "NGN", description: "Approved description", image_url: "", product_url: "", active: true }));
   });
   it("signs in without writing auth secrets to localStorage", async () => {
     vi.mocked(api).mockResolvedValue(user); const onLogin = vi.fn(); localStorage.clear();
