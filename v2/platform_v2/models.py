@@ -82,6 +82,7 @@ class Message(Base):
     sender = Column(String(120), nullable=False)
     body = Column(Text, nullable=False)
     kind = Column(String(20), nullable=False, default="text")
+    media = Column(JSON, nullable=False, default=dict)
     provider_id = Column(String(150), nullable=True, index=True)
     delivery = Column(String(20), nullable=False, default="received")
     created_at = Column(Float, nullable=False, default=time.time)
@@ -132,6 +133,8 @@ class Product(Base):
     price = Column(Numeric(18, 2), nullable=False)
     currency = Column(String(3), nullable=False, default="NGN")
     description = Column(Text, nullable=False, default="")
+    image_url = Column(Text, nullable=False, default="")
+    product_url = Column(Text, nullable=False, default="")
     active = Column(Boolean, nullable=False, default=True)
 
 class Note(Base):

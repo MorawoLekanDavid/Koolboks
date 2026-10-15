@@ -8,12 +8,13 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from sqlalchemy import func, select, text
 
 from .db import Config, factory
 from .models import Audit, Channel, Contact, Conversation, Event, Message, Note, Outbox, Product, Session, User, WebSession, Workspace, uid
 from .security import digest, passwords, signature_ok, throttle, token, verify_password
+from .media import ImageError, fetch_image, destination
 
 SECRET_REF = re.compile(r"^ITURA_SECRET_[A-Z0-9_]{1,64}$")
 
@@ -36,7 +37,15 @@ class ProductInput(Input):
     price: Decimal = Field(ge=0, max_digits=18, decimal_places=2)
     currency: str = Field(default="NGN", pattern=r"^[A-Z]{3}$")
     description: str = Field(default="", max_length=5000)
+    image_url: str = Field(default="", max_length=2048)
+    product_url: str = Field(default="", max_length=2048)
     active: bool = True
+
+    @field_validator("image_url", "product_url")
+    @classmethod
+    def public_link(cls, value):
+        if value: destination(value)
+        return value
 
 class UserInput(Input):
     email: str = Field(min_length=3, max_length=254)
@@ -58,6 +67,7 @@ class Control(Input):
 class Body(Input):
     body: str = Field(min_length=1, max_length=4000)
     request_id: str = Field(min_length=8, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    reply_to_id: str | None = Field(default=None, max_length=180)
 
 class WebStart(Input):
     name: str = Field(default="", max_length=120)
@@ -84,11 +94,11 @@ def conversation_json(db, row):
     result.update(name=contact.name, identity=contact.external_id, channel=channel.name, provider=channel.provider)
     return result
 
-def enqueue(db, conversation, body, sender, dedup_key, automated=False, author_id=None, purpose="reply"):
+def enqueue(db, conversation, body, sender, dedup_key, automated=False, author_id=None, purpose="reply", media=None):
     existing = db.query(Outbox).filter_by(dedup_key=dedup_key).first()
     if existing:
         return db.get(Message, existing.message_id)
-    message = Message(conversation_id=conversation.id, direction="outbound", sender=sender, body=body, delivery="queued")
+    message = Message(conversation_id=conversation.id, direction="outbound", sender=sender, body=body, delivery="queued", kind="image" if media else "text", media=media or {})
     db.add(message)
     db.flush()
     db.add(Outbox(dedup_key=dedup_key, message_id=message.id, automated=automated,
@@ -97,7 +107,7 @@ def enqueue(db, conversation, body, sender, dedup_key, automated=False, author_i
     conversation.updated_at = time.time()
     return message
 
-def accept_message(db, channel, provider_id, external_id, name, body, kind="text", provider_time=None):
+def accept_message(db, channel, provider_id, external_id, name, body, kind="text", provider_time=None, reply_to=None):
     if db.query(Event).filter_by(channel_id=channel.id, provider_id=provider_id).first():
         return None
     contact = db.query(Contact).filter_by(channel_id=channel.id, external_id=external_id).first()
@@ -120,7 +130,7 @@ def accept_message(db, channel, provider_id, external_id, name, body, kind="text
         conversation.mode = "human"
         conversation.version += 1
     db.add(Message(conversation_id=conversation.id, direction="inbound", sender=contact.name or external_id,
-                   body=body, kind=kind, provider_id=provider_id))
+                   body=body, kind=kind, provider_id=provider_id, media={"reply_to": reply_to} if reply_to else {}))
     event = Event(channel_id=channel.id, provider_id=provider_id, conversation_id=conversation.id,
                   kind="message", payload={"body": body, "kind": kind, "conversation_version": conversation.version,
                                            "inbound_seq": conversation.inbound_seq})
@@ -299,7 +309,7 @@ def create_app(config: Config):
     def messages(entity_id: str, user=Depends(current), db=Depends(db_session)):
         conversation_access(db, entity_id, user)
         rows = db.query(Message).filter_by(conversation_id=entity_id).order_by(Message.created_at.desc(), Message.id).limit(200).all()
-        return [serialize(r, "id direction sender body kind delivery created_at") for r in reversed(rows)]
+        return [serialize(r, "id direction sender body kind media delivery created_at") for r in reversed(rows)]
 
     @app.patch("/api/conversations/{entity_id}")
     def control(entity_id: str, body: Control, user=Depends(current), db=Depends(db_session)):
@@ -346,18 +356,27 @@ def create_app(config: Config):
 
     @app.get("/api/products")
     def products(user=Depends(current), db=Depends(db_session)):
-        return [serialize(r, "id name price currency description active") for r in db.query(Product).filter_by(workspace_id=user.workspace_id).order_by(Product.name).all()]
+        return [serialize(r, "id name price currency description image_url product_url active") for r in db.query(Product).filter_by(workspace_id=user.workspace_id).order_by(Product.name).all()]
+
+    @app.get("/api/media/image")
+    def media_image(url: str, user=Depends(current), db=Depends(db_session)):
+        throttle(db, "image-fetch:" + user.id, 60, 3600)
+        try:
+            content, mime = fetch_image(url)
+        except ImageError:
+            raise HTTPException(422, "Image unavailable or unsupported")
+        return Response(content, media_type=mime, headers={"Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
 
     @app.post("/api/products", status_code=201)
     def product_create(body: ProductInput, user=Depends(admin), db=Depends(db_session)):
         row = Product(workspace_id=user.workspace_id, **body.model_dump()); db.add(row); db.flush()
-        audit(db, user, "product.create", row.id); db.commit(); return serialize(row, "id name price currency description active")
+        audit(db, user, "product.create", row.id); db.commit(); return serialize(row, "id name price currency description image_url product_url active")
 
     @app.patch("/api/products/{entity_id}")
     def product_update(entity_id: str, body: ProductInput, user=Depends(admin), db=Depends(db_session)):
         row = scoped(db, Product, entity_id, user)
         for key, value in body.model_dump().items(): setattr(row, key, value)
-        audit(db, user, "product.update", row.id); db.commit(); return serialize(row, "id name price currency description active")
+        audit(db, user, "product.update", row.id); db.commit(); return serialize(row, "id name price currency description image_url product_url active")
 
     @app.get("/api/channels")
     def channels(user=Depends(admin), db=Depends(db_session)):
@@ -457,7 +476,7 @@ def create_app(config: Config):
                         profile = next((c.get("profile", {}).get("name", "") for c in value.get("contacts", []) if c.get("wa_id") == external_id), "")
                         kind = message.get("type", "unsupported")
                         body = message.get("text", {}).get("body", "") if kind == "text" else "Customer sent " + kind + "; human review required."
-                        accept_message(db, channel, str(message["id"]), external_id, profile[:120], body[:4000], kind, message.get("timestamp"))
+                        accept_message(db, channel, str(message["id"]), external_id, profile[:120], body[:4000], kind, message.get("timestamp"), message.get("context", {}).get("id"))
                     for status in value.get("statuses", []):
                         status_key = "status:" + str(status.get("id", "")) + ":" + str(status.get("status", "")) + ":" + str(status.get("timestamp", ""))
                         if not db.query(Event).filter_by(channel_id=channel.id, provider_id=status_key).first():
@@ -508,7 +527,19 @@ def create_app(config: Config):
     def web_messages(request: Request, db=Depends(db_session)):
         row = web_conversation(db, request)
         messages = db.query(Message).filter_by(conversation_id=row.id).order_by(Message.created_at.desc()).limit(200).all()
-        return [serialize(m, "id direction sender body delivery created_at") for m in reversed(messages)]
+        return [serialize(m, "id direction sender body kind media delivery created_at") for m in reversed(messages)]
+
+    @app.get("/web/messages/{message_id}/image")
+    def web_image(message_id: str, request: Request, db=Depends(db_session)):
+        conversation = web_conversation(db, request)
+        message = db.query(Message).filter_by(id=message_id, conversation_id=conversation.id, kind="image").first()
+        if not message: raise HTTPException(404, "Image unavailable")
+        throttle(db, "visitor-image:" + conversation.id, 120, 3600)
+        try:
+            content, mime = fetch_image(message.media.get("url", ""))
+        except ImageError:
+            raise HTTPException(422, "Image unavailable or unsupported")
+        return Response(content, media_type=mime, headers={"Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
 
     @app.post("/web/messages", status_code=202)
     def web_send(body: Body, request: Request, db=Depends(db_session)):
@@ -516,7 +547,9 @@ def create_app(config: Config):
         throttle(db, "web-message:" + row.id, 60, 3600)
         channel = db.query(Channel).filter_by(id=row.channel_id).with_for_update().one()
         contact = db.get(Contact, row.contact_id)
-        accept_message(db, channel, "web:" + row.id + ":" + body.request_id, contact.external_id, contact.name, body.body)
+        if body.reply_to_id and not db.query(Message).filter_by(id=body.reply_to_id, conversation_id=row.id).first():
+            raise HTTPException(404, "Quoted message unavailable")
+        accept_message(db, channel, "web:" + row.id + ":" + body.request_id, contact.external_id, contact.name, body.body, reply_to=body.reply_to_id)
         db.commit(); return {"accepted": True}
 
     return app
