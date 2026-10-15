@@ -30,7 +30,9 @@ async def drain(message: dict[str, str]):
     if message != {"action": "drain"}:
         raise ValueError("Invalid job wakeup")
     engine, sessions = factory(Config.from_env())
+    from .deployment import queue_health
     try:
+        queue_health(sessions, "queue.worker.started", "itura-jobs")
         worker = Worker(sessions)
         worker.recover()
         for _ in range(4):
@@ -39,5 +41,9 @@ async def drain(message: dict[str, str]):
             if not worked:
                 break
         await wake_if_needed(sessions, minimum_delay=30)
+        queue_health(sessions, "queue.worker.completed", "itura-jobs")
+    except Exception as error:
+        queue_health(sessions, "queue.worker.failed", type(error).__name__[:80])
+        raise
     finally:
         engine.dispose()
