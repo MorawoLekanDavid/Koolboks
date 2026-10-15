@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from platform_v2 import deployment, queue_worker
 from platform_v2.bootstrap import provision_initial_admin
 from platform_v2.db import Config, factory
-from platform_v2.models import Audit, Base, Channel, Event, User, Workspace
+from platform_v2.models import Audit, Base, Channel, Contact, Conversation, Event, User, Workspace
 from platform_v2.security import passwords
 
 def test_unconfigured_backend_returns_json(monkeypatch):
@@ -95,4 +95,23 @@ def test_queue_diagnostics_are_bounded_and_exclude_error_messages(tmp_path):
         assert len(rows) == 1
         assert rows[0].actor_id == "system"
         assert rows[0].entity_id == "TokenResolutionError"
+    engine.dispose()
+
+def test_queue_subscriber_drains_a_real_pending_human_event(tmp_path, monkeypatch):
+    config = Config("sqlite:///" + str(tmp_path / "subscriber.db"), "http://localhost", False)
+    engine, sessions = factory(config)
+    Base.metadata.create_all(engine)
+    with sessions() as db:
+        workspace = Workspace(name="Synthetic"); db.add(workspace); db.flush()
+        channel = Channel(workspace_id=workspace.id, name="Web", provider="web", config={}); db.add(channel); db.flush()
+        contact = Contact(workspace_id=workspace.id, channel_id=channel.id, external_id="synthetic", name="Synthetic"); db.add(contact); db.flush()
+        conversation = Conversation(workspace_id=workspace.id, channel_id=channel.id, contact_id=contact.id, mode="human"); db.add(conversation); db.flush()
+        db.add(Event(channel_id=channel.id, conversation_id=conversation.id, provider_id="test-one", kind="message", payload={"kind":"text"})); db.commit()
+    monkeypatch.setattr(queue_worker.Config, "from_env", lambda: config)
+    monkeypatch.setattr(queue_worker, "factory", lambda _: (engine, sessions))
+    monkeypatch.setattr(queue_worker, "wake_if_needed", AsyncMock())
+    asyncio.run(queue_worker.drain({"action":"drain"}))
+    with sessions() as db:
+        assert db.query(Event).one().state == "done"
+        assert {row.action for row in db.query(Audit).all()} == {"queue.worker.started", "queue.worker.completed"}
     engine.dispose()
