@@ -475,7 +475,12 @@ def create_app(config: Config):
     def web_channel(db, channel_id, request):
         row = db.query(Channel).filter_by(id=channel_id, provider="web", enabled=True).first()
         if not row: raise HTTPException(404, "Widget unavailable")
-        if request.headers.get("origin") not in row.config.get("origins", []): raise HTTPException(403, "Widget origin not allowed")
+        origin = request.headers.get("origin")
+        # Browsers omit Origin on same-origin GETs. Fetch Metadata is browser-controlled;
+        # web_conversation still requires the visitor's bearer token before this check.
+        if not origin and request.method == "GET" and request.headers.get("sec-fetch-site") == "same-origin":
+            origin = str(request.base_url).rstrip("/")
+        if origin not in row.config.get("origins", []): raise HTTPException(403, "Widget origin not allowed")
         return row
 
     def web_conversation(db, request):
