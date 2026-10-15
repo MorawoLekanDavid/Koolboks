@@ -25,7 +25,9 @@ def destination(url):
             raise ImageError("image_host_unavailable")
         for value in addresses:
             address = ipaddress.ip_address(value)
-            if not address.is_global or getattr(address, "ipv4_mapped", None) or getattr(address, "sixtofour", None) or getattr(address, "teredo", None):
+            if (not address.is_global or address.is_multicast or address.is_reserved
+                    or getattr(address, "is_site_local", False)
+                    or getattr(address, "ipv4_mapped", None) or getattr(address, "sixtofour", None) or getattr(address, "teredo", None)):
                 raise ImageError("private_image_destination")
         return host, addresses[0], (parsed.path or "/") + ("?" + parsed.query if parsed.query else "")
     except (UnicodeError, OSError, ValueError) as error:
