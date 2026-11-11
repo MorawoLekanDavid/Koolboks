@@ -42,6 +42,11 @@ MANIFEST
 .env.local
 .env.*.local
 
+# Secrets / keys -- must never be baked into an image
+*.pem
+*.key
+*_key_pair*
+
 # Logs
 *.log
 logs/
