@@ -2,7 +2,7 @@
 set -e
 
 KEY="$(dirname "$0")/chat_server_key_pair.pem"
-HOST="ubuntu@44.192.21.1"
+HOST="ubuntu@32.196.171.236"  # Elastic IP -- stable across instance stop/start
 APP_DIR="/home/ubuntu/new_chatbot"
 
 echo "→ Deploying to $HOST..."
