@@ -1,0 +1,11 @@
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /app
+COPY requirements-v2.txt .
+RUN pip install --no-cache-dir -r requirements-v2.txt
+COPY platform_v2 platform_v2
+COPY migrations_v2 migrations_v2
+COPY alembic-v2.ini .
+USER 10001
+EXPOSE 8000
+CMD ["sh", "-c", "exec python -m uvicorn platform_v2.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
