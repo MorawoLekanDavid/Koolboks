@@ -156,7 +156,13 @@ async def send_whatsapp_message(
                     text_payload["context"] = {"message_id": reply_to_wamid}
                 resp = await client.post(url, json=text_payload, headers=headers)
         if resp is not None:
-            log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
+            if resp.is_success:
+                log.info(f"WhatsApp message sent to {to}: status={resp.status_code}")
+            else:
+                # Meta's reason (expired token, payment issue, restricted account,
+                # 24h window closed...) is only in the response body -- logging just
+                # the status code made "messages not delivering" undiagnosable.
+                log.warning(f"WhatsApp message send to {to} FAILED ({resp.status_code}): {resp.text[:1000]}")
             try:
                 text_wamid = resp.json()["messages"][0]["id"]
             except Exception:

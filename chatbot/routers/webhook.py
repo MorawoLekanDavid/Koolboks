@@ -149,7 +149,15 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         if status_type == "failed":
                             errors = status_evt.get("errors", [])
                             if errors:
-                                error_detail = errors[0].get("title") or errors[0].get("message")
+                                err = errors[0]
+                                error_detail = err.get("title") or err.get("message")
+                                # Prefix Meta's numeric code (e.g. 131042 = payment issue,
+                                # 131047 = 24h window closed) so the admin UI shows something
+                                # actionable; column is String(255).
+                                if err.get("code") is not None:
+                                    error_detail = f"({err.get('code')}) {error_detail or 'Delivery failed'}"
+                                if error_detail:
+                                    error_detail = error_detail[:255]
                         background_tasks.add_task(_update_message_delivery, wamid, status_type, error_detail, status_evt.get("timestamp"))
 
                 messages = value.get("messages", [])
