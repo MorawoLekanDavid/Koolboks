@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Itura Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Phase 2 design-system layer: additive only, namespaced with a ds- prefix
+     so nothing below can collide with it. See ITURA_TRANSFORMATION_PLAN.md. -->
+<link rel="stylesheet" href="/admin/design-system.css">
 <style>
 :root {
   --orange:#FF6B00; --orange-d:#D95C00; --orange-s:rgba(255,107,0,.08); --orange-b:#FFD4A8;
@@ -949,6 +952,10 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 </style>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+<!-- Phase 2 frontend infrastructure (window.UI.*) — loaded before the main
+     inline script below so every UI.* helper is available to it. See
+     ITURA_TRANSFORMATION_PLAN.md and admin/ui-kit.js's own header comment. -->
+<script src="/admin/ui-kit.js"></script>
 </head>
 <body>
 
@@ -2026,6 +2033,8 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
           <option value="telesales_agent">Telesales Agent</option>
           <option value="bi_analyst">BI Analyst</option>
           <option value="team_lead">Team Lead</option>
+          <option value="credit_agent">Credit Agent</option>
+          <option value="credit_team_lead">Credit Team Lead</option>
           <option value="admin">Admin</option>
         </select>
         <select id="newAgentDept" style="padding:9px 12px;border:1.5px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--g700);outline:none;min-width:160px">
@@ -2040,10 +2049,13 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <h3 style="margin:0">Departments</h3>
       </div>
-      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Group agents so a Team Lead can reassign conversations within their own team, rather than across the whole company.</p>
-      <table class="agt-table"><thead><tr><th>Name</th><th>Team Lead</th><th>Members</th><th></th></tr></thead><tbody id="deptTableBody"></tbody></table>
+      <p style="font-size:13px;color:var(--g400);margin-bottom:18px">Group agents so a Team Lead can reassign conversations within their own team, rather than across the whole company. "Manual only" departments (e.g. Credit) never get an AI reply in their conversations — no Take Over button, no bot involvement at all.</p>
+      <table class="agt-table"><thead><tr><th>Name</th><th>Team Lead</th><th>Members</th><th>Manual only</th><th></th></tr></thead><tbody id="deptTableBody"></tbody></table>
       <div class="add-agent-form" id="addDeptForm" style="margin-top:18px;display:none">
         <input type="text" id="newDeptName" placeholder="Department name"/>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--g700)">
+          <input type="checkbox" id="newDeptManualOnly"/> Manual only (no AI bot)
+        </label>
         <button class="btn-primary" onclick="createDepartment()">+ Add Department</button>
       </div>
     </div>
@@ -2817,7 +2829,7 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
 // ── State ──────────────────────────────────────────────────────────────
 let adminKey='', agentName='', agentRole='customer_success_agent', agentEmail='';
 let myAgentId=null, myDepartmentId=null, myStatus='offline';
-let selectedPhone=null, selectedMode='bot';
+let selectedPhone=null, selectedMode='bot', selectedManualOnly=false;
 let allAgents=[];
 let allConversations=[], currentFilter='all';
 let interestedLeads=[], dropoffLeads=[], activeLeadGroup='interested';
@@ -3757,10 +3769,10 @@ function renderConversations(){
     const avLetter=c.name?c.name[0].toUpperCase():'#';
     const tagPills=(c.tags||[]).map(t=>`<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${t.color}22;border:1px solid ${t.color};color:${t.color};font-weight:600;white-space:nowrap">${esc(t.name)}</span>`).join('');
     const ownerChip=c.owner&&c.owner.name?`<span class="owner-chip">${ICON.person} ${esc(c.owner.name)}</span>`:'';
-    const urgency=unread>0?(c.mode==='agent'?'u-red':'u-amber'):'';
+    const urgency=unread>0?(c.mode==='bot'?'u-amber':'u-red'):'';
     return `<div class="conv-item ${selectedPhone===c.phone?'active':''}" onclick="selectConv('${c.phone}','${rn}','${c.mode}','${c.agent||''}')">
       <div class="c-av-wrap">
-        <div class="c-av ${c.mode==='agent'?'ag':''}">${avLetter}</div>
+        <div class="c-av ${c.mode!=='bot'?'ag':''}">${avLetter}</div>
         ${urgency?`<span class="urgency-dot ${urgency}" title="${urgency==='u-red'?'Needs a human — handed off with unread messages':'Bot is handling — unread messages'}"></span>`:''}
       </div>
       <div class="c-info">
@@ -3780,7 +3792,7 @@ function renderConversations(){
               ?`<span class="badge-score sc-bad" title="AI flagged this conversation as at risk — ${issueTxt}">${ICON.warning} ${qs}/10</span>`
               :`<span class="badge-score ${tier}" title="AI response quality — ${issueTxt}">${qs}/10</span>`;
           })():''}
-          <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}" title="${c.mode==='bot'?'Bot is auto-replying':'Taken over — see the owner chip for who'}">${c.mode==='bot'?ICON.robot+' Bot':ICON.handshake+' Taken Over'}</span>
+          <span class="${c.mode==='bot'?'badge-bot':'badge-agent'}" title="${c.mode==='bot'?'Bot is auto-replying':c.mode==='manual'?'Manual department — the bot never responds here':'Taken over — see the owner chip for who'}">${c.mode==='bot'?ICON.robot+' Bot':c.mode==='manual'?ICON.person+' Manual':ICON.handshake+' Taken Over'}</span>
           ${unread>0?`<span class="unread-pill">${unread}</span>`:''}
         </div>
       </div>
@@ -4260,6 +4272,7 @@ async function selectConv(phone,name,mode,agent){
   document.getElementById('attachMenu')?.classList.add('hidden');
   _lastTypingPing=0; // so the first keystroke in this chat isn't throttled by the previous one's timer
   selectedPhone=phone;selectedMode=mode;
+  selectedManualOnly=!!allConversations.find(c=>c.phone===phone)?.manual_only;
   document.getElementById('emptyState').classList.add('hidden');
   const cv=document.getElementById('chatView');cv.classList.remove('hidden');cv.style.display='flex';
   document.getElementById('chatName').textContent=name;
@@ -4787,7 +4800,7 @@ function pickProduct(id){
 }
 
 async function toggleHandoff(){
-  if(!selectedPhone)return;
+  if(!selectedPhone||selectedManualOnly)return; // nothing to take over -- there's no bot here to begin with
   const r=await fetch(`/admin/handoff/${selectedPhone}?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_name:agentName})}).catch(()=>null);
   if(!r||!r.ok)return;
   const d=await r.json();selectedMode=d.mode;updateChatUI(d.mode,d.agent);loadConversations();
@@ -4796,6 +4809,17 @@ function updateChatUI(mode,agent){
   const btn=document.getElementById('handoffBtn');
   const ra=document.getElementById('replyArea');const rd=document.getElementById('replyDisabled');
   const sub=document.getElementById('chatSubtitle');const pill=document.getElementById('chatModePill');
+  if(selectedManualOnly){
+    // Manual-only department conversation -- there's no bot in the loop at
+    // all, so "Take Over"/"Hand Back to Bot" don't apply; always show the
+    // normal reply box, never the bot-handling banner.
+    btn.style.display='none';
+    ra.classList.remove('hidden');rd.classList.add('hidden');
+    sub.textContent=`${selectedPhone||''} — manual conversation, no AI bot`;
+    pill.textContent='Manual';pill.className='chat-mode-pill agent';
+    return;
+  }
+  btn.style.display='';
   if(mode==='agent'){
     btn.innerHTML=`${ICON.robot}Hand Back to Bot`;btn.className='handoff-btn hand-back';
     ra.classList.remove('hidden');rd.classList.add('hidden');
@@ -5801,7 +5825,7 @@ function renderDepartmentTable(){
   const viewerIsAdmin=agentRole==='admin'||agentRole==='super_admin';
   if(form)form.style.display=viewerIsAdmin?'':'none';
   const leadOpts=(names)=>'<option value="">— No lead —</option>'+
-    (_agentList.filter(a=>a.role==='team_lead'||a.role==='admin'||a.role==='super_admin')
+    (_agentList.filter(a=>a.role==='team_lead'||a.role==='credit_team_lead'||a.role==='admin'||a.role==='super_admin')
       .map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join(''));
   body.innerHTML=_departments.length
     ?_departments.map(d=>{
@@ -5809,9 +5833,12 @@ function renderDepartmentTable(){
           ?`<select onchange="setDeptTeamLead(${d.id},this.value)" style="padding:4px 6px;border:1.5px solid var(--g200);border-radius:6px;font-size:12px;font-family:inherit;color:var(--g700);cursor:pointer;background:#fff;outline:none">${leadOpts()}</select>`
           :esc(d.team_lead_name||'—');
         const delBtn=viewerIsAdmin?`<button class="btn-danger" onclick="deleteDepartment(${d.id})">Remove</button>`:'';
-        return `<tr><td>${esc(d.name)}</td><td>${leadSel}</td><td>${d.member_count}</td><td>${delBtn}</td></tr>`;
+        const manualChk=viewerIsAdmin
+          ?`<input type="checkbox" ${d.manual_only?'checked':''} onchange="toggleDeptManualOnly(${d.id},this.checked)"/>`
+          :(d.manual_only?'Yes':'No');
+        return `<tr><td>${esc(d.name)}</td><td>${leadSel}</td><td>${d.member_count}</td><td>${manualChk}</td><td>${delBtn}</td></tr>`;
       }).join('')
-    :'<tr><td colspan="4" style="color:var(--g400);font-size:13px;padding:12px 0">No departments yet</td></tr>';
+    :'<tr><td colspan="5" style="color:var(--g400);font-size:13px;padding:12px 0">No departments yet</td></tr>';
   _departments.forEach(d=>{
     const sel=document.querySelector(`#deptTableBody select[onchange^="setDeptTeamLead(${d.id},"]`);
     if(sel)sel.value=d.team_lead_id||'';
@@ -5820,17 +5847,31 @@ function renderDepartmentTable(){
 async function createDepartment(){
   const name=document.getElementById('newDeptName').value.trim();
   if(!name){alert('Please enter a department name.');return;}
-  const r=await fetch(`/admin/departments?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}).catch(()=>null);
-  if(r&&r.ok){document.getElementById('newDeptName').value='';await loadDepartments();}
+  const manualOnly=!!document.getElementById('newDeptManualOnly')?.checked;
+  const r=await fetch(`/admin/departments?key=${encodeURIComponent(adminKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,manual_only:manualOnly})}).catch(()=>null);
+  if(r&&r.ok){
+    document.getElementById('newDeptName').value='';
+    if(document.getElementById('newDeptManualOnly'))document.getElementById('newDeptManualOnly').checked=false;
+    await loadDepartments();
+  }
   else if(r){const e=await r.json().catch(()=>({}));alert(e.detail||'Failed to add department.');}
 }
 async function setDeptTeamLead(deptId,agentId){
   const dept=_departments.find(d=>d.id===deptId);
   const r=await fetch(`/admin/departments/${deptId}?key=${encodeURIComponent(adminKey)}`,{
     method:'PATCH',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:dept?.name||'',team_lead_id:agentId?parseInt(agentId):null})
+    body:JSON.stringify({name:dept?.name||'',team_lead_id:agentId?parseInt(agentId):null,manual_only:dept?.manual_only||false})
   }).catch(()=>null);
   if(!r||!r.ok){alert('Failed to update team lead.');}
+  await loadDepartments();
+}
+async function toggleDeptManualOnly(deptId,checked){
+  const dept=_departments.find(d=>d.id===deptId);
+  const r=await fetch(`/admin/departments/${deptId}?key=${encodeURIComponent(adminKey)}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:dept?.name||'',team_lead_id:dept?.team_lead_id||null,manual_only:checked})
+  }).catch(()=>null);
+  if(!r||!r.ok){alert('Failed to update department.');}
   await loadDepartments();
 }
 async function deleteDepartment(id){
@@ -5855,6 +5896,7 @@ const PERM_ROLE_LABELS={
 };
 
 function _applyPerms(perms){
+  if(window.UI&&UI.setPermissions)UI.setPermissions(perms); // Phase 2: feed the new UI.can() helper real data; changes nothing else here
   // Top-level tabs with a single dedicated sidebar button
   const directMap={
     conv:['htabConv'],
@@ -8686,6 +8728,15 @@ const US_PURPOSE_LABELS={
   test_chat:'Test Chat (AI Settings)',
 };
 
+// ── Usage & Cost: Phase 2 proof-of-concept migration to the new design
+//    system / ui-kit (design-system.css + ui-kit.js). Same two endpoints,
+//    same request params, same response fields as before — only the
+//    rendering changed: UI.apiFetch() instead of a hand-built fetch+key,
+//    a skeleton while loading instead of static "Loading…" text, a real
+//    UI.errorState() with a Retry button instead of the request silently
+//    failing into stuck placeholder text, UI.emptyState() for the
+//    zero-data case, and .ds-metric-card/UI.formatNumber/UI.formatCurrency
+//    instead of the old .stat-c markup and manual toLocaleString()/toFixed().
 async function loadUsage(){
   await Promise.all([loadGroqUsage(), loadWhatsAppUsage()]);
 }
@@ -8697,62 +8748,68 @@ async function loadGroqUsage(){
   const trendEl=document.getElementById('usGroqTrend');
   const byPurposeEl=document.getElementById('usGroqByPurpose');
   if(!statsEl)return;
+
+  statsEl.innerHTML=UI.skeletonHTML('metric-grid',5);
+  trendEl.innerHTML=UI.skeletonHTML('block');
+  byPurposeEl.innerHTML=UI.skeletonHTML('rows',3);
+
+  const params={};
+  if(from)params.date_from=from;
+  if(to)params.date_to=to;
+
+  let d;
   try{
-    const qs=new URLSearchParams({key:adminKey});
-    if(from)qs.set('date_from',from);
-    if(to)qs.set('date_to',to);
-    const r=await fetch(`/admin/usage/groq?${qs}`);
-    if(!r.ok){
-      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';
-      trendEl.innerHTML='';byPurposeEl.innerHTML='';
-      return;
-    }
-    const d=await r.json();
-    if(!d.total_requests){
-      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">No AI usage recorded yet.</p>';
-      trendEl.innerHTML='';byPurposeEl.innerHTML='';
-      return;
-    }
+    d=await UI.apiFetch('/admin/usage/groq',{params,toastOnError:false});
+  }catch(err){
+    UI.errorState(statsEl,{title:'Couldn\'t load AI usage',message:err.status===401||err.status===403?'Admin access required.':err.message,onRetry:loadGroqUsage});
+    trendEl.innerHTML='';byPurposeEl.innerHTML='';
+    return;
+  }
 
-    statsEl.innerHTML=`
-      <div class="stat-c"><div class="stat-n" style="color:var(--orange)">$${d.total_cost_usd.toFixed(2)}</div><div class="stat-l">Estimated Cost</div></div>
-      <div class="stat-c"><div class="stat-n">${d.total_tokens.toLocaleString()}</div><div class="stat-l">Total Tokens</div></div>
-      <div class="stat-c"><div class="stat-n">${d.total_requests.toLocaleString()}</div><div class="stat-l">AI Requests</div></div>
-      <div class="stat-c"><div class="stat-n" style="color:var(--g500)">${d.total_prompt_tokens.toLocaleString()}</div><div class="stat-l">Prompt Tokens</div></div>
-      <div class="stat-c"><div class="stat-n" style="color:var(--g500)">${d.total_completion_tokens.toLocaleString()}</div><div class="stat-l">Completion Tokens</div></div>
-    `;
+  if(!d.total_requests){
+    UI.emptyState(statsEl,{icon:'',title:'No AI usage recorded yet',sub:'Cost and token usage will appear here once Itura starts handling conversations.'});
+    trendEl.innerHTML='';byPurposeEl.innerHTML='';
+    return;
+  }
 
-    if(!d.trend||!d.trend.length){
-      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
-    } else {
-      const maxCost=Math.max(...d.trend.map(t=>t.cost_usd),0.0001);
-      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
-        const h=Math.max(4,Math.round((t.cost_usd/maxCost)*100));
-        return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: $${t.cost_usd.toFixed(4)} · ${t.tokens.toLocaleString()} tokens · ${t.requests} requests">
-          <div style="width:100%;height:${h}px;background:var(--orange);border-radius:3px 3px 0 0"></div>
-          <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
-        </div>`;
-      }).join('')}</div>`;
-    }
+  statsEl.innerHTML=`
+    <div class="ds-metric-card"><div class="ds-metric-label">Estimated Cost</div><div class="ds-metric-value" style="color:var(--orange)">${UI.formatCurrency(d.total_cost_usd,{symbol:'$',decimals:2})}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">Total Tokens</div><div class="ds-metric-value">${UI.formatNumber(d.total_tokens)}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">AI Requests</div><div class="ds-metric-value">${UI.formatNumber(d.total_requests)}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">Prompt Tokens</div><div class="ds-metric-value" style="color:var(--g500)">${UI.formatNumber(d.total_prompt_tokens)}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">Completion Tokens</div><div class="ds-metric-value" style="color:var(--g500)">${UI.formatNumber(d.total_completion_tokens)}</div></div>
+  `;
 
-    if(!d.by_purpose||!d.by_purpose.length){
-      byPurposeEl.innerHTML='<p style="color:var(--g400);font-size:13px">No data</p>';
-    } else {
-      const maxCost2=Math.max(...d.by_purpose.map(p=>p.cost_usd),0.0001);
-      byPurposeEl.innerHTML=d.by_purpose.map(p=>{
-        const pct=Math.round((p.cost_usd/maxCost2)*100);
-        return `<div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span style="color:var(--g600)">${esc(US_PURPOSE_LABELS[p.purpose]||p.purpose)}</span>
-            <span style="font-weight:700;color:var(--g700)">$${p.cost_usd.toFixed(3)} <span style="font-weight:400;color:var(--g400)">(${p.requests} req)</span></span>
-          </div>
-          <div style="height:8px;background:var(--g100);border-radius:4px;overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:var(--orange);border-radius:4px"></div>
-          </div>
-        </div>`;
-      }).join('');
-    }
-  }catch(e){console.error(e);}
+  if(!d.trend||!d.trend.length){
+    UI.emptyState(trendEl,{icon:'',title:'Not enough data yet'});
+  } else {
+    const maxCost=Math.max(...d.trend.map(t=>t.cost_usd),0.0001);
+    trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
+      const h=Math.max(4,Math.round((t.cost_usd/maxCost)*100));
+      return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: $${t.cost_usd.toFixed(4)} · ${UI.formatNumber(t.tokens)} tokens · ${t.requests} requests">
+        <div style="width:100%;height:${h}px;background:var(--orange);border-radius:3px 3px 0 0"></div>
+        <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  if(!d.by_purpose||!d.by_purpose.length){
+    UI.emptyState(byPurposeEl,{icon:'',title:'No data'});
+  } else {
+    const maxCost2=Math.max(...d.by_purpose.map(p=>p.cost_usd),0.0001);
+    byPurposeEl.innerHTML=d.by_purpose.map(p=>{
+      const pct=Math.round((p.cost_usd/maxCost2)*100);
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+          <span style="color:var(--g600)">${esc(US_PURPOSE_LABELS[p.purpose]||p.purpose)}</span>
+          <span style="font-weight:700;color:var(--g700)">$${p.cost_usd.toFixed(3)} <span style="font-weight:400;color:var(--g400)">(${p.requests} req)</span></span>
+        </div>
+        <div style="height:8px;background:var(--g100);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:var(--orange);border-radius:4px"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 async function loadWhatsAppUsage(){
@@ -8761,40 +8818,49 @@ async function loadWhatsAppUsage(){
   const statsEl=document.getElementById('usWaStats');
   const trendEl=document.getElementById('usWaTrend');
   if(!statsEl)return;
+
+  statsEl.innerHTML=UI.skeletonHTML('metric-grid',4);
+  trendEl.innerHTML=UI.skeletonHTML('block');
+
+  const params={};
+  if(from)params.date_from=from;
+  if(to)params.date_to=to;
+
+  let d;
   try{
-    const qs=new URLSearchParams({key:adminKey});
-    if(from)qs.set('date_from',from);
-    if(to)qs.set('date_to',to);
-    const r=await fetch(`/admin/usage/whatsapp?${qs}`);
-    if(!r.ok){statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">Admin access required</p>';trendEl.innerHTML='';return;}
-    const d=await r.json();
-    if(!d.total_sent&&!d.total_received){
-      statsEl.innerHTML='<p style="color:var(--g400);font-size:13px">No messages recorded yet.</p>';
-      trendEl.innerHTML='';
-      return;
-    }
+    d=await UI.apiFetch('/admin/usage/whatsapp',{params,toastOnError:false});
+  }catch(err){
+    UI.errorState(statsEl,{title:'Couldn\'t load WhatsApp usage',message:err.status===401||err.status===403?'Admin access required.':err.message,onRetry:loadWhatsAppUsage});
+    trendEl.innerHTML='';
+    return;
+  }
 
-    statsEl.innerHTML=`
-      <div class="stat-c"><div class="stat-n" style="color:#22c55e">${d.total_sent.toLocaleString()}</div><div class="stat-l">Messages Sent</div></div>
-      <div class="stat-c"><div class="stat-n" style="color:#3b82f6">${d.total_received.toLocaleString()}</div><div class="stat-l">Messages Received</div></div>
-      <div class="stat-c"><div class="stat-n" style="color:var(--orange)">${d.sent_by_bot.toLocaleString()}</div><div class="stat-l">Sent by Bot</div></div>
-      <div class="stat-c"><div class="stat-n" style="color:var(--g500)">${d.sent_by_agent.toLocaleString()}</div><div class="stat-l">Sent by Agent</div></div>
-    `;
+  if(!d.total_sent&&!d.total_received){
+    UI.emptyState(statsEl,{icon:'',title:'No messages recorded yet'});
+    trendEl.innerHTML='';
+    return;
+  }
 
-    if(!d.trend||!d.trend.length){
-      trendEl.innerHTML='<p style="color:var(--g400);font-size:13px">Not enough data yet</p>';
-    } else {
-      const maxTotal=Math.max(...d.trend.map(t=>t.sent+t.received),1);
-      trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
-        const total=t.sent+t.received;
-        const h=Math.max(4,Math.round((total/maxTotal)*100));
-        return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.sent} sent, ${t.received} received">
-          <div style="width:100%;height:${h}px;background:#22c55e;border-radius:3px 3px 0 0"></div>
-          <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
-        </div>`;
-      }).join('')}</div>`;
-    }
-  }catch(e){console.error(e);}
+  statsEl.innerHTML=`
+    <div class="ds-metric-card"><div class="ds-metric-label">Messages Sent</div><div class="ds-metric-value" style="color:var(--ds-success)">${UI.formatNumber(d.total_sent)}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">Messages Received</div><div class="ds-metric-value" style="color:var(--ds-info)">${UI.formatNumber(d.total_received)}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">Sent by Bot</div><div class="ds-metric-value" style="color:var(--orange)">${UI.formatNumber(d.sent_by_bot)}</div></div>
+    <div class="ds-metric-card"><div class="ds-metric-label">Sent by Agent</div><div class="ds-metric-value" style="color:var(--g500)">${UI.formatNumber(d.sent_by_agent)}</div></div>
+  `;
+
+  if(!d.trend||!d.trend.length){
+    UI.emptyState(trendEl,{icon:'',title:'Not enough data yet'});
+  } else {
+    const maxTotal=Math.max(...d.trend.map(t=>t.sent+t.received),1);
+    trendEl.innerHTML=`<div style="display:flex;align-items:flex-end;gap:4px;height:100px;width:max-content;min-width:100%">${d.trend.map(t=>{
+      const total=t.sent+t.received;
+      const h=Math.max(4,Math.round((total/maxTotal)*100));
+      return `<div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center;gap:3px" title="${esc(t.date)}: ${t.sent} sent, ${t.received} received">
+        <div style="width:100%;height:${h}px;background:var(--ds-success);border-radius:3px 3px 0 0"></div>
+        <span style="font-size:9px;color:var(--g400)">${esc(t.date.slice(5))}</span>
+      </div>`;
+    }).join('')}</div>`;
+  }
 }
 // ── End Usage & Cost ──────────────────────────────────────────────────────
 

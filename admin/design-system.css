@@ -1,0 +1,170 @@
+/*
+ * Itura Design System — Phase 2 foundation layer
+ * ------------------------------------------------
+ * Purely additive. Every rule here is namespaced with a `ds-` prefix so it
+ * cannot collide with or override any existing class in admin/index.html.
+ * Tokens ALIAS the existing :root variables (--orange, --g50..--g900,
+ * --border, --sh, etc. — defined in index.html) wherever an equivalent
+ * already exists, instead of inventing a second, competing palette.
+ *
+ * Nothing in this file is loaded or applied until a screen is deliberately
+ * migrated to use these classes. Existing screens are completely unaffected.
+ */
+
+:root {
+  /* ---- Semantic status colors (new — nothing existing plays this role) ---- */
+  --ds-success:      var(--green, #22c55e);
+  --ds-success-bg:   var(--green-s, #dcfce7);
+  --ds-warning:      var(--amber, #D97706);
+  --ds-warning-bg:   var(--amber-s, #FEF3C7);
+  --ds-danger:       var(--red, #EF4444);
+  --ds-danger-bg:    var(--red-s, #fee2e2);
+  --ds-info:         #2563EB;
+  --ds-info-bg:      #DBEAFE;
+  --ds-neutral:      var(--g500, #64748B);
+  --ds-neutral-bg:   var(--g100, #F1F5F9);
+
+  /* AI vs. human conversation-state colors — used nowhere else today */
+  --ds-ai:           #7C3AED;
+  --ds-ai-bg:        #EDE9FE;
+  --ds-human:        #0D9488;
+  --ds-human-bg:     #CCFBF1;
+
+  /* ---- Spacing scale (px, matching the codebase's existing unit choice) ---- */
+  --ds-space-1: 4px;  --ds-space-2: 8px;  --ds-space-3: 12px; --ds-space-4: 16px;
+  --ds-space-5: 20px; --ds-space-6: 24px; --ds-space-7: 32px; --ds-space-8: 40px;
+
+  /* ---- Radius scale ---- */
+  --ds-radius-sm: 6px; --ds-radius-md: 10px; --ds-radius-lg: 14px; --ds-radius-full: 999px;
+
+  /* ---- Type scale — close to the sizes already in ad hoc use throughout
+     index.html (11/12/13/14/15/18/22px), formalized into one named scale ---- */
+  --ds-text-xs: 11px; --ds-text-sm: 12.5px; --ds-text-base: 13.5px; --ds-text-md: 14px;
+  --ds-text-lg: 16px; --ds-text-xl: 20px; --ds-text-2xl: 26px;
+
+  /* ---- Shadows — alias the existing scale, don't redefine the values ---- */
+  --ds-shadow-sm: var(--sh, 0 1px 3px rgba(0,0,0,.06));
+  --ds-shadow-md: var(--sh-md, 0 4px 12px rgba(0,0,0,.08));
+  --ds-shadow-lg: var(--sh-lg, 0 8px 30px rgba(0,0,0,.12));
+
+  --ds-transition: .15s ease;
+}
+
+/* ============================== Buttons ============================== */
+.ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:inherit;font-weight:700;border-radius:var(--ds-radius-md);cursor:pointer;transition:background var(--ds-transition),border-color var(--ds-transition),color var(--ds-transition);border:1.5px solid transparent;white-space:nowrap}
+.ds-btn:disabled{opacity:.5;cursor:not-allowed}
+.ds-btn-sm{font-size:var(--ds-text-xs);padding:5px 10px}
+.ds-btn-md{font-size:var(--ds-text-sm);padding:8px 14px}
+.ds-btn-lg{font-size:var(--ds-text-md);padding:10px 18px}
+.ds-btn svg{width:14px;height:14px;flex-shrink:0}
+
+.ds-btn-primary{background:var(--orange,#FF6B00);border-color:var(--orange,#FF6B00);color:#fff}
+.ds-btn-primary:hover:not(:disabled){background:var(--orange-d,#D95C00);border-color:var(--orange-d,#D95C00)}
+.ds-btn-secondary{background:#fff;border-color:var(--g200,#E2E8F0);color:var(--g700,#334155)}
+.ds-btn-secondary:hover:not(:disabled){background:var(--g50,#F8FAFC)}
+.ds-btn-ghost{background:transparent;border-color:transparent;color:var(--g600,#475569)}
+.ds-btn-ghost:hover:not(:disabled){background:var(--g100,#F1F5F9)}
+.ds-btn-danger{background:var(--ds-danger);border-color:var(--ds-danger);color:#fff}
+.ds-btn-danger:hover:not(:disabled){filter:brightness(.92)}
+
+/* ============================== Badges ============================== */
+.ds-badge{display:inline-flex;align-items:center;gap:4px;font-size:var(--ds-text-xs);font-weight:700;line-height:1;padding:4px 9px;border-radius:var(--ds-radius-full);white-space:nowrap}
+.ds-badge-success{background:var(--ds-success-bg);color:var(--ds-success)}
+.ds-badge-warning{background:var(--ds-warning-bg);color:var(--ds-warning)}
+.ds-badge-danger{background:var(--ds-danger-bg);color:var(--ds-danger)}
+.ds-badge-info{background:var(--ds-info-bg);color:var(--ds-info)}
+.ds-badge-neutral{background:var(--ds-neutral-bg);color:var(--ds-neutral)}
+.ds-badge-ai{background:var(--ds-ai-bg);color:var(--ds-ai)}
+.ds-badge-human{background:var(--ds-human-bg);color:var(--ds-human)}
+
+/* ---- Status indicators (dot + label — presence, AI/human state, etc.) ---- */
+.ds-status{display:inline-flex;align-items:center;gap:6px;font-size:var(--ds-text-sm);font-weight:600;color:var(--g600,#475569)}
+.ds-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--ds-neutral)}
+.ds-status-dot.ds-online{background:var(--ds-success)}
+.ds-status-dot.ds-away{background:var(--ds-warning)}
+.ds-status-dot.ds-offline{background:var(--ds-neutral)}
+.ds-status-dot.ds-ai{background:var(--ds-ai)}
+.ds-status-dot.ds-human{background:var(--ds-human)}
+.ds-status-dot.ds-danger{background:var(--ds-danger)}
+
+/* ============================== Metric cards ============================== */
+.ds-metric-card{background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:var(--ds-radius-lg);padding:var(--ds-space-5);display:flex;flex-direction:column;gap:6px;min-width:0}
+.ds-metric-label{font-size:var(--ds-text-xs);font-weight:700;color:var(--g500,#64748B);text-transform:uppercase;letter-spacing:.04em}
+.ds-metric-value{font-size:var(--ds-text-2xl);font-weight:800;color:var(--g900,#0F172A);font-variant-numeric:tabular-nums;line-height:1.1}
+.ds-metric-sub{font-size:var(--ds-text-xs);color:var(--g400,#94A3B8);display:flex;align-items:center;gap:4px}
+.ds-metric-sub.ds-up{color:var(--ds-success)}
+.ds-metric-sub.ds-down{color:var(--ds-danger)}
+.ds-metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--ds-space-3)}
+/* Compatibility: the existing .stat-cards-row is a plain flex row (no grid),
+   used by several not-yet-migrated screens. A .ds-metric-card dropped into
+   it needs explicit sizing or it packs tight instead of spreading evenly the
+   way the old .stat-c cards did. */
+.stat-cards-row .ds-metric-card{flex:1;min-width:150px}
+
+/* ============================== Tables ============================== */
+.ds-table-wrap{overflow-x:auto;border:1px solid var(--border,#E2E8F0);border-radius:var(--ds-radius-lg)}
+.ds-table{width:100%;border-collapse:collapse;font-size:var(--ds-text-sm)}
+.ds-table th{text-align:left;font-size:var(--ds-text-xs);font-weight:700;color:var(--g500,#64748B);text-transform:uppercase;letter-spacing:.03em;padding:10px 14px;background:var(--g50,#F8FAFC);border-bottom:1px solid var(--border,#E2E8F0);white-space:nowrap}
+.ds-table td{padding:10px 14px;border-bottom:1px solid var(--g100,#F1F5F9);color:var(--g700,#334155);vertical-align:middle}
+.ds-table tbody tr:last-child td{border-bottom:none}
+.ds-table tbody tr:hover{background:var(--g50,#F8FAFC)}
+.ds-table-compact th,.ds-table-compact td{padding:6px 12px}
+
+/* ============================== Drawer ============================== */
+.ds-drawer-overlay{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:200;opacity:0;pointer-events:none;transition:opacity var(--ds-transition)}
+.ds-drawer-overlay.ds-open{opacity:1;pointer-events:auto}
+.ds-drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:#fff;box-shadow:var(--ds-shadow-lg);z-index:201;display:flex;flex-direction:column;transform:translateX(100%);transition:transform var(--ds-transition)}
+.ds-drawer-overlay.ds-open .ds-drawer{transform:translateX(0)}
+.ds-drawer-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border,#E2E8F0);flex-shrink:0}
+.ds-drawer-title{font-size:var(--ds-text-md);font-weight:700;color:var(--g900,#0F172A)}
+.ds-drawer-close{background:none;border:none;cursor:pointer;color:var(--g400,#94A3B8);padding:4px;border-radius:6px}
+.ds-drawer-close:hover{background:var(--g100,#F1F5F9);color:var(--g700,#334155)}
+.ds-drawer-body{flex:1;overflow-y:auto;padding:18px}
+
+/* ============================== Modal & confirmation dialog ============================== */
+.ds-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity var(--ds-transition)}
+.ds-modal-overlay.ds-open{opacity:1;pointer-events:auto}
+.ds-modal{background:#fff;border-radius:var(--ds-radius-lg);box-shadow:var(--ds-shadow-lg);width:100%;max-width:440px;padding:22px;transform:scale(.97);transition:transform var(--ds-transition)}
+.ds-modal-overlay.ds-open .ds-modal{transform:scale(1)}
+.ds-modal-title{font-size:var(--ds-text-lg);font-weight:700;color:var(--g900,#0F172A);margin-bottom:8px}
+.ds-modal-body{font-size:var(--ds-text-base);color:var(--g600,#475569);line-height:1.5;margin-bottom:20px}
+.ds-modal-actions{display:flex;justify-content:flex-end;gap:8px}
+.ds-modal.ds-confirm-danger .ds-modal-title{color:var(--ds-danger)}
+
+/* ============================== Toasts ============================== */
+.ds-toast-stack{position:fixed;bottom:20px;right:20px;z-index:400;display:flex;flex-direction:column;gap:8px;max-width:360px}
+.ds-toast{display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid var(--border,#E2E8F0);border-left:4px solid var(--ds-neutral);border-radius:var(--ds-radius-md);box-shadow:var(--ds-shadow-md);padding:12px 14px;font-size:var(--ds-text-sm);color:var(--g700,#334155);opacity:0;transform:translateY(6px);transition:opacity var(--ds-transition),transform var(--ds-transition)}
+.ds-toast.ds-show{opacity:1;transform:translateY(0)}
+.ds-toast-success{border-left-color:var(--ds-success)}
+.ds-toast-danger{border-left-color:var(--ds-danger)}
+.ds-toast-warning{border-left-color:var(--ds-warning)}
+.ds-toast-info{border-left-color:var(--ds-info)}
+.ds-toast-msg{flex:1;line-height:1.4}
+.ds-toast-close{background:none;border:none;cursor:pointer;color:var(--g400,#94A3B8);font-size:16px;line-height:1;padding:0}
+
+/* ============================== Alerts (inline banners) ============================== */
+.ds-alert{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--ds-radius-md);font-size:var(--ds-text-sm);line-height:1.5;border:1px solid transparent}
+.ds-alert-success{background:var(--ds-success-bg);color:#166534;border-color:#bbf7d0}
+.ds-alert-warning{background:var(--ds-warning-bg);color:#92400e;border-color:var(--amber-b,#FDE68A)}
+.ds-alert-danger{background:var(--ds-danger-bg);color:#991b1b;border-color:#fecaca}
+.ds-alert-info{background:var(--ds-info-bg);color:#1e40af;border-color:#bfdbfe}
+.ds-alert-icon{flex-shrink:0;width:16px;height:16px;margin-top:1px}
+
+/* ============================== Skeleton / loading ============================== */
+@keyframes ds-shimmer{0%{background-position:-200px 0}100%{background-position:calc(200px + 100%) 0}}
+.ds-skeleton{background:linear-gradient(90deg,var(--g100,#F1F5F9) 25%,var(--g200,#E2E8F0) 37%,var(--g100,#F1F5F9) 63%);background-size:400px 100%;animation:ds-shimmer 1.4s ease-in-out infinite;border-radius:var(--ds-radius-sm)}
+.ds-skeleton-text{height:12px;margin-bottom:8px;width:100%}
+.ds-skeleton-text:last-child{width:60%;margin-bottom:0}
+.ds-skeleton-block{height:80px;width:100%}
+.ds-skeleton-circle{width:36px;height:36px;border-radius:50%}
+.ds-skeleton-row{display:flex;flex-direction:column;gap:8px;padding:14px}
+
+/* ============================== Error state ============================== */
+/* Empty states already exist and are reused as-is (.ui-empty / emptyState() in
+   index.html) — this is the one new sibling for a genuine failure, distinct
+   from "nothing here yet": it always offers a retry action. */
+.ds-error-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:40px 20px;text-align:center}
+.ds-error-icon{width:44px;height:44px;background:var(--ds-danger-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ds-danger);flex-shrink:0}
+.ds-error-icon svg{width:20px;height:20px}
+.ds-error-title{font-size:var(--ds-text-md);font-weight:700;color:var(--g700,#334155)}
+.ds-error-sub{font-size:var(--ds-text-sm);color:var(--g400,#94A3B8);max-width:320px;line-height:1.5}

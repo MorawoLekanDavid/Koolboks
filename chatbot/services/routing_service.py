@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from chatbot.config import log
 from chatbot.core import redis_client
 from chatbot.database import get_db
-from chatbot.models import Agent, ConversationOwner, Lead, Message
+from chatbot.models import Agent, ConversationOwner, Department, Lead, Message
 from chatbot.services.presence_service import is_online
 
 # Only the frontline support role takes a turn in the rotation — telesales
@@ -81,6 +81,30 @@ async def _pick_sticky_owner(db, phone: str) -> Agent | None:
     if await is_online(creator.id):
         return creator
     return None
+
+
+async def is_manual_only_owner(phone: str) -> bool:
+    """True if this phone's ConversationOwner belongs to an agent in a
+    manual_only department (e.g. Credit) -- those conversations never get a
+    bot reply, permanently: no TTL, no auto-resume, unlike the per-session
+    Redis handoff key a normal agent takeover uses. False if there's no
+    owner yet, the owner doesn't match a real agent, or their department
+    isn't manual_only -- the bot behaves exactly as it does today."""
+    db = get_db()
+    try:
+        owner = db.query(ConversationOwner).filter(ConversationOwner.phone == phone).first()
+        if not owner or not owner.owner_email:
+            return False
+        agent = db.query(Agent).filter(Agent.email == owner.owner_email).first()
+        if not agent or agent.department_id is None:
+            return False
+        dept = db.query(Department).filter(Department.id == agent.department_id).first()
+        return bool(dept and dept.manual_only)
+    except Exception as e:
+        log.warning(f"is_manual_only_owner check failed for {phone}: {e}")
+        return False
+    finally:
+        db.close()
 
 
 async def auto_assign_conversation(phone: str) -> None:

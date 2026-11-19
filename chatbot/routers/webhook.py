@@ -14,7 +14,7 @@ from chatbot.database import get_db
 from chatbot.models import BroadcastRecipient, Message
 from chatbot.services.bot_control import is_bot_globally_disabled
 from chatbot.services.lead_service import save_lead
-from chatbot.services.routing_service import auto_assign_conversation
+from chatbot.services.routing_service import auto_assign_conversation, is_manual_only_owner
 from chatbot.services.whatsapp_service import mark_whatsapp_read, save_message_db
 from chatbot.utils.phone import extract_valid_phone, normalize_phone
 from chatbot.workers.bot_response import delayed_bot_response
@@ -298,6 +298,17 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     # below ever runs.
                     if bot_globally_off:
                         log.info(f"Bot is globally disabled — {session_id} message recorded, no reply")
+                        await _record_silent_inbound(session_id, wa_from, name, text, background_tasks)
+                        continue
+
+                    # Conversations owned by a manual-only department (e.g. Credit)
+                    # never get a bot reply -- permanently, no TTL, no auto-resume.
+                    # Checked before the per-session handoff key below, which is for
+                    # a temporary agent takeover and WOULD auto-reset after
+                    # HANDOFF_AUTO_RESET_HOURS -- wrong for a department that's
+                    # manual by design, not just manual for the moment.
+                    if await is_manual_only_owner(wa_from):
+                        log.info(f"{session_id} owned by a manual-only department — bot silent")
                         await _record_silent_inbound(session_id, wa_from, name, text, background_tasks)
                         continue
 

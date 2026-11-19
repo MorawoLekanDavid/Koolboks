@@ -103,6 +103,11 @@ class Department(Base):
     # and a mutual FK cycle between these two tables breaks create_all()'s
     # table-creation ordering. Resolved in application code instead.
     team_lead_id = Column(Integer, nullable=True)
+    # When true, every conversation owned by an agent in this department never
+    # gets a bot reply -- permanently, no TTL, unlike the per-conversation
+    # Redis handoff key (see routing_service.is_manual_only_owner). For
+    # departments that work customers entirely by hand (e.g. Credit).
+    manual_only = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     agents = relationship("Agent", back_populates="department", foreign_keys="Agent.department_id")

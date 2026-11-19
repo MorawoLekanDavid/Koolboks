@@ -19,8 +19,8 @@ from chatbot.config import (
 from chatbot.core import redis_client
 from chatbot.database import get_db
 from chatbot.dependencies import get_admin_ctx
-from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, Escalation, HandoffEvent, Message, ReassignmentRequest, Tag
-from chatbot.routers.permissions import _phone_allowed, conversation_guard, get_conversation_scope, require_tab_permission
+from chatbot.models import Agent, CannedResponse, ConversationOwner, ConversationScore, ConversationTag, Department, Escalation, HandoffEvent, Message, ReassignmentRequest, Tag
+from chatbot.routers.permissions import TEAM_LEAD_ROLES, _phone_allowed, conversation_guard, get_conversation_scope, require_tab_permission
 from chatbot.services.escalation_service import mark_first_response_if_needed
 from chatbot.services.whatsapp_service import (
     WHATSAPP_MEDIA_MAX_BYTES,
@@ -168,6 +168,18 @@ async def list_conversations(
                     ).where(ConversationOwner.phone.in_(phones))
                 ).all()
 
+            # Emails of agents in a manual_only department (e.g. Credit) --
+            # their conversations never show the Take Over control, since the
+            # bot never engages there in the first place (see webhook.py /
+            # routing_service.is_manual_only_owner).
+            manual_only_emails = {
+                a.email
+                for a in db.query(Agent)
+                .join(Department, Agent.department_id == Department.id)
+                .filter(Department.manual_only == True)
+                .all()
+            }
+
             score_rows = []
             if phones:
                 # Ordered by phone then most-recent-first, so the first row seen per
@@ -208,11 +220,11 @@ async def list_conversations(
                     )
                 ).all()
 
-            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows, first_msg_rows
+            return total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows, first_msg_rows, manual_only_emails
         finally:
             db.close()
 
-    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows, first_msg_rows = await run_in_threadpool(_db_fetch)
+    total, rows, phones, agent_rows, inbound_totals, tags_rows, owner_rows, score_rows, first_msg_rows, manual_only_emails = await run_in_threadpool(_db_fetch)
 
     outreach_set = {
         r.phone for r in first_msg_rows
@@ -293,20 +305,26 @@ async def list_conversations(
         total_in = inbound_totals.get(r.phone, 0)
         last_read = read_map.get(r.phone)
         unread = unread_overrides.get(r.phone, total_in) if last_read else total_in
+        owner = owner_map.get(r.phone)
+        is_manual_only = bool(owner and owner.get("email") in manual_only_emails)
         conversations.append(
             {
                 "phone": r.phone,
                 "name": r.name,
                 "last_message": r.last_message.isoformat() if r.last_message else None,
                 "total_messages": r.total,
-                "mode": "agent" if handoff else "bot",
+                # manual_only conversations never get a handoff key (the bot never
+                # engages to begin with) -- without this they'd otherwise show "bot"
+                # here despite having no bot involvement at all.
+                "mode": "manual" if is_manual_only else ("agent" if handoff else "bot"),
                 "agent": handoff if handoff and handoff != "1" else None,
                 "unread": unread,
                 "agents_involved": agent_map.get(r.phone, []),
                 "tags": tags_map.get(r.phone, []),
-                "owner": owner_map.get(r.phone),
+                "owner": owner,
                 "score": score_map.get(r.phone),
                 "is_outreach": r.phone in outreach_set,
+                "manual_only": is_manual_only,
             }
         )
 
@@ -721,7 +739,7 @@ async def set_conversation_owner(phone: str, body: OwnerUpdate, ctx: dict = Depe
         try:
             # Team Lead can reassign broadly, but only to agents in their own
             # department — not a company-wide free-for-all.
-            if ctx.get("role") == "team_lead" and body.owner_email:
+            if ctx.get("role") in TEAM_LEAD_ROLES and body.owner_email:
                 if not _dept_match(db, ctx.get("agent_id"), body.owner_email):
                     raise HTTPException(403, "You can only reassign within your own department")
 
@@ -782,9 +800,9 @@ async def request_reassignment(phone: str, body: ReassignmentRequestIn, ctx: dic
         db = get_db()
         try:
             to_email = body.to_owner_email or requester_email
-            if to_email != requester_email and role not in ("admin", "super_admin", "team_lead"):
+            if to_email != requester_email and role not in ("admin", "super_admin", *TEAM_LEAD_ROLES):
                 raise HTTPException(403, "You can only request a conversation for yourself")
-            if role == "team_lead" and to_email != requester_email and not _dept_match(db, ctx.get("agent_id"), to_email):
+            if role in TEAM_LEAD_ROLES and to_email != requester_email and not _dept_match(db, ctx.get("agent_id"), to_email):
                 raise HTTPException(403, "You can only assign within your own department")
 
             target_agent = db.query(Agent).filter(Agent.email == to_email).first() if to_email else None
@@ -794,7 +812,7 @@ async def request_reassignment(phone: str, body: ReassignmentRequestIn, ctx: dic
             from_name = existing_owner.owner_name if existing_owner else None
             from_email = existing_owner.owner_email if existing_owner else None
 
-            auto = role in ("admin", "super_admin", "team_lead")
+            auto = role in ("admin", "super_admin", *TEAM_LEAD_ROLES)
             req = ReassignmentRequest(
                 phone=norm, from_owner_name=from_name, from_owner_email=from_email,
                 to_owner_name=to_name, to_owner_email=to_email,
@@ -828,7 +846,7 @@ def _can_decide(db, ctx: dict, req: ReassignmentRequest) -> bool:
     role = ctx.get("role")
     if role in ("admin", "super_admin"):
         return True
-    if role == "team_lead":
+    if role in TEAM_LEAD_ROLES:
         scope = get_conversation_scope(db, ctx)
         return req.requested_by_email in scope.get("dept_emails", set())
     return False
@@ -888,7 +906,7 @@ async def list_reassignment_requests(
             if status and status != "all":
                 q = q.filter(ReassignmentRequest.status == status)
             if role not in ("admin", "super_admin"):
-                if role == "team_lead":
+                if role in TEAM_LEAD_ROLES:
                     scope = get_conversation_scope(db, ctx)
                     dept_emails = scope.get("dept_emails", set()) | {ctx.get("email")}
                     q = q.filter(ReassignmentRequest.requested_by_email.in_(dept_emails))

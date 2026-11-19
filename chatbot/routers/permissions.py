@@ -12,13 +12,26 @@ from chatbot.utils.phone import normalize_phone
 router = APIRouter(prefix="/admin/role-permissions", tags=["permissions"])
 
 # Tabs that can be toggled per role (conv is always visible — not in this list)
-ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings", "usage", "routing", "escalations"]
+# assignmentRules (Phase 3I) is deliberately separate from routing: routing
+# gates Auto-Routing (live conversation ownership), assignmentRules gates
+# Lead Assignment Rules (bulk Lead.assigned_to changes) — related but
+# distinct capabilities that used to share the routing tab as a stopgap
+# nav-visibility proxy only (see PHASE_3H_REPORT.md / PHASE_3I_PREFLIGHT.md
+# §8) — never a real server-side gate until now.
+ALL_TABS = ["leads", "contacts", "products", "canned", "analytics", "team", "templates", "aiSettings", "usage", "routing", "escalations", "assignmentRules"]
 
 # Roles whose permissions are configurable via the Team tab UI
 CONFIGURABLE_ROLES = [
     "super_admin", "admin",
     "customer_success_agent", "telesales_agent", "bi_analyst", "team_lead",
+    "credit_agent", "credit_team_lead",
 ]
+
+# team_lead-equivalent roles -- get department-wide (not just personal) scope
+# in get_conversation_scope/get_analytics_scope below. A plain `role ==
+# "team_lead"` check would silently drop a credit_team_lead to personal-only
+# visibility, losing oversight of their own department's chats.
+TEAM_LEAD_ROLES = ("team_lead", "credit_team_lead")
 
 # Roles that only ever get read access to Conversations — no send/take-over/
 # tag/reassign, regardless of what the tab matrix says. Not part of the
@@ -30,32 +43,46 @@ DEFAULTS: Dict[str, Dict[str, bool]] = {
     "super_admin": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True, "routing": True,
-        "escalations": True,
+        "escalations": True, "assignmentRules": True,
     },
     "admin": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": True, "templates": True, "aiSettings": True, "usage": True, "routing": True,
-        "escalations": True,
+        "escalations": True, "assignmentRules": True,
     },
     "customer_success_agent": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
-        "escalations": True,
+        "escalations": True, "assignmentRules": False,
     },
     "telesales_agent": {
         "leads": False, "contacts": False, "products": False, "canned": False,
         "analytics": True, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
-        "escalations": False,
+        "escalations": False, "assignmentRules": False,
     },
     "bi_analyst": {
         "leads": False, "contacts": False, "products": False, "canned": False,
         "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": True, "routing": False,
-        "escalations": True,
+        "escalations": True, "assignmentRules": False,
     },
     "team_lead": {
         "leads": True, "contacts": True, "products": True, "canned": True,
         "analytics": True, "team": False, "templates": False, "aiSettings": False, "usage": False, "routing": False,
-        "escalations": True,
+        "escalations": True, "assignmentRules": False,
+    },
+    # Credit department -- fully manual chats, no bot involvement (see
+    # Department.manual_only / routing_service.is_manual_only_owner). No
+    # Products/Canned Responses/Leads -- those are sales tools they don't use.
+    # Templates stays on since they open every conversation with one.
+    "credit_agent": {
+        "leads": False, "contacts": True, "products": False, "canned": False,
+        "analytics": True, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
+        "escalations": False, "assignmentRules": False,
+    },
+    "credit_team_lead": {
+        "leads": False, "contacts": True, "products": False, "canned": False,
+        "analytics": True, "team": False, "templates": True, "aiSettings": False, "usage": False, "routing": False,
+        "escalations": True, "assignmentRules": False,
     },
 }
 
@@ -120,7 +147,7 @@ def get_conversation_scope(db, ctx: dict) -> dict:
     role = ctx.get("role")
     if role in CONVERSATION_UNRESTRICTED_ROLES:
         return {"unrestricted": True}
-    if role == "team_lead":
+    if role in TEAM_LEAD_ROLES:
         return {"unrestricted": False, "team_lead": True, "dept_emails": _dept_emails(db, ctx.get("agent_id")), "include_unassigned": True}
     return {"unrestricted": False, "team_lead": False, "own_email": ctx.get("email"), "include_unassigned": False}
 
@@ -142,7 +169,7 @@ def get_analytics_scope(db, ctx: dict) -> dict:
     role = ctx.get("role")
     if role in ANALYTICS_UNRESTRICTED_ROLES:
         return {"unrestricted": True}
-    if role == "team_lead":
+    if role in TEAM_LEAD_ROLES:
         agent_id = ctx.get("agent_id")
         me = db.query(Agent).filter(Agent.id == agent_id).first() if agent_id else None
         if me and me.department_id is not None:
@@ -159,7 +186,7 @@ async def require_org_wide_analytics(ctx: dict = Depends(require_tab_permission(
     (Overview, AI Performance, Traffic Telemetry, Campaigns) — there's no
     way to scope company-wide numbers down to "my own", so regular agents
     don't get an unscoped view of them at all."""
-    if ctx.get("role") not in ANALYTICS_UNRESTRICTED_ROLES and ctx.get("role") != "team_lead":
+    if ctx.get("role") not in ANALYTICS_UNRESTRICTED_ROLES and ctx.get("role") not in TEAM_LEAD_ROLES:
         raise HTTPException(403, "Your role only has access to your own analytics")
     return ctx
 

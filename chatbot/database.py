@@ -256,6 +256,13 @@ def init_database():
 
     try:
         with db_engine.connect() as _c:
+            _c.execute(sa_text("ALTER TABLE departments ADD COLUMN IF NOT EXISTS manual_only BOOLEAN DEFAULT FALSE"))
+            _c.commit()
+    except Exception as _e:
+        log.warning(f"departments.manual_only migration: {_e}")
+
+    try:
+        with db_engine.connect() as _c:
             _c.execute(sa_text("""
                 CREATE TABLE IF NOT EXISTS reassignment_requests (
                     id SERIAL PRIMARY KEY,

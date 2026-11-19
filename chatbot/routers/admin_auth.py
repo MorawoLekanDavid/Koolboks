@@ -136,7 +136,8 @@ async def agent_login(body: AgentLoginRequest, request: Request):
 
 # ── Agent Management ──────────────────────────────────────────────────────────
 
-AGENT_ROLES = ("customer_success_agent", "telesales_agent", "admin", "bi_analyst", "team_lead")
+AGENT_ROLES = ("customer_success_agent", "telesales_agent", "admin", "bi_analyst", "team_lead",
+               "credit_agent", "credit_team_lead")
 
 
 class AgentCreate(BaseModel):
@@ -189,6 +190,7 @@ async def agents_directory(ctx: dict = Depends(get_admin_ctx)):
 class DepartmentIn(BaseModel):
     name: str
     team_lead_id: Optional[int] = None
+    manual_only: bool = False
 
 
 @router.get("/departments")
@@ -204,7 +206,8 @@ async def list_departments(ctx: dict = Depends(require_tab_permission("team"))):
             return [
                 {"id": d.id, "name": d.name, "team_lead_id": d.team_lead_id,
                  "team_lead_name": agent_names.get(d.team_lead_id),
-                 "member_count": member_counts.get(d.id, 0)}
+                 "member_count": member_counts.get(d.id, 0),
+                 "manual_only": bool(d.manual_only)}
                 for d in depts
             ]
         finally:
@@ -238,11 +241,12 @@ async def create_department(body: DepartmentIn, ctx: dict = Depends(require_admi
         existing = db.query(Department).filter(Department.name == name).first()
         if existing:
             raise HTTPException(409, "A department with this name already exists")
-        dept = Department(name=name, team_lead_id=body.team_lead_id)
+        dept = Department(name=name, team_lead_id=body.team_lead_id, manual_only=body.manual_only)
         db.add(dept)
         db.commit()
         db.refresh(dept)
-        return {"id": dept.id, "name": dept.name, "team_lead_id": dept.team_lead_id}
+        return {"id": dept.id, "name": dept.name, "team_lead_id": dept.team_lead_id,
+                "manual_only": dept.manual_only}
     finally:
         db.close()
 
@@ -261,8 +265,10 @@ async def update_department(dept_id: int, body: DepartmentIn, ctx: dict = Depend
                 raise HTTPException(409, "A department with this name already exists")
             dept.name = name
         dept.team_lead_id = body.team_lead_id
+        dept.manual_only = body.manual_only
         db.commit()
-        return {"id": dept.id, "name": dept.name, "team_lead_id": dept.team_lead_id}
+        return {"id": dept.id, "name": dept.name, "team_lead_id": dept.team_lead_id,
+                "manual_only": dept.manual_only}
     finally:
         db.close()
 
