@@ -445,6 +445,20 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);height:100v
   .global-bot-off-banner{flex-wrap:wrap}
   .gbo-action{margin-left:32px}
 }
+/* Meta billing rejecting sends (error 131042) -- a third-party payment
+   problem on Meta's own side, not something this app can fix, so there's
+   no action button here the way the bot-off banner has "Turn Bot On".
+   Amber rather than red: distinct from "we turned the bot off on purpose"
+   above it, and this one self-clears once the failures stop for a while. */
+.payment-issue-banner{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--orange-s);border-bottom:1px solid var(--orange-b);flex-shrink:0}
+.pib-icon{flex-shrink:0;width:22px;height:22px;color:var(--orange-d);display:flex;align-items:center;justify-content:center}
+.pib-icon svg{width:19px;height:19px}
+.pib-text{flex:1;min-width:0}
+.pib-title{font-size:13px;font-weight:700;color:#9A3412;line-height:1.3}
+.pib-sub{font-size:11.5px;color:#9A3412;opacity:.85;line-height:1.4;margin-top:1px}
+@media (max-width:520px){
+  .payment-issue-banner{flex-wrap:wrap}
+}
 .reply-disabled svg{width:15px;height:15px}
 .ai-perf-title [data-icon]{display:inline-flex;vertical-align:-3px}
 .ai-perf-title svg{width:17px;height:17px}
@@ -1109,6 +1123,20 @@ body.read-only-chat #noteSubmit{pointer-events:none;opacity:.55}
       <div class="gbo-sub" id="gboSubtext">Every message needs a human reply until it's turned back on.</div>
     </div>
     <button class="gbo-action hidden" id="gboTurnOnBtn" onclick="setGlobalBotDisabled(false)">Turn Bot On</button>
+  </div>
+
+  <!-- Shown to every agent whenever Meta is rejecting outbound WhatsApp
+       sends for a billing reason (error 131042 -- no valid payment method
+       on the WhatsApp Business Account). This is on Meta's side, not ours --
+       there's no button here, only the fix link. A background worker keeps
+       retrying affected messages on its own every few minutes, so this is
+       informational, not something that needs a manual resend. -->
+  <div class="payment-issue-banner hidden" id="paymentIssueBanner">
+    <span class="pib-icon" data-icon="warning"></span>
+    <div class="pib-text">
+      <div class="pib-title">WhatsApp is rejecting some messages — Meta billing issue</div>
+      <div class="pib-sub" id="pibSubtext">Some customers aren't receiving replies because no valid payment method is set up on the WhatsApp Business Account. We're auto-retrying every 5 minutes, but this needs fixing in Meta Business Manager's billing hub to stop for good.</div>
+    </div>
   </div>
 
   <!-- Conversations tab -->
@@ -3122,6 +3150,18 @@ function _renderGlobalBotStatus(d){
     desc.textContent=d.disabled
       ? `Off — every conversation is silent until this is switched back on. Turned off${who}${when}.`
       : 'On — replying normally across every conversation.';
+  }
+  _renderPaymentIssueBanner(d.payment_issue);
+}
+function _renderPaymentIssueBanner(pi){
+  const banner=document.getElementById('paymentIssueBanner');
+  if(!banner)return;
+  const active=!!(pi&&pi.active);
+  banner.classList.toggle('hidden',!active);
+  if(active){
+    const sub=document.getElementById('pibSubtext');
+    const since=pi.first_at?` First seen ${timeAgo(pi.first_at)}.`:'';
+    sub.textContent=`${pi.count} message${pi.count===1?'':'s'} rejected by Meta billing in the last ${pi.window_hours}h because no valid payment method is set up on the WhatsApp Business Account.${since} We're auto-retrying every 5 minutes, but this needs fixing in Meta Business Manager's billing hub to stop for good.`;
   }
 }
 async function onGlobalBotToggleClicked(el){

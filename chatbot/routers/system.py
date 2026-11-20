@@ -3,9 +3,22 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
 
+from chatbot.config import (
+    DATABASE_URL,
+    GROQ_API_KEY,
+    REDIS_URL,
+    WABA_ID,
+    WHATSAPP_API_TOKEN,
+    WHATSAPP_PHONE_NUMBER_ID,
+    ZAPIER_WEBHOOK,
+)
+from fastapi.concurrency import run_in_threadpool
+
+from chatbot.core import redis_client
 from chatbot.dependencies import get_admin_ctx, require_super_admin
 from chatbot.services.bot_control import get_bot_status, set_bot_globally_disabled
 from chatbot.workers.handoff_watchdog import resume_all_pending_after_reenable
+from chatbot.workers.payment_retry import get_payment_issue_status
 
 router = APIRouter(prefix="/admin/system", tags=["system"])
 
@@ -14,8 +27,16 @@ router = APIRouter(prefix="/admin/system", tags=["system"])
 async def bot_status(ctx: dict = Depends(get_admin_ctx)):
     """Any signed-in agent can see whether the bot is globally on or off --
     everyone needs to know this to understand why every chat has gone quiet
-    -- but only a super admin can change it (see the POST below)."""
-    return await get_bot_status()
+    -- but only a super admin can change it (see the POST below). Also
+    carries the Meta billing payment-issue signal (see payment_retry.py) on
+    this same already-polled-every-20s endpoint, rather than adding a
+    second poll just for that banner."""
+    status = await get_bot_status()
+    # get_payment_issue_status is a plain synchronous DB query -- pushed off
+    # the event loop here the same way admin_auth.py/permissions.py/
+    # templates.py do for their own DB-backed routes.
+    status["payment_issue"] = await run_in_threadpool(get_payment_issue_status)
+    return status
 
 
 class BotSwitchRequest(BaseModel):
@@ -43,3 +64,31 @@ async def set_bot_status(
         # responds instantly even if there's a lot to catch up on.
         background_tasks.add_task(resume_all_pending_after_reenable, was["since"], by)
     return result
+
+
+@router.get("/dependency-status")
+async def dependency_status(ctx: dict = Depends(get_admin_ctx)):
+    """Read-only, boolean-only view of which external dependencies are
+    configured — added in Phase 3H to back the Channels and Integrations
+    Manage pages, neither of which has any other backend capability today
+    (see PHASE_3H_PREFLIGHT.md §5/§10). Never returns a token, key, URL, or
+    any other credential value — only whether one is present. Any
+    authenticated agent can view this (same gate as the bot-status read
+    above); nothing here is sensitive on its own."""
+    redis_connected = False
+    if redis_client.client:
+        try:
+            redis_connected = bool(await redis_client.client.ping())
+        except Exception:
+            redis_connected = False
+    return {
+        "whatsapp": {
+            "configured": bool(WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID),
+            "phone_number_id_set": bool(WHATSAPP_PHONE_NUMBER_ID),
+            "waba_id_set": bool(WABA_ID),
+        },
+        "groq": {"configured": bool(GROQ_API_KEY)},
+        "redis": {"configured": bool(REDIS_URL), "connected": redis_connected},
+        "database": {"configured": bool(DATABASE_URL)},
+        "zapier": {"configured": bool(ZAPIER_WEBHOOK)},
+    }
