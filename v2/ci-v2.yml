@@ -1,0 +1,29 @@
+# Activate as .github/workflows/itura-v2.yml once repository Actions permissions are verified.
+name: ITURA v2 checks
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-v2.txt
+      - run: python -m pytest -c pytest-v2.ini -q
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2/console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
